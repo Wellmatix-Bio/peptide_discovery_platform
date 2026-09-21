@@ -1,0 +1,30 @@
+{
+    "case_id": "TC-06_neuropathic_dfu_uninfected",
+    "indication": "diabetic_foot_ulcer",
+    "wound_context": [
+        "chronic",
+        "uninfected",
+        "neuropathic",
+        "high_glucose",
+        "low_perfusion"
+    ],
+    "desired_functions": [
+        "angiogenesis",
+        "keratinocyte_migration",
+        "fibroblast_proliferation"
+    ],
+    "pathogens": [],
+    "delivery_system": "topical_hydrogel",
+    "max_length": 25,
+    "dosing_interval_hours": 24,
+    "release_target_hours": 24,
+    "safety_constraints": {
+        "hemolysis": "low",
+        "human_cell_cytotoxicity": "low"
+    },
+    "manufacturing": {
+        "method": "solid_phase_synthesis",
+        "max_cost_per_gram_usd": 400
+    },
+    "stage": "discovery"
+}

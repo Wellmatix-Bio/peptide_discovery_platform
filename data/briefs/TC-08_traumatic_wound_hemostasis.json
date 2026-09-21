@@ -1,0 +1,34 @@
+{
+    "case_id": "TC-08_traumatic_wound_hemostasis",
+    "indication": "traumatic_laceration",
+    "wound_context": [
+        "acute",
+        "bleeding",
+        "contaminated",
+        "field_use"
+    ],
+    "desired_functions": [
+        "hemostatic",
+        "antimicrobial",
+        "re_epithelialization"
+    ],
+    "pathogens": [
+        "Staphylococcus_aureus",
+        "Escherichia_coli",
+        "Clostridium_perfringens"
+    ],
+    "delivery_system": "spray_gel",
+    "max_length": 20,
+    "dosing_interval_hours": 12,
+    "release_target_hours": 12,
+    "safety_constraints": {
+        "hemolysis": "low",
+        "human_cell_cytotoxicity": "low",
+        "thrombogenicity": "controlled"
+    },
+    "manufacturing": {
+        "method": "solid_phase_synthesis",
+        "ambient_stability_required": true
+    },
+    "stage": "discovery"
+}

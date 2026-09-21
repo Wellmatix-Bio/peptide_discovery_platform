@@ -1,0 +1,14 @@
+
+run_id: test_run
+schema_version: 1
+seed: 42
+
+# Path to the initial set of candidate peptides.
+seed_candidates_path: ./data/raw/curated_peptides_machine_readable.fasta
+# seed_candidates_path: ./data/raw/reconciled_general_amps.fasta
+
+artifacts_dir: ./artifacts
+model_store: ./model_store
+
+entry_stage: s01_brief               # path to .jsonl when entering mid-pipeline
+input: null                       # path to .jsonl when entering mid-pipeline

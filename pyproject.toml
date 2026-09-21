@@ -1,0 +1,49 @@
+# Package metadata, dependencies, and build config for the wmx package.
+[project]
+name = "wmx"
+version = "0.1.0"
+requires-python = ">=3.11"
+dependencies = [
+    "pydantic>=2.13",
+    "PyYAML>=6.0",
+    "structlog>=26.1",
+    # API server
+    "fastapi>=0.141",
+    "uvicorn>=0.53",
+    "httpx>=0.28",
+    "google-auth>=2.58",
+    "google-api-core>=2.38",
+    "google-cloud-aiplatform>=2.1",
+    # ML / numerics
+    "torch>=2.11",
+    "numpy>=2.3",
+    "pandas>=3.0",
+    "scikit-learn>=1.9",
+    "xgboost>=3.2",
+    "transformers>=5.15",
+    "peft>=0.20",
+    "accelerate>=1.15",
+    "bitsandbytes>=0.50",
+    "joblib>=1.5",
+    "tqdm>=4.70",
+    # Sequence / structure biology
+    "biopython>=1.88",
+    "modlamp>=4.3",
+    "freesasa>=2.2",
+    "gemmi>=0.7",
+    "openmm>=8.6",
+    "pdbfixer>=1.12",
+    "propy3>=2.0",
+    "fair-esm>=2.0",
+    # Route A/C generation
+    "deap>=1.4",
+    "rapidfuzz>=3.14",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=9.1",
+]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]

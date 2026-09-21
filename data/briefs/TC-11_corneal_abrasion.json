@@ -1,0 +1,32 @@
+{
+    "case_id": "TC-11_corneal_abrasion",
+    "indication": "corneal_epithelial_defect",
+    "wound_context": [
+        "acute",
+        "avascular",
+        "tear_film_exposed",
+        "transparency_critical"
+    ],
+    "desired_functions": [
+        "epithelial_migration",
+        "anti_inflammatory",
+        "anti_angiogenesis"
+    ],
+    "pathogens": [
+        "Pseudomonas_aeruginosa"
+    ],
+    "delivery_system": "eye_drop",
+    "max_length": 15,
+    "dosing_interval_hours": 4,
+    "release_target_hours": 4,
+    "safety_constraints": {
+        "hemolysis": "not_applicable",
+        "human_cell_cytotoxicity": "low",
+        "ocular_irritation": "none"
+    },
+    "manufacturing": {
+        "method": "solid_phase_synthesis",
+        "sterile_filterable": true
+    },
+    "stage": "discovery"
+}

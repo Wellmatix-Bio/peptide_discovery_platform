@@ -1,0 +1,16 @@
+{
+    "case_id": "TC-17_minimal_brief_defaults_test",
+    "indication": "chronic_wound",
+    "wound_context": [],
+    "desired_functions": [
+        "wound_healing"
+    ],
+    "pathogens": [],
+    "delivery_system": null,
+    "max_length": null,
+    "dosing_interval_hours": null,
+    "release_target_hours": null,
+    "safety_constraints": {},
+    "manufacturing": {},
+    "stage": "discovery"
+}

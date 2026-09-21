@@ -1,0 +1,35 @@
+{
+    "case_id": "TC-18_edge_case_length_vs_function",
+    "indication": "infected_burn",
+    "wound_context": [
+        "acute",
+        "infected",
+        "high_exudate"
+    ],
+    "desired_functions": [
+        "antimicrobial",
+        "antibiofilm",
+        "angiogenesis",
+        "collagen_synthesis",
+        "immunomodulation",
+        "hemostatic"
+    ],
+    "pathogens": [
+        "MRSA",
+        "Pseudomonas_aeruginosa",
+        "Acinetobacter_baumannii"
+    ],
+    "delivery_system": "foam_dressing",
+    "max_length": 10,
+    "dosing_interval_hours": 48,
+    "release_target_hours": 48,
+    "safety_constraints": {
+        "hemolysis": "low",
+        "human_cell_cytotoxicity": "low"
+    },
+    "manufacturing": {
+        "method": "solid_phase_synthesis",
+        "max_cost_per_gram_usd": 150
+    },
+    "stage": "discovery"
+}

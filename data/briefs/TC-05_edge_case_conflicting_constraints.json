@@ -1,0 +1,32 @@
+{
+    "case_id": "TC-05_edge_case_conflicting_constraints",
+    "indication": "chronic_pressure_ulcer",
+    "wound_context": [
+        "chronic",
+        "infected",
+        "necrotic"
+    ],
+    "desired_functions": [
+        "antimicrobial",
+        "angiogenesis",
+        "collagen_synthesis",
+        "hemostatic"
+    ],
+    "pathogens": [
+        "MRSA",
+        "VRE"
+    ],
+    "delivery_system": "microneedle_patch",
+    "max_length": 8,
+    "dosing_interval_hours": 168,
+    "release_target_hours": 168,
+    "safety_constraints": {
+        "hemolysis": "low",
+        "human_cell_cytotoxicity": "low"
+    },
+    "manufacturing": {
+        "method": "solid_phase_synthesis",
+        "max_cost_per_gram_usd": 100
+    },
+    "stage": "discovery"
+}

@@ -1,0 +1,33 @@
+{
+    "case_id": "TC-09_pediatric_burn",
+    "indication": "pediatric_partial_thickness_burn",
+    "wound_context": [
+        "acute",
+        "inflamed",
+        "high_surface_to_volume_ratio"
+    ],
+    "desired_functions": [
+        "anti_inflammatory",
+        "re_epithelialization",
+        "antimicrobial"
+    ],
+    "pathogens": [
+        "Staphylococcus_aureus",
+        "Pseudomonas_aeruginosa"
+    ],
+    "delivery_system": "hydrogel_sheet",
+    "max_length": 22,
+    "dosing_interval_hours": 48,
+    "release_target_hours": 48,
+    "safety_constraints": {
+        "hemolysis": "low",
+        "human_cell_cytotoxicity": "low",
+        "immunogenicity": "low",
+        "systemic_absorption": "minimal"
+    },
+    "manufacturing": {
+        "method": "solid_phase_synthesis",
+        "max_cost_per_gram_usd": 600
+    },
+    "stage": "discovery"
+}

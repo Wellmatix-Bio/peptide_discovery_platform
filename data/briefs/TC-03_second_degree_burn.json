@@ -1,0 +1,34 @@
+{
+    "case_id": "TC-03_second_degree_burn",
+    "indication": "partial_thickness_burn",
+    "wound_context": [
+        "acute",
+        "high_exudate",
+        "inflamed",
+        "large_surface_area"
+    ],
+    "desired_functions": [
+        "anti_inflammatory",
+        "antimicrobial",
+        "re_epithelialization",
+        "angiogenesis"
+    ],
+    "pathogens": [
+        "Pseudomonas_aeruginosa",
+        "Acinetobacter_baumannii"
+    ],
+    "delivery_system": "foam_dressing",
+    "max_length": 25,
+    "dosing_interval_hours": 72,
+    "release_target_hours": 72,
+    "safety_constraints": {
+        "hemolysis": "low",
+        "human_cell_cytotoxicity": "low",
+        "immunogenicity": "low"
+    },
+    "manufacturing": {
+        "method": "solid_phase_synthesis",
+        "max_cost_per_gram_usd": 400
+    },
+    "stage": "discovery"
+}

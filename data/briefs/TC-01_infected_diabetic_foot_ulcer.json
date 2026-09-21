@@ -1,0 +1,35 @@
+{
+    "case_id": "TC-01_infected_diabetic_foot_ulcer",
+    "indication": "diabetic_foot_ulcer",
+    "wound_context": [
+        "chronic",
+        "infected",
+        "high_glucose",
+        "ischemic"
+    ],
+    "desired_functions": [
+        "antimicrobial",
+        "antibiofilm",
+        "keratinocyte_migration",
+        "angiogenesis",
+        "anti_inflammatory"
+    ],
+    "pathogens": [
+        "MRSA",
+        "Staphylococcus_aureus",
+        "Pseudomonas_aeruginosa"
+    ],
+    "delivery_system": "topical_hydrogel",
+    "max_length": 30,
+    "dosing_interval_hours": 48,
+    "release_target_hours": 48,
+    "safety_constraints": {
+        "hemolysis": "low",
+        "human_cell_cytotoxicity": "low"
+    },
+    "manufacturing": {
+        "method": "solid_phase_synthesis",
+        "max_cost_per_gram_usd": 500
+    },
+    "stage": "discovery"
+}

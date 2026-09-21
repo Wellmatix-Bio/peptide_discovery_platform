@@ -1,0 +1,30 @@
+{
+    "case_id": "TC-02_clean_surgical_incision",
+    "indication": "post_surgical_incision",
+    "wound_context": [
+        "acute",
+        "clean",
+        "sutured"
+    ],
+    "desired_functions": [
+        "keratinocyte_migration",
+        "fibroblast_proliferation",
+        "collagen_synthesis",
+        "scar_reduction"
+    ],
+    "pathogens": [],
+    "delivery_system": "film_dressing",
+    "max_length": 20,
+    "dosing_interval_hours": 24,
+    "release_target_hours": 24,
+    "safety_constraints": {
+        "hemolysis": "low",
+        "human_cell_cytotoxicity": "low",
+        "fibrosis_risk": "low"
+    },
+    "manufacturing": {
+        "method": "solid_phase_synthesis",
+        "max_cost_per_gram_usd": 300
+    },
+    "stage": "lead_optimization"
+}

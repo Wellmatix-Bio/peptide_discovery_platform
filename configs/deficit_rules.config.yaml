@@ -1,0 +1,104 @@
+# Stage 2 deficit rules — grounded ONLY in fields extractable from the
+# Stage 1 Therapeutic Product Brief table (indication, wound type, intended
+# function, patient population, pathogens, biological objective).
+#
+# "field" refers to a key in the parsed context vector (see
+# stage2_context_example.json). "op" is one of: contains, contains_any,
+# nonempty. Evidence tiers: strong / moderate / weak — see engine for the
+# confidence mapping.
+
+deficits:
+
+  infection:
+    base: 0.10
+    cap: 0.95
+    contributions:
+      - field: wound_context
+        op: contains
+        value: infected
+        delta: 0.55
+        evidence: strong
+      - field: wound_context
+        op: contains
+        value: chronic
+        delta: 0.15
+        evidence: moderate
+      - field: pathogens
+        op: nonempty
+        delta: 0.15
+        evidence: strong
+      - field: desired_functions
+        op: contains
+        value: antimicrobial
+        delta: 0.05
+        evidence: weak
+
+  reepithelialization:
+    base: 0.30
+    cap: 0.90
+    contributions:
+      - field: wound_context
+        op: contains
+        value: chronic
+        delta: 0.15
+        evidence: moderate
+      - field: wound_context
+        op: contains
+        value: high_glucose
+        delta: 0.05
+        evidence: weak
+      - field: target_population
+        op: contains
+        value: diabetes
+        delta: 0.15
+        evidence: strong
+      - field: desired_functions
+        op: contains
+        value: keratinocyte_migration
+        delta: 0.05
+        evidence: weak
+
+  angiogenesis:
+    base: 0.20
+    cap: 0.90
+    contributions:
+      - field: desired_functions
+        op: contains
+        value: angiogenesis
+        delta: 0.05
+        evidence: weak
+
+  inflammation_resolution:
+    base: 0.25
+    cap: 0.85
+    contributions:
+      - field: wound_context
+        op: contains
+        value: chronic
+        delta: 0.20
+        evidence: strong
+      - field: wound_context
+        op: contains
+        value: high_glucose
+        delta: 0.05
+        evidence: weak
+      - field: target_population
+        op: contains
+        value: diabetes
+        delta: 0.15
+        evidence: moderate
+      - field: desired_functions
+        op: contains
+        value: anti_inflammatory
+        delta: 0.05
+        evidence: weak
+
+  matrix_balance:
+    base: 0.20
+    cap: 0.80
+    contributions:
+      - field: wound_context
+        op: contains
+        value: chronic
+        delta: 0.05
+        evidence: weak

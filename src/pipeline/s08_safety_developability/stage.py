@@ -125,31 +125,47 @@ def _get_hemolysis_v2_model() -> HemoPI2PHC50Predictor:
     return _hemolysis_v2_model
 
 
-def _get_hemolysis_v1_model() -> ReplicatedHemoPI2Predictor:
+def _get_hemolysis_v1_model(use_feature_cache: bool = False) -> ReplicatedHemoPI2Predictor:
     global _hemolysis_v1_model
-    if _hemolysis_v1_model is None:
-        _hemolysis_v1_model = ReplicatedHemoPI2Predictor()
+    # Rebuild if the cached instance's mode doesn't match what's asked for
+    # now, not just when it's unset -- otherwise a stale instance built with
+    # the opposite use_feature_cache silently ignores this call's flag and
+    # crashes on a mismatched feature_extractor.
+    if (
+        _hemolysis_v1_model is None
+        or _hemolysis_v1_model.use_feature_cache != use_feature_cache
+    ):
+        _hemolysis_v1_model = ReplicatedHemoPI2Predictor(use_feature_cache=use_feature_cache)
     return _hemolysis_v1_model
 
 
-def _get_cytotoxicity_model() -> CytotoxicityClassifier:
+def _get_cytotoxicity_model(use_feature_cache: bool = False) -> CytotoxicityClassifier:
     global _cytotoxicity_model
-    if _cytotoxicity_model is None:
-        _cytotoxicity_model = CytotoxicityClassifier()
+    if (
+        _cytotoxicity_model is None
+        or _cytotoxicity_model.use_feature_cache != use_feature_cache
+    ):
+        _cytotoxicity_model = CytotoxicityClassifier(use_feature_cache=use_feature_cache)
     return _cytotoxicity_model
 
 
-def _get_solubility_model() -> SolubilityPredictor:
+def _get_solubility_model(use_feature_cache: bool = False) -> SolubilityPredictor:
     global _solubility_model
-    if _solubility_model is None:
-        _solubility_model = SolubilityPredictor()
+    if (
+        _solubility_model is None
+        or _solubility_model.use_feature_cache != use_feature_cache
+    ):
+        _solubility_model = SolubilityPredictor(use_feature_cache=use_feature_cache)
     return _solubility_model
 
 
-def _get_aggregation_model() -> AggregationPredictor:
+def _get_aggregation_model(use_feature_cache: bool = False) -> AggregationPredictor:
     global _aggregation_model
-    if _aggregation_model is None:
-        _aggregation_model = AggregationPredictor()
+    if (
+        _aggregation_model is None
+        or _aggregation_model.use_feature_cache != use_feature_cache
+    ):
+        _aggregation_model = AggregationPredictor(use_feature_cache=use_feature_cache)
     return _aggregation_model
 
 
@@ -180,7 +196,7 @@ class Stage8Models:
     cleavage: CleavageSitePredictor
 
 
-def build_models(config_params: dict) -> Stage8Models:
+def build_models(config_params: dict, use_feature_cache: bool = False) -> Stage8Models:
     """Factory: import and initialize every Stage 8 model.
 
     Each predictor lazy-loads its own weights on first predict() call, so
@@ -195,14 +211,14 @@ def build_models(config_params: dict) -> Stage8Models:
     hemolysis_model = (
         _get_hemolysis_v2_model()
         if hemolysis_version == "v2"
-        else _get_hemolysis_v1_model()
+        else _get_hemolysis_v1_model(use_feature_cache)
     )
     return Stage8Models(
         hemolysis=hemolysis_model,
         hemolysis_version=hemolysis_version,
-        cytotoxicity=_get_cytotoxicity_model(),
-        solubility=_get_solubility_model(),
-        aggregation=_get_aggregation_model(),
+        cytotoxicity=_get_cytotoxicity_model(use_feature_cache),
+        solubility=_get_solubility_model(use_feature_cache),
+        aggregation=_get_aggregation_model(use_feature_cache),
         cleavage=_get_cleavage_model(),
     )
 
@@ -227,7 +243,7 @@ class Stage8(CandidateStage):
         cleavage stability, then rejects candidates that fail any hard
         safety/developability threshold (CLAUDE.md: hard thresholds override
         score, applied throughout -- not as a late add-on)."""
-        models = build_models(config.params)
+        models = build_models(config.params, ctx.use_feature_cache)
         self._hemolysis_version_used = models.hemolysis_version
         solvent = config.params.get("solubility_solvent", "Ultrapure water")
         # DRAMP_aggregate -> maps to mammalian cell
@@ -243,7 +259,17 @@ class Stage8(CandidateStage):
         ]
         if len(sequences) != len(candidates):
             raise ValueError("Stage 8 received a candidate with no sequence")
-        hemolysis_results = self.compute_hemolysis_batch(sequences, models.hemolysis)
+
+        use_feature_cache = ctx.use_feature_cache
+        feature_extractor = ctx.feature_extractor if use_feature_cache else None
+        if use_feature_cache:
+            # Warm the shared ESM2 cache once for the whole stage instead of
+            # once per candidate inside compute_cytotoxicity/compute_solubility.
+            ctx.feature_extractor.get_esm2_embedding_batch(sequences)
+
+        hemolysis_results = self.compute_hemolysis_batch(
+            sequences, models.hemolysis, feature_extractor
+        )
 
         survivors: list[Candidate] = []
         for candidate, hemolysis_result in zip(
@@ -254,13 +280,13 @@ class Stage8(CandidateStage):
                 {
                     "hemolysis": hemolysis_result,
                     "cytotoxicity": self.compute_cytotoxicity(
-                        sequence, models.cytotoxicity, cell_type
+                        sequence, models.cytotoxicity, cell_type, feature_extractor
                     ),
                     "solubility": self.compute_solubility(
-                        sequence, models.solubility, solvent
+                        sequence, models.solubility, solvent, feature_extractor
                     ),
                     "aggregation_tendency": self.compute_aggregation(
-                        sequence, models.aggregation
+                        sequence, models.aggregation, feature_extractor
                     ),
                 }
             )
@@ -309,6 +335,7 @@ class Stage8(CandidateStage):
         self,
         sequences: list[str],
         model: HemoPI2PHC50Predictor | ReplicatedHemoPI2Predictor,
+        feature_extractor=None,
     ) -> list[dict]:
         """pHC50 for every candidate in one call (v1's in-process batched
         predict, or v2/HemoPI2's single batched subprocess) instead of one
@@ -318,28 +345,46 @@ class Stage8(CandidateStage):
         conversions)."""
         if not sequences:
             return []
-        phc50_values = model.predict_phc50_batch(sequences)
+        # v2 (HemoPI2 subprocess) has no feature_extractor parameter -- only
+        # v1 (in-process descriptor reproduction) reads the shared cache.
+        phc50_values = (
+            model.predict_phc50_batch(sequences, feature_extractor)
+            if isinstance(model, ReplicatedHemoPI2Predictor)
+            else model.predict_phc50_batch(sequences)
+        )
         return [{"phc50": phc50, "status": "ok"} for phc50 in phc50_values]
 
     def compute_cytotoxicity(
-        self, sequence: str, model: CytotoxicityClassifier, cell_type: str
+        self,
+        sequence: str,
+        model: CytotoxicityClassifier,
+        cell_type: str,
+        feature_extractor,
     ) -> dict:
         """P(mammalian-cell cytotoxic) from cytotoxicity_predictor_v1."""
-        score = model.predict_cytotoxicity(sequence, cell_type=cell_type)
+        score = model.predict_cytotoxicity(
+            sequence, feature_extractor, cell_type=cell_type
+        )
         return {"score": score, "cell_type": cell_type, "status": "ok"}
 
     def compute_solubility(
-        self, sequence: str, model: SolubilityPredictor, solvent: str
+        self,
+        sequence: str,
+        model: SolubilityPredictor,
+        solvent: str,
+        feature_extractor,
     ) -> dict:
         """P(soluble) from solubility_predictor_v1, same model/solvent convention as Stage 5."""
-        score = model.predict_proba(sequence, solvent)
+        score = model.predict_proba(sequence, solvent, feature_extractor)
         return {"score": score, "solvent": solvent, "status": "ok"}
 
-    def compute_aggregation(self, sequence: str, model: AggregationPredictor) -> dict:
+    def compute_aggregation(
+        self, sequence: str, model: AggregationPredictor, feature_extractor
+    ) -> dict:
         """P(aggregation-prone) from aggregation_predictor_v1."""
         if len(sequence) < 5:
             return {"score": None, "status": "skipped_too_short"}
-        score = model.predict_aggregation(sequence)
+        score = model.predict_aggregation(sequence, feature_extractor)
         return {"score": score, "status": "ok"}
 
     # ------------------------------------------------------------------

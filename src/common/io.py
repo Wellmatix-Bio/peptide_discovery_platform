@@ -39,7 +39,7 @@ def load_candidates_fasta(path: str | Path, *, schema_version: int) -> list[Cand
     if not path.exists():
         raise FileNotFoundError(f"FASTA file not found: {path}")
     candidates: list[Candidate] = []
-    with open(path, "r") as f:
+    with open(path, "r", encoding="utf-8") as f:
         for line in f:
             line = line.strip()
             if line.startswith(">"):

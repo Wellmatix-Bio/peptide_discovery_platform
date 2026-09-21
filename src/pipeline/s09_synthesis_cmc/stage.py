@@ -64,9 +64,9 @@ FINAL_PURITY_DG_NG_RECOVERY_PENALTY = 0.08  # rearrangement isomer co-elutes
 FINAL_PURITY_NON_STANDARD_RECOVERY_PENALTY = 0.05  # per non-standard building block
 
 
-def build_model() -> SynthesisFeasibilityEnsemble:
+def build_model(use_feature_cache: bool = False) -> SynthesisFeasibilityEnsemble:
     """Factory: import and initialize the synthesis-feasibility ML ensemble (supplementary weak prior, not a gate)."""
-    return SynthesisFeasibilityEnsemble()
+    return SynthesisFeasibilityEnsemble(use_feature_cache=use_feature_cache)
 
 
 class Stage9(CandidateStage):
@@ -84,11 +84,22 @@ class Stage9(CandidateStage):
         gate on difficulty_class). Yield, purification, cost, storage, and
         scale-up risk are preserved as soft-penalty scores for Stage 11,
         never rejection reasons on their own."""
-        model = build_model()
+        use_feature_cache = ctx.use_feature_cache
+        model = build_model(use_feature_cache)
+        feature_extractor = ctx.feature_extractor if use_feature_cache else None
+        if use_feature_cache:
+            # Warm the shared ESM2 cache once for the whole stage instead of
+            # once per candidate inside compute_ml_feasibility_prior.
+            sequences = [
+                candidate.sequence for candidate in candidates if candidate.sequence
+            ]
+            ctx.feature_extractor.get_esm2_embedding_batch(sequences)
 
         survivors: list[Candidate] = []
         for candidate in tqdm(candidates, desc="Stage 9"):
-            feasibility = self.assess_synthesis_feasibility(candidate, model, config.params)
+            feasibility = self.assess_synthesis_feasibility(
+                candidate, model, config.params, feature_extractor
+            )
             candidate.predictions["synthesis_feasibility"] = feasibility
 
             verdict = self.compute_synthesis_verdict(feasibility, config.params)
@@ -124,7 +135,11 @@ class Stage9(CandidateStage):
     # -- Top-level assessment --
 
     def assess_synthesis_feasibility(
-        self, candidate: Candidate, model: SynthesisFeasibilityEnsemble, config_params: dict
+        self,
+        candidate: Candidate,
+        model: SynthesisFeasibilityEnsemble,
+        config_params: dict,
+        feature_extractor,
     ) -> dict:
         sequence = candidate.sequence
         modifications = candidate.predictions.get("modifications", {})
@@ -141,7 +156,7 @@ class Stage9(CandidateStage):
             crude_purity, penalties, disulfide_pairs, non_standard
         )
 
-        ml_prior = self.compute_ml_feasibility_prior(sequence, model)
+        ml_prior = self.compute_ml_feasibility_prior(sequence, model, feature_extractor)
 
         return {
             "predicted_crude_purity": crude_purity,
@@ -384,9 +399,11 @@ class Stage9(CandidateStage):
 
     # -- Supplementary ML prior --
 
-    def compute_ml_feasibility_prior(self, sequence: str, model: SynthesisFeasibilityEnsemble) -> dict:
+    def compute_ml_feasibility_prior(
+        self, sequence: str, model: SynthesisFeasibilityEnsemble, feature_extractor
+    ) -> dict:
         """Synthesis-feasibility probability from synthesis_feasibility_predictor_v1; weak prior, never a gate."""
-        score = model.predict_proba(sequence)
+        score = model.predict_proba(sequence, feature_extractor)
         return {
             "score": score,
             "status": "ok",

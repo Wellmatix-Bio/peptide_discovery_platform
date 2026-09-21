@@ -7,7 +7,7 @@ from common.gpu import release_stage_models
 from common.logging import get_logger
 from pipeline.base import CandidateStage, RunContext
 from pipeline.s04_generation import routeB
-from pipeline.s04_generation.routeA import RouteA
+from pipeline.s04_generation.routeA import AMINO_ACID_SET, RouteA
 from pipeline.s04_generation.routeB import RouteB
 from schemas.candidate import Candidate
 from schemas.run_config import StageConfig
@@ -35,6 +35,10 @@ def _build_route_a(
                 for candidate in candidates
                 if candidate.sequence
             ],
+            "use_feature_cache": ctx.use_feature_cache,
+            "feature_extractor": (
+                ctx.feature_extractor if ctx.use_feature_cache else None
+            ),
         }
     )
 
@@ -75,7 +79,7 @@ class Stage4(CandidateStage):
         config: StageConfig,
         ctx: RunContext,
     ) -> list[Candidate]:
-        generated: list[Candidate] = list(candidates)
+        generated: list[Candidate] = []
         for route_key, build_route in self.routes.items():
             route = build_route(candidates, config, ctx)
             logger.info(

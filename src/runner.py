@@ -13,6 +13,7 @@ from common.logging import get_logger
 from common.model_registry import ModelRegistry
 from common.stats import write_run_stats
 from pipeline.base import CandidateStage, CandidateStageResult, RunContext, SetupStage
+from pipeline.feature_extractor import FeatureExtractor
 from registry import build_stages
 from schemas.candidate import Candidate
 from schemas.knowledge_base import KnowledgeBase
@@ -106,6 +107,8 @@ class PipelineRunner:
             audit=AuditWriter(run_dir / "audit_log.jsonl"),
             boundary=BoundaryWriter(run_dir),
             models=ModelRegistry(config.model_store),
+            feature_extractor=FeatureExtractor(),
+            use_feature_cache=config.use_feature_cache,
             seed=config.seed or 42,
         )
 

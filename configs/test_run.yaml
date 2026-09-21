@@ -10,5 +10,11 @@ seed_candidates_path: ./data/raw/curated_peptides_machine_readable.fasta
 artifacts_dir: ./artifacts
 model_store: ./model_store
 
+# Pipeline-wide switch: batch-warm and reuse the shared ESM2/descriptor
+# cache (FeatureExtractor) across every stage that supports it, instead of
+# each model re-embedding every sequence independently. One run uses one
+# consistent embedding source throughout -- not a per-stage setting.
+use_feature_cache: true
+
 entry_stage: s01_brief               # path to .jsonl when entering mid-pipeline
 input: null                       # path to .jsonl when entering mid-pipeline

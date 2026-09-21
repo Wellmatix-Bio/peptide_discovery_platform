@@ -44,17 +44,27 @@ _solubility_model: SolubilityPredictor | None = None
 _aggregation_model: AggregationPredictor | None = None
 
 
-def _get_solubility_model() -> SolubilityPredictor:
+def _get_solubility_model(use_feature_cache: bool = False) -> SolubilityPredictor:
     global _solubility_model
-    if _solubility_model is None:
-        _solubility_model = SolubilityPredictor()
+    # Rebuild if the cached instance's mode doesn't match what's asked for
+    # now, not just when it's unset -- otherwise a stale instance built with
+    # the opposite use_feature_cache silently ignores this call's flag and
+    # crashes on a mismatched feature_extractor.
+    if (
+        _solubility_model is None
+        or _solubility_model.use_feature_cache != use_feature_cache
+    ):
+        _solubility_model = SolubilityPredictor(use_feature_cache=use_feature_cache)
     return _solubility_model
 
 
-def _get_aggregation_model() -> AggregationPredictor:
+def _get_aggregation_model(use_feature_cache: bool = False) -> AggregationPredictor:
     global _aggregation_model
-    if _aggregation_model is None:
-        _aggregation_model = AggregationPredictor()
+    if (
+        _aggregation_model is None
+        or _aggregation_model.use_feature_cache != use_feature_cache
+    ):
+        _aggregation_model = AggregationPredictor(use_feature_cache=use_feature_cache)
     return _aggregation_model
 
 
@@ -141,6 +151,16 @@ class Stage5(CandidateStage):
         solvent = config.params.get("solubility_solvent", "Ultrapure water")
         desired_functions = ctx.brief.desired_functions if ctx.brief else []
 
+        use_feature_cache = ctx.use_feature_cache
+        feature_extractor = ctx.feature_extractor if use_feature_cache else None
+        if use_feature_cache:
+            # Warm the shared ESM2 cache once for the whole stage instead of
+            # one embedding per candidate inside compute_solubility below.
+            sequences = [
+                candidate.sequence for candidate in candidates if candidate.sequence
+            ]
+            ctx.feature_extractor.get_esm2_embedding_batch(sequences)
+
         survivors: list[Candidate] = []
         for candidate in tqdm(candidates, desc="Stage 5"):
             sequence = candidate.sequence
@@ -165,8 +185,15 @@ class Stage5(CandidateStage):
                     "secondary_structure_consistency": self.compute_secondary_structure_consistency(
                         sequence, desired_functions, config.params
                     ),
-                    "solubility": self.compute_solubility(sequence, solvent=solvent),
-                    "aggregation_tendency": self.compute_aggregation_tendency(sequence),
+                    "solubility": self.compute_solubility(
+                        sequence,
+                        feature_extractor,
+                        use_feature_cache,
+                        solvent=solvent,
+                    ),
+                    "aggregation_tendency": self.compute_aggregation_tendency(
+                        sequence, feature_extractor, use_feature_cache
+                    ),
                 }
             )
             verdict = self.compute_screening_verdict(
@@ -356,17 +383,23 @@ class Stage5(CandidateStage):
         return ss, confidence
 
     def compute_solubility(
-        self, sequence: str, solvent: str = DEFAULT_SOLUBILITY_SOLVENT
+        self,
+        sequence: str,
+        feature_extractor,
+        use_feature_cache: bool = False,
+        solvent: str = DEFAULT_SOLUBILITY_SOLVENT,
     ) -> dict:
         """P(soluble) from solubility_predictor_v1 (XGBoost over ESM2 + solvent descriptors).
         `solvent` defaults to a physiological/wound-fluid-like aqueous buffer since the brief's
         delivery_system is free text, not one of the model's 7 trained-on lab solvents.
         """
-        model = _get_solubility_model()
-        score = model.predict_proba(sequence, solvent)
+        model = _get_solubility_model(use_feature_cache)
+        score = model.predict_proba(sequence, solvent, feature_extractor)
         return {"score": score, "solvent": solvent, "status": "ok"}
 
-    def compute_aggregation_tendency(self, sequence: str) -> dict:
+    def compute_aggregation_tendency(
+        self, sequence: str, feature_extractor, use_feature_cache: bool = False
+    ) -> dict:
         """Aggregation-propensity probability from aggregation_predictor_v1 (XGBoost over
         AAindex1/biopython/propy descriptors). Below AGGREGATION_MIN_LENGTH the model's
         feature extraction (QSO/SOCN/PAAC/APAAC lag) is undefined, so it's skipped."""
@@ -375,8 +408,8 @@ class Stage5(CandidateStage):
                 "score": None,
                 "status": "skipped_too_short",
             }
-        model = _get_aggregation_model()
-        score = model.predict_aggregation(sequence)
+        model = _get_aggregation_model(use_feature_cache)
+        score = model.predict_aggregation(sequence, feature_extractor)
         return {"score": score, "status": "ok"}
 
     def compute_screening_verdict(

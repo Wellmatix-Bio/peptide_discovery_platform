@@ -17,10 +17,11 @@ from common.logging import get_logger
 from tqdm import tqdm
 from src.schemas.stage4_route import Stage4Route
 from schemas.candidate import Candidate
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, fields
 from model_store.amp_classifier_v1 import AMPClassifier
 from model_store.hemolysis_predictor_v1 import ReplicatedHemoPI2Predictor
 from modlamp.descriptors import GlobalDescriptor, PeptideDescriptor
+from pipeline.feature_extractor import FeatureExtractor
 
 try:
     from deap import base, creator
@@ -104,8 +105,8 @@ class ConstraintConfig:
     TODO: Defaults are broad placeholders — tune per target class the way the rest of this pipeline's thresholds are tuned.
     """
 
-    min_length: int = 8
-    max_length: int = 40
+    min_length: int
+    max_length: int
     charge_min: float = -3.0
     charge_max: float = 8.0
     hydro_min: float = -1.0
@@ -115,15 +116,25 @@ class ConstraintConfig:
 
     @classmethod
     def from_params(cls, params: dict) -> "ConstraintConfig":
-        """Build from config.params, falling back to this dataclass's own
-        defaults for any field the caller didn't set."""
-        defaults = cls()
-        return cls(
-            **{
-                field_name: params.get(field_name, getattr(defaults, field_name))
-                for field_name in defaults.__dataclass_fields__
-            }
-        )
+        """Build from config.params. min_length/max_length have no dataclass
+        default (there's no sane universal peptide-length range) and must be
+        present in params -- Stage 4's _build_route_a always supplies them
+        (from config.params or its own 6/35 default) before this is called.
+        Every other field falls back to its own dataclass default."""
+        if "min_length" not in params or "max_length" not in params:
+            raise ValueError(
+                "ConstraintConfig.from_params requires min_length and max_length in params."
+            )
+        kwargs = {
+            "min_length": params["min_length"],
+            "max_length": params["max_length"],
+        }
+        for f in fields(cls):
+            if f.name in ("min_length", "max_length"):
+                continue
+            if f.name in params:
+                kwargs[f.name] = params[f.name]
+        return cls(**kwargs)
 
 
 @dataclass(frozen=True)
@@ -135,39 +146,50 @@ class FilterResult:
 
 
 def compute_attributes(sequence: str, ph: float = 7.4) -> dict:
-    gd = GlobalDescriptor([sequence])
+    return compute_attributes_batch([sequence], ph=ph)[0]
+
+
+def compute_attributes_batch(sequences: list[str], ph: float = 7.4) -> list[dict]:
+    """Same descriptors as compute_attributes, computed for every sequence in
+    one modlAMP call per property instead of one call per sequence -- modlAMP's
+    descriptor classes natively accept a list of sequences and return one row
+    per sequence in `.descriptor`."""
+    if not sequences:
+        return []
+
+    gd = GlobalDescriptor(sequences)
     gd.calculate_charge(ph=ph, amide=False)
-    net_charge = float(gd.descriptor[0][0])
+    net_charges = [float(row[0]) for row in gd.descriptor]
 
-    gd = GlobalDescriptor([sequence])
+    gd = GlobalDescriptor(sequences)
     gd.isoelectric_point()
-    isoelectric_point = float(gd.descriptor[0][0])
+    isoelectric_points = [float(row[0]) for row in gd.descriptor]
 
-    gd = GlobalDescriptor([sequence])
+    gd = GlobalDescriptor(sequences)
     gd.calculate_MW(amide=False)
-    molecular_weight = float(gd.descriptor[0][0])
+    molecular_weights = [float(row[0]) for row in gd.descriptor]
 
-    pd_global = PeptideDescriptor([sequence], "eisenberg")
+    pd_global = PeptideDescriptor(sequences, "eisenberg")
     pd_global.calculate_global()
-    hydrophobicity = float(pd_global.descriptor[0][0])
+    hydrophobicities = [float(row[0]) for row in pd_global.descriptor]
 
-    pd_moment = PeptideDescriptor([sequence], "eisenberg")
+    pd_moment = PeptideDescriptor(sequences, "eisenberg")
     pd_moment.calculate_moment()
-    hydrophobic_moment = float(pd_moment.descriptor[0][0])
+    hydrophobic_moments = [float(row[0]) for row in pd_moment.descriptor]
 
-    aggregation_score = _aggregation_score(sequence)
-    solubility_flag = _solubility_flag(net_charge, hydrophobicity)
-
-    return {
-        "length": len(sequence),
-        "molecular_weight": molecular_weight,
-        "net_charge": net_charge,
-        "isoelectric_point": isoelectric_point,
-        "hydrophobicity": hydrophobicity,
-        "hydrophobic_moment": hydrophobic_moment,
-        "aggregation_score": aggregation_score,
-        "solubility_flag": solubility_flag,
-    }
+    return [
+        {
+            "length": len(sequence),
+            "molecular_weight": molecular_weights[i],
+            "net_charge": net_charges[i],
+            "isoelectric_point": isoelectric_points[i],
+            "hydrophobicity": hydrophobicities[i],
+            "hydrophobic_moment": hydrophobic_moments[i],
+            "aggregation_score": _aggregation_score(sequence),
+            "solubility_flag": _solubility_flag(net_charges[i], hydrophobicities[i]),
+        }
+        for i, sequence in enumerate(sequences)
+    ]
 
 
 def _aggregation_score(sequence: str) -> float:
@@ -203,20 +225,9 @@ def _solubility_flag(net_charge: float, hydrophobicity: float) -> str:
     return "moderate"
 
 
-def physicochemical_filter(
-    sequence: str, config: ConstraintConfig = ConstraintConfig()
-) -> FilterResult:
-    sequence = sequence.strip().upper()
-    if not sequence or any(aa not in AMINO_ACID_SET for aa in sequence):
-        return FilterResult(
-            sequence=sequence,
-            passed=False,
-            fail_reasons=["invalid_sequence"],
-            computed_attributes={},
-        )
-
-    attrs = compute_attributes(sequence, ph=config.ph)
-
+def _attrs_fail_reasons(attrs: dict, config: ConstraintConfig) -> list[str]:
+    """Threshold checks shared by physicochemical_filter and
+    physicochemical_filter_batch, applied to an already-computed attrs dict."""
     fail_reasons = []
     if attrs["length"] < config.min_length or attrs["length"] > config.max_length:
         fail_reasons.append("length_out_of_range")
@@ -228,13 +239,50 @@ def physicochemical_filter(
         fail_reasons.append("aggregation_score_too_high")
     if attrs["solubility_flag"] == "very_low":
         fail_reasons.append("solubility_very_low")
+    return fail_reasons
 
-    return FilterResult(
-        sequence=sequence,
-        passed=not fail_reasons,
-        fail_reasons=fail_reasons,
-        computed_attributes=attrs,
-    )
+
+def physicochemical_filter(sequence: str, config: ConstraintConfig) -> FilterResult:
+    return physicochemical_filter_batch([sequence], config)[0]
+
+
+def physicochemical_filter_batch(
+    sequences: list[str], config: ConstraintConfig
+) -> list[FilterResult]:
+    """Same checks as physicochemical_filter, computed for every sequence in
+    one compute_attributes_batch call instead of one modlAMP call per
+    sequence. Invalid sequences (empty/non-standard residues) are filtered
+    out before that call since modlAMP can't score them, and reinserted into
+    the result in their original positions."""
+    normalized = [s.strip().upper() for s in sequences]
+
+    valid_indices = []
+    valid_sequences = []
+    results: list[FilterResult | None] = [None] * len(normalized)
+    for i, sequence in enumerate(normalized):
+        if not sequence or any(aa not in AMINO_ACID_SET for aa in sequence):
+            results[i] = FilterResult(
+                sequence=sequence,
+                passed=False,
+                fail_reasons=["invalid_sequence"],
+                computed_attributes={},
+            )
+        else:
+            valid_indices.append(i)
+            valid_sequences.append(sequence)
+
+    if valid_sequences:
+        attrs_list = compute_attributes_batch(valid_sequences, ph=config.ph)
+        for i, sequence, attrs in zip(valid_indices, valid_sequences, attrs_list):
+            fail_reasons = _attrs_fail_reasons(attrs, config)
+            results[i] = FilterResult(
+                sequence=sequence,
+                passed=not fail_reasons,
+                fail_reasons=fail_reasons,
+                computed_attributes=attrs,
+            )
+
+    return results
 
 
 def validate_inputs(
@@ -485,29 +533,66 @@ def _hemolysis_safety_factor(hemolysis_phc50: float) -> float:
     return numerator / (numerator + 100)
 
 
-def _evaluate_with_cache(
-    sequence: str,
+def _batch_from_scalar(
+    predictor: Callable[[str], float],
+) -> Callable[[list[str]], list[float]]:
+    """Adapts a scalar (sequence) -> value predictor into a batch-shaped one
+    (one call per sequence) for callers (mainly tests) that override the
+    scalar amp_predictor/hemolysis_predictor without providing a batch
+    version. Real usage goes through predict_amp_batch/
+    predict_hemolysis_phc50_batch instead, which make one model call for the
+    whole list."""
+
+    def _batched(sequences: list[str]) -> list[float]:
+        return [predictor(sequence) for sequence in sequences]
+
+    return _batched
+
+
+def _evaluate_population(
+    sequences: list[str],
     cache: Dict[str, Evaluation],
-    amp_predictor: Callable[[str], float],
-    hemolysis_predictor: Callable[[str], float],
+    amp_predictor_batch: Callable[[list[str]], list[float]],
+    hemolysis_predictor_batch: Callable[[list[str]], list[float]],
     constraint_config: ConstraintConfig,
-) -> Evaluation:
-    if sequence not in cache:
-        filter_result = physicochemical_filter(sequence, constraint_config)
+) -> None:
+    """Evaluate every not-yet-cached sequence in `sequences` and populate
+    `cache` for each, using one physicochemical_filter_batch call and (for
+    whatever survives that filter) one predictor-batch call each, instead of
+    one physicochemical_filter + predictor call per sequence.
+
+    Same cache contents and per-sequence gating/fitness rules as scoring one
+    sequence at a time would produce -- only the number of underlying model
+    calls differs.
+    """
+    to_score = [seq for seq in dict.fromkeys(sequences) if seq not in cache]
+    if not to_score:
+        return
+
+    filter_results = physicochemical_filter_batch(to_score, constraint_config)
+
+    passed_sequences = [
+        seq for seq, result in zip(to_score, filter_results) if result.passed
+    ]
+    amp_probs = amp_predictor_batch(passed_sequences) if passed_sequences else []
+    hemolysis_values = (
+        hemolysis_predictor_batch(passed_sequences) if passed_sequences else []
+    )
+    passed_results = dict(zip(passed_sequences, zip(amp_probs, hemolysis_values)))
+
+    for seq, filter_result in zip(to_score, filter_results):
         if not filter_result.passed:
-            # Rejected before spending a predictor call — this is the "cheap gate" role
-            # physicochemical_filter plays pre-Model-1/2, same as Routes B/C.
-            cache[sequence] = Evaluation(
+            cache[seq] = Evaluation(
                 REJECTED_FITNESS_FLOOR, 0.0, REJECTED_HEMOLYSIS_PHC50
             )
+            continue
+        amp_prob, hemolysis_phc50 = passed_results[seq]
+        if not 0 <= amp_prob <= 1:
+            logger.warning(f"AMP predictor returned {amp_prob}; expected [0, 1].")
+            fitness_score = REJECTED_FITNESS_FLOOR
         else:
-            amp_prob = amp_predictor(sequence)
-            hemolysis_phc50 = hemolysis_predictor(sequence)
-            if not 0 <= amp_prob <= 1:
-                raise ValueError(f"AMP predictor returned {amp_prob}; expected [0, 1].")
             fitness_score = amp_prob * _hemolysis_safety_factor(hemolysis_phc50)
-            cache[sequence] = Evaluation(fitness_score, amp_prob, hemolysis_phc50)
-    return cache[sequence]
+        cache[seq] = Evaluation(fitness_score, amp_prob, hemolysis_phc50)
 
 
 def _setup_deap() -> base.Toolbox:
@@ -546,28 +631,84 @@ def _summarize_generation(generation: int, population: List) -> None:
     )
 
 
-def _real_amp_predictor() -> AMPClassifier:
+def _real_amp_predictor(use_feature_cache: bool = False) -> AMPClassifier:
     global _amp_model_cache
-    if _amp_model_cache is None:
-        _amp_model_cache = AMPClassifier()
+    # Rebuild if the cached instance's mode doesn't match what's being asked
+    # for now -- a bare `if _amp_model_cache is None` would silently keep
+    # serving a stale True/False instance to a caller that changed its mind,
+    # and a use_feature_cache=True instance handed a use_feature_cache=False
+    # call's feature_extractor=None crashes instead of falling back.
+    if (
+        _amp_model_cache is None
+        or _amp_model_cache.use_feature_cache != use_feature_cache
+    ):
+        _amp_model_cache = AMPClassifier(use_feature_cache=use_feature_cache)
     return _amp_model_cache
 
 
-def _real_hemolysis_predictor() -> ReplicatedHemoPI2Predictor:
+def _real_hemolysis_predictor(
+    use_feature_cache: bool = False,
+) -> ReplicatedHemoPI2Predictor:
     global _hemolysis_model_cache
-    if _hemolysis_model_cache is None:
-        _hemolysis_model_cache = ReplicatedHemoPI2Predictor()
+    if (
+        _hemolysis_model_cache is None
+        or _hemolysis_model_cache.use_feature_cache != use_feature_cache
+    ):
+        _hemolysis_model_cache = ReplicatedHemoPI2Predictor(
+            use_feature_cache=use_feature_cache
+        )
     return _hemolysis_model_cache
 
 
-def predict_amp(sequence: str) -> float:
+def predict_amp(
+    sequence: str,
+    feature_extractor: FeatureExtractor | None = None,
+    use_feature_cache: bool = False,
+) -> float:
     """Real AMP probability from amp_classifier_v1's saved ensemble."""
-    return _real_amp_predictor().predict_proba(sequence)
+    return _real_amp_predictor(use_feature_cache).predict_proba(
+        sequence, feature_extractor
+    )
 
 
-def predict_hemolysis_phc50(sequence: str) -> float:
+def predict_hemolysis_phc50(
+    sequence: str,
+    feature_extractor: FeatureExtractor | None = None,
+    use_feature_cache: bool = False,
+) -> float:
     """Real hemolysis model output from hemolysis_predictor_v1: pHC50, not a probability."""
-    return _real_hemolysis_predictor().predict_phc50(sequence)
+    return _real_hemolysis_predictor(use_feature_cache).predict_phc50(
+        sequence, feature_extractor
+    )
+
+
+def predict_amp_batch(
+    sequences: list[str],
+    feature_extractor: FeatureExtractor | None = None,
+    use_feature_cache: bool = False,
+) -> list[float]:
+    """Real AMP probabilities from amp_classifier_v1, one ESM2 forward pass
+    for the whole list instead of one pass per sequence. When use_feature_cache
+    is set, warms the shared FeatureExtractor for this batch first, so a
+    sequence already embedded by an earlier GA generation (or by this same
+    run's later stages) is never re-embedded."""
+    if use_feature_cache and feature_extractor is not None and sequences:
+        feature_extractor.get_esm2_embedding_batch(sequences)
+    return _real_amp_predictor(use_feature_cache).predict_proba_batch(
+        sequences, feature_extractor
+    )
+
+
+def predict_hemolysis_phc50_batch(
+    sequences: list[str],
+    feature_extractor: FeatureExtractor | None = None,
+    use_feature_cache: bool = False,
+) -> list[float]:
+    """Real hemolysis pHC50 values from hemolysis_predictor_v1, one
+    descriptor-extraction pass for the whole list instead of one per sequence."""
+    return _real_hemolysis_predictor(use_feature_cache).predict_phc50_batch(
+        sequences, feature_extractor
+    )
 
 
 class BestIndividual(TypedDict):
@@ -594,19 +735,47 @@ def run_ga(
     random_seed: int = 42,
     amp_predictor: Callable[[str], float] | None = None,
     hemolysis_predictor: Callable[[str], float] | None = None,
+    amp_predictor_batch: Callable[[list[str]], list[float]] | None = None,
+    hemolysis_predictor_batch: Callable[[list[str]], list[float]] | None = None,
     tournsize: int = 3,
     constraint_config: ConstraintConfig | None = None,
+    use_feature_cache: bool = False,
+    feature_extractor: FeatureExtractor | None = None,
 ) -> GAResult:
     validate_inputs(
         seed_sequence, min_length, max_length, pop_size, n_generations, mutation_rate
     )
     if tournsize < 2:
         raise ValueError("tournsize must be >= 2.")
-    amp_predictor = predict_amp if amp_predictor is None else amp_predictor
-    hemolysis_predictor = (
-        predict_hemolysis_phc50 if hemolysis_predictor is None else hemolysis_predictor
+    # Batch predictors take priority when given explicitly; otherwise prefer
+    # the real batched models, falling back to wrapping a scalar predictor
+    # (real or a test's mock) one call per sequence so callers that only
+    # override the scalar amp_predictor/hemolysis_predictor keep working.
+    if amp_predictor_batch is None:
+        amp_predictor_batch = (
+            (
+                lambda sequences: predict_amp_batch(
+                    sequences, feature_extractor, use_feature_cache
+                )
+            )
+            if amp_predictor is None
+            else _batch_from_scalar(amp_predictor)
+        )
+    if hemolysis_predictor_batch is None:
+        hemolysis_predictor_batch = (
+            (
+                lambda sequences: predict_hemolysis_phc50_batch(
+                    sequences, feature_extractor, use_feature_cache
+                )
+            )
+            if hemolysis_predictor is None
+            else _batch_from_scalar(hemolysis_predictor)
+        )
+    constraint_config = (
+        constraint_config
+        if constraint_config is not None
+        else ConstraintConfig(min_length=min_length, max_length=max_length)
     )
-    constraint_config = constraint_config if constraint_config is not None else ConstraintConfig()
     random.seed(random_seed)
     np.random.seed(random_seed)
     rng = random.Random(random_seed)
@@ -617,23 +786,34 @@ def run_ga(
     hall_of_fame = SimpleHallOfFame()  # seems unnecessary
     ordinal = 0
 
-    def record(individual) -> None:
-        evaluation = _evaluate_with_cache(
-            "".join(individual), eval_cache, amp_predictor, hemolysis_predictor, constraint_config
+    def record_batch(individuals: List) -> None:
+        """Evaluate every individual's sequence in one batched pass (see
+        _evaluate_population), then append one history row per individual --
+        same per-individual outcome as calling record(individual) in a loop,
+        fewer underlying model calls."""
+        sequences = ["".join(individual) for individual in individuals]
+        _evaluate_population(
+            sequences,
+            eval_cache,
+            amp_predictor_batch,
+            hemolysis_predictor_batch,
+            constraint_config,
         )
-        individual.fitness.values = (evaluation.fitness_score,)
-        history_rows.append(
-            {
-                "variant_id": individual.variant_id,
-                "parent_id": individual.parent_id,
-                "sequence": "".join(individual),
-                "generation": individual.generation,
-                "fitness_score": evaluation.fitness_score,
-                "amp_prob": evaluation.amp_prob,
-                "hemolysis_phc50": evaluation.hemolysis_phc50,
-                "timestamp": datetime.now(timezone.utc).isoformat(),
-            }
-        )
+        for individual, sequence in zip(individuals, sequences):
+            evaluation = eval_cache[sequence]
+            individual.fitness.values = (evaluation.fitness_score,)
+            history_rows.append(
+                {
+                    "variant_id": individual.variant_id,
+                    "parent_id": individual.parent_id,
+                    "sequence": sequence,
+                    "generation": individual.generation,
+                    "fitness_score": evaluation.fitness_score,
+                    "amp_prob": evaluation.amp_prob,
+                    "hemolysis_phc50": evaluation.hemolysis_phc50,
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                }
+            )
 
     population = []
     seed_id = _make_variant_id(seed_sequence, 0, ordinal)
@@ -647,8 +827,7 @@ def run_ga(
         ordinal += 1
         population.append(_make_individual(sequence, variant_id, seed_id, 0))
 
-    for individual in population:
-        record(individual)
+    record_batch(population)
     hall_of_fame.update(population)
     _summarize_generation(0, population)
 
@@ -683,8 +862,7 @@ def run_ga(
                 offsprings.append(
                     _make_individual(child_seq, variant_id, parent_ids, generation)
                 )
-        for individual in offsprings:
-            record(individual)
+        record_batch(offsprings)
         population = offsprings
         if not population:
             # Every pair this generation exhausted MAX_CONSTRAINT_RETRIES with no
@@ -720,6 +898,19 @@ def run_ga(
     return {"best": best, "history": history, "population": population}
 
 
+def _is_valid_sequence(sequence: str | None, min_length: int, max_length: int) -> bool:
+    """A non-empty string of only standard amino acids -- guards against
+    malformed entry candidates (e.g. a data-curation note left in place of
+    a sequence) silently riding through Stage 4 unvalidated, since Stage 4
+    passes incoming candidates straight into its output otherwise."""
+    return (
+        bool(sequence)
+        and set(sequence.strip()) <= AMINO_ACID_SET
+        and len(sequence.strip()) > min_length
+        and len(sequence.strip()) < max_length
+    )
+
+
 class RouteA(Stage4Route):
     """Reference-guided candidate generation: GA optimization of a seed peptide
     (Stage 4, route A). See CLAUDE.md's multi-route generation convention."""
@@ -728,7 +919,24 @@ class RouteA(Stage4Route):
         super().__init__(config)
 
     def run(self) -> list[Candidate]:
-        seed_candidates = self.config.get("seed_candidates", [])
+        valid_candidates = []
+        for candidate in self.config.get("seed_candidates", []):
+            if _is_valid_sequence(
+                candidate.get("seed_sequence", None),
+                self.config.get("min_length", 6),
+                self.config.get("max_length", 35),
+            ):
+                valid_candidates.append(candidate)
+            else:
+                logger.info(
+                    "routeA.invalid_seed_candidate",
+                    extra={
+                        "candidate": candidate.get("seed_sequence", None),
+                    },
+                )
+        seed_candidates = valid_candidates
+        use_feature_cache = self.config.get("use_feature_cache", False)
+        feature_extractor = self.config.get("feature_extractor")
         candidates: list[Candidate] = []
         for seed_params in tqdm(seed_candidates, desc="RouteA"):
             seed_sequence = seed_params.get("seed_sequence")
@@ -741,13 +949,19 @@ class RouteA(Stage4Route):
             try:
                 result = run_ga(
                     seed_sequence=seed_sequence,
-                    min_length=seed_params.get("min_length", constraint_config.min_length),
-                    max_length=seed_params.get("max_length", constraint_config.max_length),
+                    min_length=seed_params.get(
+                        "min_length", constraint_config.min_length
+                    ),
+                    max_length=seed_params.get(
+                        "max_length", constraint_config.max_length
+                    ),
                     pop_size=seed_params.get("pop_size", 10),
                     n_generations=seed_params.get("n_generations", 20),
                     mutation_rate=seed_params.get("mutation_rate", 0.1),
                     random_seed=seed_params.get("random_seed", 42),
                     constraint_config=constraint_config,
+                    use_feature_cache=use_feature_cache,
+                    feature_extractor=feature_extractor,
                 )
             except Exception as e:
                 logger.error(

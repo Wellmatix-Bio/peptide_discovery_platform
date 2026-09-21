@@ -1,40 +1,68 @@
-# Wellmatix Peptide Platform (`wmx`)
+# Wellmatix Peptide Platform
 
 AI-driven discovery platform for wound-healing therapeutic peptides. The system takes a
-therapeutic product brief and returns a ranked, synthesis-ready shortlist of candidates
-together with safety, developability, formulation and IP context.
+therapeutic product brief and returns a ranked, synthesis-oriented shortlist of candidates
+together with safety, developability, and mechanistic evidence for each one.
 
 ---
 
 ## Architecture
 
-The platform is a **linear stage pipeline**. Each stage is an independent package that
-receives a list of candidate objects, enriches them, and returns them. Stages never
-import from one another; anything shared lives in `common/`.
+The platform is a **linear stage pipeline**, split into two kinds of stage:
+
+- **Setup stages** (`s01`-`s03`) run once, before any candidates exist. They take the run
+  config and produce a payload (brief, wound-biology objectives, standardized records)
+  that later stages read back out of `RunContext`.
+- **Candidate stages** (`s04`-`s14`) take the current candidate list, enrich it, and
+  return the survivors — a stage may filter candidates out directly based on its own
+  thresholds, and logs what it removed and why.
 
 ```
-s01_brief              Therapeutic product brief / TPP
-s02_target_definition  Wound biology → biological objective vector
-s03_data_integration   Public + internal data → reference knowledge base
-s04_generation         Reference-guided, de novo, interface and multifunctional design
-s05_physchem_screening Core properties and early rejection rules
-s06_functional_models  Antimicrobial, wound closure, angiogenesis, immune, ECM, hemostatic
-s07_structure_mechanism Structure prediction, docking, pathway inference
-s08_safety_developability Toxicity, hemolysis, immunogenicity, stability
-s09_synthesis_cmc      Synthesis feasibility, purity, yield, cost
-s10_formulation        Delivery system co-design and release profile
-s11_ranking            Weighted multi-objective score + hard thresholds
-s12_diversity_ip       Clustering, portfolio selection, patent/FTO analysis
-s13_validation_plan    Tiered experimental protocol generation
-s14_active_learning    Experimental results → recalibration → next batch
+s01_brief                  Therapeutic product brief -> machine-readable Brief
+s02_target_definition      Wound biology -> deficit-rule-driven objective vector
+s03_data_integration       Reference knowledge base (not yet implemented)
+s04_generation              Route A (GA, reference-guided) + Route B (ProtGPT2 LoRA, de novo)
+s05_physchem_screening     Physicochemical properties, soft flags + 2 hard rejects
+s06_functional_models      Antimicrobial, migration, angiogenesis, immunomodulation
+s07_structure_mechanism    ESMFold structure + pathway-engagement mechanism summary
+s08_safety_developability  Hemolysis, cytotoxicity, aggregation, cleavage stability
+s09_synthesis_cmc          Rule-based synthesis difficulty, cost bands, purity ceiling
+s10_formulation            Delivery/formulation co-design (not yet implemented)
+s11_ranking                Pure weighted multi-objective ranking (no hard gates)
+s12_diversity_ip           Diversity/novelty/IP selection (not yet implemented)
+s13_validation_plan        Experimental validation protocol (not yet implemented)
+s14_active_learning        Experimental-result feedback loop (not yet implemented)
 ```
+
+Stages currently registered and runnable end-to-end: **s01, s02, s04, s05, s06, s07, s08,
+s09, s11** (`src/registry.py`). s03, s10, s12-s14 exist as directories under
+`src/pipeline/` but have no working stage implementation yet.
 
 Two rules keep this structure from degrading:
 
-1. **No cross-stage imports.** A stage may import from `common/`, `schemas/`,
-   `models/` and `data/` — never from another `sNN_*` package.
+1. **No cross-stage imports.** A stage may import from `common/`, `schemas/`, and
+   `model_store/` — never from another `sNN_*` package.
 2. **Every stage boundary is serialisable.** Stage output is written to
-   `artifacts/runs/<run_id>/sNN_<name>.jsonl` and can be loaded back as input.
+   `artifacts/runs/<run_id>/<stage_name>.jsonl` via `BoundaryWriter`, alongside a
+   per-stage/per-prediction entry in `audit_log.jsonl`.
+
+### Shared feature-extraction cache
+
+`src/pipeline/feature_extractor.py` provides `FeatureExtractor`, a pipeline-run-scoped
+cache (one instance lives on `RunContext` for the whole run) that memoizes the raw
+per-sequence ESM2 embeddings and modlAMP/propy descriptors that several models under
+`model_store/` would otherwise recompute independently — keyed by a hash of the sequence
+plus a fingerprint of which extractor/checkpoint produced it. Every model keeps its own
+original tokenizer/pooling/descriptor code as the default path; each accepts a
+`use_feature_cache: bool = False` constructor flag that switches it onto the shared cache
+instead, with no change to its own pooling, scaling, or PCA logic.
+
+This is controlled by a single **pipeline-level** switch, `use_feature_cache` in the run
+manifest (`configs/test_run.yaml`), not a per-stage setting — a run uses one consistent
+embedding source throughout, never some stages cached and others not. When on, each of
+Stages 5, 6, 8, and 9 batch-warms the cache once for every candidate right before its
+per-candidate loop (one batched ESM2 forward pass per stage instead of one per model per
+candidate), then every model call in that loop hits the warm cache. Off by default.
 
 ---
 
@@ -47,145 +75,153 @@ cd wellmatix-peptide-platform
 python -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev]"
 
-cp .env.example .env    # then fill in credentials and paths
+cp .env.example .env    # DEV_MODE and any local overrides
 ```
 
-Requires Python 3.11+. Structure prediction and docking stages (`s07`) additionally
-require the external tools referenced in `docs/architecture.md`; they are optional and
-disabled by default.
+Requires Python 3.11+ (see `pyproject.toml` for the full dependency list: PyTorch,
+transformers, XGBoost, scikit-learn, modlAMP, biopython, propy3, DEAP, freesasa,
+fair-esm). Stage 7's structure prediction uses `esmfold_v1` from `model_store/` directly
+— no external tool install required.
 
 ---
 
 ## Quickstart
 
-Run the full pipeline for a diabetic foot ulcer brief:
+There is no packaged CLI yet — the entry point is `main.py`, which takes a single run
+config path:
 
 ```bash
-wmx run --config configs/runs/dfu_full.yaml
+python main.py configs/test_run.yaml
 ```
 
-Score externally supplied sequences, entering at the functional-model stage:
+`configs/test_run.yaml` is the run **manifest**: `run_id`, `seed`, `seed_candidates_path`,
+`artifacts_dir`, `model_store`, `entry_stage`, and the pipeline-wide `use_feature_cache`
+switch. The actual per-stage `enabled`/`params` block lives in a matching file under
+`configs/runs/`, named `<run_id>.yaml` (`RunConfig.load` reads both and merges them — see
+`src/schemas/run_config.py`).
 
-```bash
-wmx run --config configs/runs/score_only.yaml \
-        --input data/incoming/collaborator_sequences.csv
-```
+`configs/runs/` currently has:
 
-Re-rank an existing run under different weights without recomputing predictions:
+- `test_run.yaml` — the working end-to-end config, all implemented stages enabled.
+- `dfu_full.yaml` — a diabetic-foot-ulcer-oriented variant (has some stale/unused keys
+  from an earlier stage-naming convention; not guaranteed to run as-is).
+- `score_only.yaml`, `rescore_existing.yaml` — placeholder stubs (header comment only,
+  no `stages:` block yet) for a future mid-pipeline-entry workflow.
 
-```bash
-wmx run --config configs/runs/rescore_existing.yaml \
-        --input artifacts/runs/dfu_2026_08/s10_formulation.jsonl
-```
+A separate FastAPI stub for Vertex AI job management lives at `src/api/api.py`
+(`uvicorn api:app --reload`) — unrelated to the `main.py` pipeline path, and not wired to
+real GCP config yet.
 
-Other commands:
-
-```bash
-wmx stages                       # list stages with their requires/produces contract
-wmx validate --config <path>     # check a config without executing
-wmx report --run-id <run_id>     # regenerate JSON + PDF reports
-wmx results upload --file <path> # push experimental results into active learning
-```
+Sample product briefs for manual testing live in `data/briefs/TC-01...TC-20*.json`,
+covering a range of wound contexts and several deliberate edge cases; point a run's
+`s01_therapeutic_product_brief.params.brief_path` at one of these.
 
 ---
 
 ## Configuration
 
-Run behaviour is entirely config-driven. `configs/base.yaml` holds defaults; files in
-`configs/runs/` override them.
+Run behaviour is entirely config-driven, with every stage's tunable thresholds living in
+`configs/runs/<run_id>.yaml` — nothing is hardcoded with no override path. A handful of
+run-wide (not per-stage) settings live in the manifest instead (`configs/test_run.yaml`):
 
 ```yaml
-run_id: dfu_2026_08
-schema_version: 1
-
-entry_stage: s04_generation      # where the pipeline starts
-exit_stage: s12_diversity_ip     # optional early stop
-input: null                      # path to serialised candidates for mid-pipeline entry
-
-weights:    !include ../weights/infected_diabetic_ulcer.yaml
-thresholds: !include ../thresholds/default_hard_thresholds.yaml
-
-stages:
-  s04_generation:
-    enabled: true
-    routes: [A, D]
-    max_candidates: 5000
-  s05_physchem_screening:
-    enabled: true
-  s06_functional_models:
-    enabled: true
-    models: [antimicrobial, wound_closure, angiogenesis, immunomodulation]
-  s07_structure_mechanism:
-    enabled: false               # expensive; off unless a defined target exists
-  s09_synthesis_cmc:
-    enabled: true
-    max_length: 30
+run_id: test_run
+seed: 42
+seed_candidates_path: ./data/raw/curated_peptides_machine_readable.fasta
+artifacts_dir: ./artifacts
+model_store: ./model_store
+use_feature_cache: false   # pipeline-wide FeatureExtractor switch, see above
+entry_stage: s01_brief
 ```
 
-Disabling a stage skips it. Setting `entry_stage` starts partway through, in which case
-`input` must point at a serialised candidate set or a supported external format.
+Per-stage config (trimmed from `configs/runs/test_run.yaml`):
 
-See `docs/config_reference.md` for the full option list.
+```yaml
+stages:
+  s01_therapeutic_product_brief:
+    enabled: true
+    params:
+      brief_path: ./data/briefs/TC-03_second_degree_burn.json
+
+  s05_physchem_screening:
+    enabled: true
+    params:
+      ph: 7.4
+      aggregation_tendency_flag_max: 0.75
+      ss_confidence_unstable_max: 0.5
+      # ...
+
+  s08_safety_developability:
+    enabled: true
+    params:
+      hemolysis_phc50_reject_max: 4.0
+      hemolysis_predictor_version: "v1"   # or "v2" (HemoPI2 CLI subprocess)
+
+  s11_ranking:
+    enabled: true
+    params:
+      ranking_config:            # inline policy: baseline_weights, modifier_rules,
+        baseline_weights: {...}  # normalizers, input_sources -- see s11_ranking/stage.py
+```
+
+Disabling a stage (`enabled: false`) skips it entirely. `RunConfig.for_stage(name)`
+returns a default-enabled, no-params `StageConfig` for any stage not explicitly listed.
 
 ---
 
 ## Stage contracts
 
-Each stage declares the fields it needs and the fields it adds:
+Each candidate stage declares the fields it needs and the fields it adds:
 
 ```python
-class Stage:
-    name: str
-    requires: set[str]
-    produces: set[str]
+class CandidateStage(Stage):
+    requires: set[str] = set()
+    produces: set[str] = set()
 
-    def run(self, candidates: list[Candidate], config: StageConfig) -> list[Candidate]:
+    def run(self, candidates: list[Candidate], config: StageConfig, ctx: RunContext) -> list[Candidate]:
         ...
 ```
 
-Before execution the runner checks that every enabled stage's `requires` is satisfied by
-the incoming object plus the `produces` of preceding enabled stages. A mismatch fails at
-startup, not halfway through a long run. The authoritative table lives in
-`docs/stage_contracts.md` and must be updated in the same commit as any contract change.
-
----
-
-## Schema versioning
-
-Candidate objects carry a `schema_version`. Frozen historical versions live in
-`src/schemas/versions/` with migrations, so candidate files written months ago still
-load — this matters because active learning depends on an unbroken experimental history.
-Any field change requires an entry in `docs/schema_changelog.md`.
+Before execution, `PipelineRunner._validate_contracts` checks that every enabled stage's
+`requires` is satisfiable by the incoming candidate fields plus the `produces` of every
+preceding enabled stage — a mismatch raises `ConfigError` at startup, not partway through
+a run. See `src/pipeline/base.py` for the full `CandidateStage`/`SetupStage` contract,
+including the pre/postcondition checks `execute()` runs around every stage's `run()`.
 
 ---
 
 ## Provenance
 
-Every prediction written by any stage records:
+Every candidate stage's execution is recorded via `AuditWriter`
+(`common/audit.py`) to `artifacts/runs/<run_id>/audit_log.jsonl`, alongside a snapshot of
+the fully resolved run config (`config_snapshot.yaml`) written at run start. Each
+candidate's individual model predictions are recorded inline on
+`candidate.predictions`, which is itself serialised at every stage boundary
+(`artifacts/runs/<run_id>/<stage_name>.jsonl`) — so a run's full decision trail is
+reconstructable from the boundary files plus the audit log and config snapshot.
 
-- model name, version and checksum
-- input sequence and processing parameters
-- prediction value and confidence
-- applicability-domain status
-- timestamp and run ID
-
-These land in `artifacts/runs/<run_id>/audit_log.jsonl`, alongside a snapshot of the
-resolved config. A run is reproducible from that pair alone.
+A final `candidates_final.json` and a `stats_<run_id>.txt` summary are also written to
+the run directory at the end of a run (see `common/io.write_final_candidates` and
+`common/stats.write_run_stats`).
 
 ---
 
 ## Repository layout
 
 ```
-configs/         run, weight and threshold configuration
-src/             package source (runner, schemas, pipeline, models, data, reporting)
-artifacts/       per-run outputs and audit logs (gitignored)
-model_store/     model weights and manifest (gitignored)
-data/            local datasets (gitignored except manifests)
-notebooks/       exploration and validation notebooks
-tests/           unit, integration and schema-compatibility tests
-docs/            architecture, stage contracts, schema changelog, config reference
-scripts/         data ingestion, model registration, results upload
+configs/         run manifests (configs/*.yaml) and per-run stage configs (configs/runs/)
+src/             package source
+  pipeline/      s01-s14 stage packages + feature_extractor.py + base.py
+  schemas/       Candidate, RunConfig, Brief, and related pydantic models
+  common/        audit, boundary I/O, GPU release, env loading, stats, logging
+  api/           standalone FastAPI Vertex AI stub (not part of the main.py pipeline)
+  registry.py    stage-name -> stage-class registration
+  runner.py      PipelineRunner: loads config, resolves stages, executes them in order
+artifacts/       per-run outputs, audit logs, config snapshots (gitignored)
+model_store/     model weights + predictor.py wrappers, one directory per model (gitignored)
+data/            briefs/, raw/ seed sequences, and other local datasets (gitignored except manifests)
+tests/           unit (per-stage), integration, and schema tests
+docs/            architecture, stage contracts, schema changelog, config reference (stub headers so far)
 ```
 
 ---
@@ -193,29 +229,36 @@ scripts/         data ingestion, model registration, results upload
 ## Development
 
 ```bash
-pytest                      # full suite
-pytest tests/unit           # fast
-pytest tests/integration    # includes a mid-pipeline-entry run
-ruff check . && ruff format .
-mypy src/
+pytest                          # full suite
+pytest tests/unit/pipeline      # per-stage unit tests
 ```
+
+`pyproject.toml` sets `pythonpath = ["src"]` for pytest, so tests import stage modules
+the same way `main.py` does (`from pipeline.sNN_xxx.stage import StageN`).
 
 Adding a stage or model:
 
-1. Create the package under `src/pipeline/` or `src/models/`.
-2. Implement `Stage` (or the model interface) and declare `requires` / `produces`.
-3. Register it in `src/registry.py`.
-4. Add a unit test, a fixture, and a row in `docs/stage_contracts.md`.
-5. Register model weights with `scripts/register_model.py` so versions are tracked.
+1. Create the package under `src/pipeline/sNN_<name>/` with a `stage.py` defining a
+   `CandidateStage` (or `SetupStage` for s01-s03) subclass.
+2. Declare `requires` / `produces`, implement `run()`.
+3. Register the class in `src/registry.py`'s `SETUP_STAGE_CLASSES` or
+   `CANDIDATE_STAGE_CLASSES` — a stage with no registry entry never executes, even if
+   fully implemented (this has bitten this project once already).
+4. Add a unit test under `tests/unit/pipeline/test_sNN_<name>.py`.
+5. If the stage calls a model, add it under `model_store/<model_name>_v1/` with its own
+   `predictor.py`, following the existing lazy-load-on-first-`predict()` pattern.
 
 ---
 
 ## Status
 
-Pre-MVP. Current scope targets the infected diabetic foot ulcer indication:
-brief → generation → physchem → antimicrobial/migration/toxicity/hemolysis prediction →
-stability and synthesis feasibility → ranking → diversity selection → top-10 synthesis
-recommendation → experimental upload → active-learning update.
+Pre-MVP, actively evolving. Implemented and wired: brief loading (s01) → wound-biology
+deficit rules (s02) → GA/de-novo generation (s04) → physicochemical screening (s05) →
+antimicrobial/migration/angiogenesis/immunomodulation prediction (s06) → ESMFold
+structure + mechanism (s07) → hemolysis/cytotoxicity/aggregation/cleavage-stability
+safety screening (s08) → rule-based synthesis feasibility (s09) → pure multi-objective
+ranking with no hard gates (s11). Not yet implemented: s03 (data integration), s10
+(formulation), s12 (diversity/IP), s13 (validation planning), s14 (active learning).
 
 ---
 

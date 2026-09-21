@@ -51,8 +51,9 @@ class RouteB(Stage4Route):
     ) -> list[Candidate]:
         tags = self.config.get("tags", ["<AMP>"])
         n_peptides = self.config.get("n_peptides", 100)
-        min_length = self.config.get("min_length", ConstraintConfig().min_length)
-        max_length = self.config.get("max_length", ConstraintConfig().max_length)
+        min_length = self.config.get("min_length", 6)
+        max_length = self.config.get("max_length", 35)
+        constraint_config = ConstraintConfig(min_length=min_length, max_length=max_length)
 
         logger.info(
             "routeb.generate.start",
@@ -76,7 +77,7 @@ class RouteB(Stage4Route):
 
         candidates_out = []
         for sequence in sequences:
-            filter_result = physicochemical_filter(sequence, ConstraintConfig())
+            filter_result = physicochemical_filter(sequence, constraint_config)
             candidates_out.append(
                 Candidate(
                     id=_make_variant_id(sequence, tags),

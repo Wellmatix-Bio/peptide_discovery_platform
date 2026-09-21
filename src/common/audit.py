@@ -14,11 +14,18 @@ def _now() -> str:
 
 class AuditWriter:
     """Appends one JSONL record per setup stage, candidate stage, and
-    failure to `path`, so a run's full provenance trail lives in one file."""
+    failure to `path`, so a run's full provenance trail lives in one file.
+
+    A fresh instance truncates any existing file at `path` first -- a run
+    directory reflects that run's current state (config_snapshot.yaml is
+    likewise overwritten fresh every run), so re-running the same run_id
+    must not silently accumulate a previous run's audit records underneath
+    this run's own."""
 
     def __init__(self, path: str | Path) -> None:
         self.path = Path(path)
         self.path.parent.mkdir(parents=True, exist_ok=True)
+        self.path.write_text("", encoding="utf-8")
 
     def _append(self, record: dict[str, Any]) -> None:
         with open(self.path, "a", encoding="utf-8") as f:

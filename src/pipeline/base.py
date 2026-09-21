@@ -31,6 +31,7 @@ from common.audit import AuditWriter
 from common.io import BoundaryWriter
 from common.logging import get_logger
 from common.model_registry import ModelRef, ModelRegistry
+from pipeline.feature_extractor import FeatureExtractor
 from schemas.brief import Brief
 from schemas.objectives import ObjectiveVector
 from schemas.candidate import Candidate
@@ -81,6 +82,8 @@ class RunContext:
     audit: AuditWriter
     boundary: BoundaryWriter
     models: ModelRegistry
+    feature_extractor: FeatureExtractor
+    use_feature_cache: bool = False
     seed: int = 42
 
     # populated by setup stages / loaded at startup

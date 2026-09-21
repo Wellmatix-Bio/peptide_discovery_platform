@@ -2001,7 +2001,9 @@ def prevalidate_candidates(candidates: list[dict]) -> list[dict]:
     for c in candidates:
         if c["mean_sequence_confidence"] is None or c["mean_sequence_confidence"] < MEAN_CONFIDENCE_THRESHOLD:
             continue
-        filter_result = physicochemical_filter(c["sequence"], ConstraintConfig())
+        filter_result = physicochemical_filter(
+            c["sequence"], ConstraintConfig(min_length=6, max_length=35)
+        )
         if not filter_result.passed:
             continue
         c["physicochemical_attributes"] = filter_result.computed_attributes

@@ -1,0 +1,337 @@
+# Shared, memoizing feature extraction for models under model_store/.
+#
+# Centralizes only the expensive, model-agnostic computation each predictor
+# used to redo independently: the ESM2 tokenize+forward-pass, and the
+# modlAMP/propy descriptor passes. Pooling, scaling, PCA, and every other
+# per-model transform stay exactly where they already live, inside each
+# predictor's own code -- this class never pools, scales, or interprets a
+# feature, it only computes and caches raw per-sequence representations.
+from __future__ import annotations
+
+import hashlib
+from dataclasses import dataclass, field
+from typing import Any
+
+import numpy as np
+import pandas as pd
+import torch
+from Bio.SeqUtils.ProtParam import ProteinAnalysis
+from modlamp.descriptors import GlobalDescriptor, PeptideDescriptor
+from propy.PyPro import GetProDes
+from transformers import AutoTokenizer, EsmModel
+
+from model_store.hemolysis_predictor_v1.predictor import (
+    Extractor as _HemolysisV1Extractor,
+    normalize_sequences as _normalize_hemolysis_v1_sequences,
+)
+from model_store.hemolysis_predictor_v1.property_tables import (
+    PROPERTY_TABLES as _HEMOLYSIS_V1_PROPERTY_TABLES,
+)
+
+DEFAULT_ESM2_MODEL_NAME = "facebook/esm2_t33_650M_UR50D"
+# Sequences per forward pass, chosen to bound GPU memory use -- measured at
+# ~4.6GB peak reserved on an 8GB card for 256 sequences of the pipeline's max
+# length (50 residues), leaving headroom against fragmentation/other processes.
+DEFAULT_ESM2_BATCH_SIZE = 256
+
+_AROMATIC = set("FWY")
+_HYDROPHOBIC = set("AVLIMFW")
+_POLAR = set("STNQCY")
+_POSITIVE = set("KRH")
+_NEGATIVE = set("DE")
+_SMALL = set("AGS")
+
+_SOCN_QSO_LAG = 4
+_PAAC_LAMBDA = 4
+_PAAC_KEYS = [f"PAAC{i}" for i in range(1, 21 + _PAAC_LAMBDA)]
+_APAAC_KEYS = [f"APAAC{i}" for i in range(1, 21 + 2 * _PAAC_LAMBDA)]
+
+
+def _biopython_features(seq: str) -> dict[str, float]:
+    """Matches aggregation_predictor_v1's biopython_features exactly."""
+    pa = ProteinAnalysis(seq)
+    helix, turn, sheet = pa.secondary_structure_fraction()
+    ext_reduced, ext_oxidized = pa.molar_extinction_coefficient()
+    n = len(seq)
+    return {
+        "bp_length": n,
+        "bp_molecular_weight": pa.molecular_weight(),
+        "bp_aromaticity": pa.aromaticity(),
+        "bp_instability_index": pa.instability_index(),
+        "bp_gravy": pa.gravy(),
+        "bp_isoelectric_point": pa.isoelectric_point(),
+        "bp_charge_at_pH7": pa.charge_at_pH(7.0),
+        "bp_ss_helix_frac": helix,
+        "bp_ss_turn_frac": turn,
+        "bp_ss_sheet_frac": sheet,
+        "bp_molar_ext_reduced": ext_reduced,
+        "bp_molar_ext_oxidized": ext_oxidized,
+        "bp_aromatic_frac": sum(c in _AROMATIC for c in seq) / n,
+        "bp_hydrophobic_frac": sum(c in _HYDROPHOBIC for c in seq) / n,
+        "bp_polar_frac": sum(c in _POLAR for c in seq) / n,
+        "bp_positive_frac": sum(c in _POSITIVE for c in seq) / n,
+        "bp_negative_frac": sum(c in _NEGATIVE for c in seq) / n,
+        "bp_small_frac": sum(c in _SMALL for c in seq) / n,
+        "bp_net_charge_frac": (sum(c in _POSITIVE for c in seq) - sum(c in _NEGATIVE for c in seq)) / n,
+    }
+
+
+def _safe_descriptor(fn, fallback_keys, *args, **kwargs) -> dict[str, float]:
+    try:
+        return fn(*args, **kwargs)
+    except Exception:
+        return {k: np.nan for k in fallback_keys}
+
+
+def _propy_features(seq: str) -> dict[str, float]:
+    """Matches aggregation_predictor_v1's pybiomed_features exactly."""
+    gp = GetProDes(seq)
+    feats: dict[str, float] = {}
+    feats.update(gp.GetAAComp())
+    feats.update(gp.GetDPComp())
+    feats.update(gp.GetCTD())
+    feats.update(gp.GetMoranAuto())
+    feats.update(gp.GetGearyAuto())
+    feats.update(gp.GetMoreauBrotoAuto())
+    feats.update(gp.GetQSO(maxlag=_SOCN_QSO_LAG))
+    feats.update(gp.GetSOCN(maxlag=_SOCN_QSO_LAG))
+    feats.update(_safe_descriptor(gp.GetPAAC, _PAAC_KEYS, lamda=_PAAC_LAMBDA))
+    feats.update(_safe_descriptor(gp.GetAPAAC, _APAAC_KEYS, lamda=_PAAC_LAMBDA))
+    return feats
+
+
+@dataclass(frozen=True)
+class ESM2Embedding:
+    """One sequence's raw ESM2 output. `hidden_states` includes BOS/EOS (and
+    any padding, trimmed to this sequence's own length) -- callers slice out
+    whatever special-token convention their own pooling needs; this class
+    makes no assumption about which positions matter to a given model."""
+
+    hidden_states: np.ndarray  # (seq_len_with_specials, hidden_dim), float32
+    input_ids: np.ndarray  # (seq_len_with_specials,), token ids incl. BOS/EOS
+    cls_token_id: int
+    eos_token_id: int
+
+
+def _sequence_cache_key(sequence: str, fingerprint: str) -> str:
+    digest = hashlib.sha256(sequence.encode("utf-8")).hexdigest()
+    return f"{digest}:{fingerprint}"
+
+
+class FeatureExtractor:
+    """Pipeline-run-scoped cache of raw per-sequence feature representations.
+
+    One instance lives on RunContext for the whole run (see
+    PipelineRunner._build_context). Entries are memoized by a hash of the
+    sequence plus a fingerprint identifying which extractor/checkpoint
+    produced them, so a checkpoint change can never silently serve a stale
+    value under an unchanged-looking key. There is no explicit eviction: a
+    candidate dropped by some stage's reject simply never triggers another
+    lookup, so its entry becomes unreachable on its own.
+    """
+
+    def __init__(
+        self,
+        esm2_model_name: str = DEFAULT_ESM2_MODEL_NAME,
+        esm2_batch_size: int = DEFAULT_ESM2_BATCH_SIZE,
+    ) -> None:
+        self.esm2_model_name = esm2_model_name
+        self.esm2_batch_size = esm2_batch_size
+        self._esm2_fingerprint = f"esm2:{esm2_model_name}"
+        self._esm2_cache: dict[str, ESM2Embedding] = {}
+        self._modlamp_cache: dict[str, dict[str, float]] = {}
+        self._propy_biopython_cache: dict[str, dict[str, float]] = {}
+        self._hemolysis_v1_cache: dict[str, dict[str, float]] = {}
+
+        self._esm2_tokenizer: Any = None
+        self._esm2_model: Any = None
+        self._esm2_device: str | None = None
+        self._hemolysis_v1_extractor: _HemolysisV1Extractor | None = None
+
+    # ------------------------------------------------------------------
+    # ESM2
+    # ------------------------------------------------------------------
+
+    def _load_esm2(self) -> None:
+        if self._esm2_model is not None:
+            return
+        self._esm2_device = "cuda" if torch.cuda.is_available() else "cpu"
+        self._esm2_tokenizer = AutoTokenizer.from_pretrained(self.esm2_model_name)
+        self._esm2_model = (
+            EsmModel.from_pretrained(self.esm2_model_name)
+            .to(self._esm2_device)
+            .eval()
+        )
+
+    def get_esm2_embedding(self, sequence: str) -> ESM2Embedding:
+        """Raw per-token ESM2 hidden states for one sequence, memoized."""
+        return self.get_esm2_embedding_batch([sequence])[0]
+
+    def get_esm2_embedding_batch(self, sequences: list[str]) -> list[ESM2Embedding]:
+        """Raw per-token ESM2 hidden states for a batch, memoized per sequence.
+
+        Only sequences not already cached are sent through the tokenizer and
+        model, split into chunks of at most `self.esm2_batch_size` to bound
+        peak GPU memory regardless of how many sequences are missing; cached
+        entries are returned as-is. Results are returned in the same order
+        as `sequences`.
+        """
+        keys = [_sequence_cache_key(s, self._esm2_fingerprint) for s in sequences]
+        missing_indices = [i for i, k in enumerate(keys) if k not in self._esm2_cache]
+
+        if missing_indices:
+            self._load_esm2()
+            cls_id = self._esm2_tokenizer.cls_token_id
+            eos_id = self._esm2_tokenizer.eos_token_id
+            for chunk_start in range(0, len(missing_indices), self.esm2_batch_size):
+                chunk_indices = missing_indices[
+                    chunk_start : chunk_start + self.esm2_batch_size
+                ]
+                chunk_sequences = [sequences[i] for i in chunk_indices]
+                with torch.no_grad():
+                    enc = self._esm2_tokenizer(
+                        chunk_sequences, return_tensors="pt", padding=True
+                    ).to(self._esm2_device)
+                    out = self._esm2_model(**enc)
+                    hidden = out.last_hidden_state
+                    attention_mask = enc["attention_mask"]
+
+                for row, index in enumerate(chunk_indices):
+                    n_valid = int(attention_mask[row].sum().item())
+                    trimmed_hidden = (
+                        hidden[row, :n_valid].cpu().numpy().astype(np.float32)
+                    )
+                    trimmed_ids = enc["input_ids"][row, :n_valid].cpu().numpy()
+                    self._esm2_cache[keys[index]] = ESM2Embedding(
+                        hidden_states=trimmed_hidden,
+                        input_ids=trimmed_ids,
+                        cls_token_id=cls_id,
+                        eos_token_id=eos_id,
+                    )
+
+        return [self._esm2_cache[k] for k in keys]
+
+    # ------------------------------------------------------------------
+    # modlAMP physicochemical descriptors
+    # ------------------------------------------------------------------
+
+    def get_modlamp_descriptors(self, sequence: str) -> dict[str, float]:
+        """GlobalDescriptor (all) + per-scale global/moment PeptideDescriptor
+        features, matching amp_classifier_v1/mbic_predictor_v1's own
+        modlamp_features_batch column layout. Memoized per sequence."""
+        return self.get_modlamp_descriptors_batch([sequence])[0]
+
+    def get_modlamp_descriptors_batch(
+        self, sequences: list[str]
+    ) -> list[dict[str, float]]:
+        fingerprint = "modlamp"
+        keys = [_sequence_cache_key(s, fingerprint) for s in sequences]
+        missing_indices = [i for i, k in enumerate(keys) if k not in self._modlamp_cache]
+
+        if missing_indices:
+            missing_sequences = [sequences[i].upper() for i in missing_indices]
+
+            gd = GlobalDescriptor(missing_sequences)
+            gd.calculate_all(amide=True)
+            global_names = [f"modlamp_{name}" for name in gd.featurenames]
+
+            scalar_scales = ["eisenberg", "gravy", "flexibility", "aasi"]
+            multidim_scales = ["z3", "z5", "abhprk"]
+            scale_columns: dict[str, np.ndarray] = {}
+            for scale in scalar_scales:
+                pdesc = PeptideDescriptor(missing_sequences, scale)
+                pdesc.calculate_global()
+                scale_columns[f"modlamp_{scale}_global"] = pdesc.descriptor.flatten()
+                pdesc_m = PeptideDescriptor(missing_sequences, scale)
+                pdesc_m.calculate_moment()
+                scale_columns[f"modlamp_{scale}_moment"] = pdesc_m.descriptor.flatten()
+            for scale in multidim_scales:
+                pdesc = PeptideDescriptor(missing_sequences, scale)
+                pdesc.calculate_global()
+                scale_columns[f"modlamp_{scale}_global"] = pdesc.descriptor.flatten()
+
+            for row, index in enumerate(missing_indices):
+                row_feats = {
+                    name: float(gd.descriptor[row, col])
+                    for col, name in enumerate(global_names)
+                }
+                for name, values in scale_columns.items():
+                    row_feats[name] = float(values[row])
+                self._modlamp_cache[keys[index]] = row_feats
+
+        return [self._modlamp_cache[k] for k in keys]
+
+    # ------------------------------------------------------------------
+    # biopython / propy descriptors
+    # ------------------------------------------------------------------
+
+    def get_propy_biopython_descriptors(self, sequence: str) -> dict[str, float]:
+        """biopython ProteinAnalysis + propy GetProDes (AAComp, DPComp, CTD,
+        Moran/Geary/Moreau-Broto autocorrelation, QSO, SOCN, PAAC, APAAC)
+        features, matching aggregation_predictor_v1's own biopython_features/
+        pybiomed_features column layout. Does not include the AAindex1
+        ProtScale pass -- that needs a per-model scale table the extractor
+        doesn't own, so aggregation_predictor_v1 still computes it itself.
+        Memoized per sequence."""
+        return self.get_propy_biopython_descriptors_batch([sequence])[0]
+
+    def get_propy_biopython_descriptors_batch(
+        self, sequences: list[str]
+    ) -> list[dict[str, float]]:
+        fingerprint = "propy_biopython"
+        keys = [_sequence_cache_key(s, fingerprint) for s in sequences]
+        missing_indices = [
+            i for i, k in enumerate(keys) if k not in self._propy_biopython_cache
+        ]
+
+        for index in missing_indices:
+            seq = sequences[index].upper()
+            feats: dict[str, float] = {}
+            feats.update(_biopython_features(seq))
+            feats.update(_propy_features(seq))
+            self._propy_biopython_cache[keys[index]] = feats
+
+        return [self._propy_biopython_cache[k] for k in keys]
+
+    # ------------------------------------------------------------------
+    # hemolysis_predictor_v1's 1167-descriptor HemoPI2 reproduction
+    # ------------------------------------------------------------------
+
+    def _get_hemolysis_v1_extractor(self) -> _HemolysisV1Extractor:
+        if self._hemolysis_v1_extractor is None:
+            self._hemolysis_v1_extractor = _HemolysisV1Extractor(
+                _HEMOLYSIS_V1_PROPERTY_TABLES
+            )
+        return self._hemolysis_v1_extractor
+
+    def get_hemolysis_v1_descriptors(self, sequence: str) -> dict[str, float]:
+        """hemolysis_predictor_v1's full descriptor row (AAC, DPC, ATC, BTC,
+        PCP, RRI, PRI, DDR, SER, SEP, CTC, CeTD, PAAC, APAAC, QSO, SOC),
+        matching Extractor.extract's own column layout. Memoized per
+        sequence -- this is a single-consumer feature set (nothing else in
+        model_store/ uses HemoPI2's descriptor scheme), so caching it only
+        helps when the same sequence is scored more than once in a run
+        (e.g. Stage 4's GA re-evaluating an unchanged parent, or Stage 4 and
+        Stage 8 both scoring the same surviving candidate)."""
+        return self.get_hemolysis_v1_descriptors_batch([sequence])[0]
+
+    def get_hemolysis_v1_descriptors_batch(
+        self, sequences: list[str]
+    ) -> list[dict[str, float]]:
+        fingerprint = "hemolysis_v1"
+        keys = [_sequence_cache_key(s, fingerprint) for s in sequences]
+        missing_indices = [
+            i for i, k in enumerate(keys) if k not in self._hemolysis_v1_cache
+        ]
+
+        if missing_indices:
+            missing_sequences = [sequences[i] for i in missing_indices]
+            normalized = list(_normalize_hemolysis_v1_sequences(missing_sequences))
+            extractor = self._get_hemolysis_v1_extractor()
+            rows = extractor.extract(normalized)
+            for row_position, index in enumerate(missing_indices):
+                self._hemolysis_v1_cache[keys[index]] = rows.iloc[
+                    row_position
+                ].to_dict()
+
+        return [self._hemolysis_v1_cache[k] for k in keys]

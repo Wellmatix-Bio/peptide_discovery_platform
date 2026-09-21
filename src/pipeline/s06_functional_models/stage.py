@@ -61,24 +61,28 @@ _angiogenic_model: AngiogenicActivityPredictor | None = None
 _anti_inflammatory_model: AntiInflammatoryPredictor | None = None
 
 
-def _get_amp_model() -> AMPClassifier:
+def _get_amp_model(use_feature_cache: bool = False) -> AMPClassifier:
     global _amp_model
-    if _amp_model is None:
-        _amp_model = AMPClassifier()
+    # Rebuild if the cached instance's mode doesn't match what's asked for
+    # now, not just when it's unset -- otherwise a stale instance built with
+    # the opposite use_feature_cache silently ignores this call's flag and
+    # crashes on a mismatched (None or unexpectedly non-None) feature_extractor.
+    if _amp_model is None or _amp_model.use_feature_cache != use_feature_cache:
+        _amp_model = AMPClassifier(use_feature_cache=use_feature_cache)
     return _amp_model
 
 
-def _get_mic_model() -> MICPredictorEnsemble:
+def _get_mic_model(use_feature_cache: bool = False) -> MICPredictorEnsemble:
     global _mic_model
-    if _mic_model is None:
-        _mic_model = MICPredictorEnsemble()
+    if _mic_model is None or _mic_model.use_feature_cache != use_feature_cache:
+        _mic_model = MICPredictorEnsemble(use_feature_cache=use_feature_cache)
     return _mic_model
 
 
-def _get_mbic_model() -> MBICPredictor:
+def _get_mbic_model(use_feature_cache: bool = False) -> MBICPredictor:
     global _mbic_model
-    if _mbic_model is None:
-        _mbic_model = MBICPredictor()
+    if _mbic_model is None or _mbic_model.use_feature_cache != use_feature_cache:
+        _mbic_model = MBICPredictor(use_feature_cache=use_feature_cache)
     return _mbic_model
 
 
@@ -89,10 +93,13 @@ def _get_proliferation_migration_model() -> ProliferationMigrationPredictor:
     return _proliferation_migration_model
 
 
-def _get_angiogenic_model() -> AngiogenicActivityPredictor:
+def _get_angiogenic_model(use_feature_cache: bool = False) -> AngiogenicActivityPredictor:
     global _angiogenic_model
-    if _angiogenic_model is None:
-        _angiogenic_model = AngiogenicActivityPredictor()
+    if (
+        _angiogenic_model is None
+        or _angiogenic_model.use_feature_cache != use_feature_cache
+    ):
+        _angiogenic_model = AngiogenicActivityPredictor(use_feature_cache=use_feature_cache)
     return _angiogenic_model
 
 
@@ -118,6 +125,23 @@ STAGE6_THRESHOLDS = {
 # override of e.g. just MRSA would silently drop every other pathogen's
 # default threshold.
 STAGE6_NESTED_THRESHOLD_KEYS = {"max_mic", "max_mbic"}
+
+
+def check_pathogen_vocabulary(pathogens: list[str]) -> dict[str, list[str]]:
+    """Pathogens the brief lists but neither MIC nor MBIC predictor supports.
+    These can never produce a real prediction (compute_mic/compute_mbic skip
+    them, filter_predictions logs them as missing_required_predictions) --
+    surfacing this up front avoids the failure mode where every candidate
+    ends up insufficient_evidence and it's unclear why."""
+    normalized_mic = {o.replace(" ", "_") for o in MIC_SUPPORTED_ORGANISMS}
+    normalized_mbic = {s.replace(" ", "_") for s in MBIC_SUPPORTED_SPECIES}
+    out_of_vocab = {
+        "mic": [p for p in pathogens if p not in normalized_mic],
+        "mbic": [p for p in pathogens if p not in normalized_mbic],
+    }
+    if out_of_vocab["mic"] or out_of_vocab["mbic"]:
+        logger.warning("s06.pathogen_vocabulary_gap", extra=out_of_vocab)
+    return out_of_vocab
 
 
 def merge_stage6_thresholds(overrides: dict) -> dict:
@@ -232,10 +256,15 @@ def filter_predictions(
                 metadata=output,
             )
 
+    # Missing predictions (e.g. a pathogen outside the MIC/MBIC model's
+    # vocabulary, see check_pathogen_vocabulary) are surfaced but don't
+    # reject the candidate -- only an actual failed threshold does. Otherwise
+    # a single out-of-vocabulary pathogen like MRSA would silently reject
+    # every candidate regardless of its real predicted properties.
     status = "rejected" if failed else "insufficient_evidence" if missing else "passed"
     return {
         "status": status,
-        "passed": status == "passed",
+        "passed": not failed,
         "required_functions": list(desired_functions),
         "failed_requirements": failed,
         "missing_required_predictions": missing,
@@ -260,20 +289,41 @@ class Stage6(CandidateStage):
         if ctx.brief is None:
             raise ValueError("Stage 6 filtering requires the Stage 1 product brief")
         pathogens = ctx.brief.pathogens
+        check_pathogen_vocabulary(pathogens)
         thresholds = merge_stage6_thresholds(config.params.get("stage6_thresholds", {}))
         survivors = []
+
+        use_feature_cache = ctx.use_feature_cache
+        feature_extractor = ctx.feature_extractor if use_feature_cache else None
+        if use_feature_cache:
+            # Warm the shared ESM2 cache for every candidate in one batched
+            # forward pass, before amp/mic/mbic/angiogenic each ask for it
+            # individually below -- turns 4 separate per-sequence embeddings
+            # into 1 batched one for the whole stage.
+            sequences = [
+                candidate.sequence for candidate in candidates if candidate.sequence
+            ]
+            ctx.feature_extractor.get_esm2_embedding_batch(sequences)
 
         for candidate in tqdm(candidates, desc="Stage 6"):
             sequence = candidate.sequence
             candidate.predictions.update(
                 {
-                    "amp_probability": self.compute_amp_probability(sequence),
-                    "mic": self.compute_mic(sequence, pathogens),
-                    "mbic": self.compute_mbic(sequence, pathogens),
+                    "amp_probability": self.compute_amp_probability(
+                        sequence, feature_extractor, use_feature_cache
+                    ),
+                    "mic": self.compute_mic(
+                        sequence, pathogens, feature_extractor, use_feature_cache
+                    ),
+                    "mbic": self.compute_mbic(
+                        sequence, pathogens, feature_extractor, use_feature_cache
+                    ),
                     "proliferation_migration": self.compute_proliferation_migration(
                         sequence
                     ),
-                    "angiogenic_activity": self.compute_angiogenic_activity(sequence),
+                    "angiogenic_activity": self.compute_angiogenic_activity(
+                        sequence, feature_extractor, use_feature_cache
+                    ),
                     "anti_inflammatory_probability": self.compute_anti_inflammatory_probability(
                         sequence
                     ),
@@ -311,39 +361,54 @@ class Stage6(CandidateStage):
     # Individual model computations — one method each.
     # ------------------------------------------------------------------
 
-    def compute_amp_probability(self, sequence: str) -> float:
+    def compute_amp_probability(
+        self, sequence: str, feature_extractor, use_feature_cache: bool = False
+    ) -> float:
         """P(antimicrobial peptide) from amp_classifier_v1 (5-fold XGBoost +
         meta-model ensemble over ESM2 + modlAMP descriptors). Supports the
         antimicrobial-action target function."""
-        model = _get_amp_model()
-        return model.predict_proba(sequence)
+        model = _get_amp_model(use_feature_cache)
+        return model.predict_proba(sequence, feature_extractor)
 
-    def compute_mic(self, sequence: str, pathogens: list[str]) -> dict:
+    def compute_mic(
+        self,
+        sequence: str,
+        pathogens: list[str],
+        feature_extractor,
+        use_feature_cache: bool = False,
+    ) -> dict:
         """log10(MIC, uM) per pathogen from mic_predictor_v1 (BiLSTM+CNN+RF
         ensemble), restricted to the model's 3 ATCC reference organisms.
         `pathogens` outside that vocabulary are skipped, not guessed at; if
         none of the brief's pathogens match, scores all 3 supported organisms
         so the prediction isn't silently empty."""
-        model = _get_mic_model()
+        model = _get_mic_model(use_feature_cache)
         organisms = [
             p for p in pathogens if p in MIC_SUPPORTED_ORGANISMS
         ] or MIC_SUPPORTED_ORGANISMS
         per_organism = {
-            organism: model.predict_log_mic(sequence, organism)
+            organism: model.predict_log_mic(sequence, organism, feature_extractor)
             for organism in organisms
         }
         return {"log_mic_um": per_organism, "status": "ok"}
 
-    def compute_mbic(self, sequence: str, pathogens: list[str]) -> dict:
+    def compute_mbic(
+        self,
+        sequence: str,
+        pathogens: list[str],
+        feature_extractor,
+        use_feature_cache: bool = False,
+    ) -> dict:
         """pMBIC (biofilm-inhibition potency) per pathogen from mbic_predictor_v1
         (SVR over ESM2 PCA + modlAMP physchem + species one-hot). Same
         vocabulary-restriction/fallback behavior as compute_mic."""
-        model = _get_mbic_model()
+        model = _get_mbic_model(use_feature_cache)
         species_list = [p for p in pathogens if p in MBIC_SUPPORTED_SPECIES] or sorted(
             MBIC_SUPPORTED_SPECIES
         )
         per_species = {
-            species: model.predict_pmbic(sequence, species) for species in species_list
+            species: model.predict_pmbic(sequence, species, feature_extractor)
+            for species in species_list
         }
         return {"pmbic": per_species, "status": "ok"}
 
@@ -355,12 +420,14 @@ class Stage6(CandidateStage):
         model = _get_proliferation_migration_model()
         return model.predict(sequence)
 
-    def compute_angiogenic_activity(self, sequence: str) -> dict:
+    def compute_angiogenic_activity(
+        self, sequence: str, feature_extractor, use_feature_cache: bool = False
+    ) -> dict:
         """Angiogenic-dominant probability from angiogenic_activity_predictor_v1
         (SVM+RF+MLP ensemble over physchem + ESM2-PCA features). Supports the
         angiogenesis target function."""
-        model = _get_angiogenic_model()
-        return model.predict(sequence)
+        model = _get_angiogenic_model(use_feature_cache)
+        return model.predict(sequence, feature_extractor)
 
     def compute_anti_inflammatory_probability(self, sequence: str) -> float:
         """P(anti-inflammatory peptide) from anti_inflammatory_predictor_v1

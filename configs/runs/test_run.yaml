@@ -2,7 +2,7 @@ stages:
   s01_therapeutic_product_brief:
     enabled: true
     params:
-      brief_path: ./data/briefs/TC-03_second_degree_burn.json
+      brief_path: ./data/briefs/TC-01_infected_diabetic_foot_ulcer.json
   s02_wound_biology_and_targets:
     enabled: true
     params:
@@ -16,7 +16,7 @@ stages:
     enabled: true
     params:
       tags: ["<AMP>"]
-      n_peptides: 50
+      n_peptides: 100
       min_length: 6
       max_length: 35
       max_new_tokens: 120
@@ -25,15 +25,13 @@ stages:
       generator: null
       input: null
       route_a_ga_params:
-        pop_size: 7
-        n_generations: 10
+        pop_size: 3
+        n_generations: 5
         mutation_rate: 0.1
         random_seed: 42
       # Route A hard-reject thresholds (physicochemical_filter / ConstraintConfig).
       # min_length/max_length above take precedence if also set there.
       route_a_constraint_config:
-        min_length: 8
-        max_length: 40
         charge_min: -3.0
         charge_max: 8.0
         hydro_min: -1.0
@@ -65,9 +63,12 @@ stages:
         max_mic:
           MRSA: 16.0
           Pseudomonas_aeruginosa: 16.0
+          Staphylococcus_aureus: 16.0
         max_mbic:
           MRSA: 32.0
           Pseudomonas_aeruginosa: 32.0
+          Staphylococcus_aureus: 32.0
+
 
   s07_structure_mechanism:
     enabled: true
@@ -95,7 +96,7 @@ stages:
     enabled: true
     params:
       max_length: 35
-      rejected_difficulty_classes: ["medium", "high"]
+      rejected_difficulty_classes: ["high"]
 
   s11_ranking:
     enabled: true

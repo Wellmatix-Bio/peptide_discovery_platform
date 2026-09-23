@@ -14,7 +14,7 @@
         "fibroblast_proliferation"
     ],
     "pathogens": [],
-    "delivery_system": "topical_hydrogel",
+    "delivery_system": "Hydrogel",
     "max_length": 25,
     "dosing_interval_hours": 24,
     "release_target_hours": 24,

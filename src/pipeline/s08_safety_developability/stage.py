@@ -42,20 +42,7 @@ SOLUBILITY_FLAG_MIN = 0.3  # P(soluble) below this is flagged, not rejected
 # Cleavage-stability score (see compute_cleavage_stability) below this rejects.
 CLEAVAGE_STABILITY_REJECT_MIN = 0.3
 
-# Wound-relevant protease selection (step 4): a hand-reviewed accession
-# allowlist against the bundled 118-enzyme catalog
-# (model_store/cleavage_site_predictor_v1/enzymes/enzyme_catalog.csv), not a
-# keyword filter -- protein names in that catalog are inconsistent enough
-# ("Elastase-1 precursor" covers both neutrophil-adjacent and purely
-# digestive/pancreatic orthologs; "u-/t-Plasminogen activator" entries
-# activate plasmin but aren't the wound-fluid protease itself) that name
-# matching alone pulls in irrelevant enzymes.
-#
-# The panel is missing real human MMP-1/-2/-3/-8/-9/-12 and human neutrophil
-# elastase entirely (README.md's "Known coverage gap") -- their structures
-# failed the source project's alignment check upstream of this migration.
-# Non-human orthologs of the same functional families stand in as
-# directional evidence, grouped by EC number below.
+# Wound-relevant protease selection (step 4): a hand-reviewed accession allowlist against the bundled 118-enzyme catalog
 WOUND_PROTEASE_ACCESSIONS = {
     # MMP-9 / gelatinase B (EC 3.4.24.35)
     "O18733",
@@ -125,7 +112,9 @@ def _get_hemolysis_v2_model() -> HemoPI2PHC50Predictor:
     return _hemolysis_v2_model
 
 
-def _get_hemolysis_v1_model(use_feature_cache: bool = False) -> ReplicatedHemoPI2Predictor:
+def _get_hemolysis_v1_model(
+    use_feature_cache: bool = False,
+) -> ReplicatedHemoPI2Predictor:
     global _hemolysis_v1_model
     # Rebuild if the cached instance's mode doesn't match what's asked for
     # now, not just when it's unset -- otherwise a stale instance built with
@@ -135,7 +124,9 @@ def _get_hemolysis_v1_model(use_feature_cache: bool = False) -> ReplicatedHemoPI
         _hemolysis_v1_model is None
         or _hemolysis_v1_model.use_feature_cache != use_feature_cache
     ):
-        _hemolysis_v1_model = ReplicatedHemoPI2Predictor(use_feature_cache=use_feature_cache)
+        _hemolysis_v1_model = ReplicatedHemoPI2Predictor(
+            use_feature_cache=use_feature_cache
+        )
     return _hemolysis_v1_model
 
 
@@ -145,7 +136,9 @@ def _get_cytotoxicity_model(use_feature_cache: bool = False) -> CytotoxicityClas
         _cytotoxicity_model is None
         or _cytotoxicity_model.use_feature_cache != use_feature_cache
     ):
-        _cytotoxicity_model = CytotoxicityClassifier(use_feature_cache=use_feature_cache)
+        _cytotoxicity_model = CytotoxicityClassifier(
+            use_feature_cache=use_feature_cache
+        )
     return _cytotoxicity_model
 
 

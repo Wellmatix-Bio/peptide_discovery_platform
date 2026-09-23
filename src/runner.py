@@ -1,4 +1,4 @@
-﻿# Loads config, resolves stage order, and executes the pipeline.
+# Loads config, resolves stage order, and executes the pipeline.
 
 from __future__ import annotations
 
@@ -8,6 +8,7 @@ from pathlib import Path
 
 import os
 from common.audit import AuditWriter
+from common import storage
 from common.io import BoundaryWriter, load_candidates_fasta, write_final_candidates
 from common.logging import get_logger
 from common.model_registry import ModelRegistry
@@ -31,6 +32,29 @@ SETUP_STAGE_TARGET_FIELD = {
 
 class ConfigError(RuntimeError):
     """Raised when a run config cannot produce a valid pipeline."""
+
+
+def build_run_services(
+    run_id: str,
+    schema_version: int,
+    run_dir: str,
+    model_store: str,
+    feature_extractor: FeatureExtractor,
+    *,
+    use_feature_cache: bool = False,
+    seed: int = 42,
+) -> RunContext:
+    """Shared by PipelineRunner._build_context and worker.py's run_job."""
+    return RunContext(
+        run_id=run_id,
+        schema_version=schema_version,
+        audit=AuditWriter(f"{run_dir}/audit_log.jsonl"),
+        boundary=BoundaryWriter(run_dir),
+        models=ModelRegistry(model_store),
+        feature_extractor=feature_extractor,
+        use_feature_cache=use_feature_cache,
+        seed=seed,
+    )
 
 
 class PipelineRunner:
@@ -64,17 +88,17 @@ class PipelineRunner:
                 candidates, self.config.for_stage(stage.name), self.ctx
             )
             stage_results.append(stage_result)
+            candidates = stage_result.candidates
             if not stage_result.candidates:
                 logger.warning("run.exhausted", extra={"stage": stage.name})
                 break
-            candidates = stage_result.candidates
 
         run_duration = time.perf_counter() - run_started
         logger.info(
             "run.done", extra={"run_id": self.config.run_id, "n": len(candidates)}
         )
 
-        run_dir = Path(self.config.artifacts_dir) / "runs" / self.config.run_id
+        run_dir = storage.join(self.config.artifacts_dir, "runs", self.config.run_id)
         stats_path = write_run_stats(
             run_dir,
             run_id=self.config.run_id,
@@ -97,22 +121,19 @@ class PipelineRunner:
     # ------------------------------------------------------------------
 
     def _build_context(self, config: RunConfig) -> RunContext:
-        run_dir = Path(config.artifacts_dir) / "runs" / config.run_id
-        run_dir.mkdir(parents=True, exist_ok=True)
-        config.snapshot(run_dir / "config_snapshot.yaml")
+        run_dir = storage.join(config.artifacts_dir, "runs", config.run_id)
+        storage.ensure_dir(run_dir)
+        config.snapshot(storage.join(run_dir, "config_snapshot.yaml"))
 
-        ctx = RunContext(
+        return build_run_services(
             run_id=config.run_id,
             schema_version=config.schema_version,
-            audit=AuditWriter(run_dir / "audit_log.jsonl"),
-            boundary=BoundaryWriter(run_dir),
-            models=ModelRegistry(config.model_store),
+            run_dir=str(run_dir),
+            model_store=config.model_store,
             feature_extractor=FeatureExtractor(),
             use_feature_cache=config.use_feature_cache,
-            seed=config.seed or 42,
+            seed=config.seed,
         )
-
-        return ctx
 
     def _load_entry_candidates(self) -> list[Candidate]:
         """Empty for a full run (s04 generates them); loaded when entering mid-pipeline."""

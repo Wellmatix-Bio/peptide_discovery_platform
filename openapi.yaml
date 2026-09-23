@@ -1,0 +1,1332 @@
+openapi: 3.1.0
+info:
+  title: End-to-end Pipeline Jobs API
+  version: 1.0.0
+  description: Job creation and status checks only. Stage parameters are validated
+    by stage name. No application-level authentication is defined.
+paths:
+  /api/v1/jobs/create:
+    post:
+      summary: Submit a full pipeline job
+      operationId: createJob
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateJobRequest'
+            example:
+              request_id: request-001
+              use_feature_cache: true
+              stages:
+                s01_therapeutic_product_brief:
+                  brief:
+                    case_id: TC-01_infected_diabetic_foot_ulcer
+                    indication: diabetic_foot_ulcer
+                    wound_context:
+                    - chronic
+                    - infected
+                    - high_glucose
+                    - ischemic
+                    desired_functions:
+                    - antimicrobial
+                    - keratinocyte_migration
+                    - angiogenesis
+                    - anti_inflammatory
+                    pathogens:
+                    - Staphylococcus_aureus
+                    - Pseudomonas_aeruginosa
+                    delivery_system: Hydrogel
+                    max_length: 30
+                    dosing_interval_hours: 48
+                    release_target_hours: 48
+                    safety_constraints:
+                      hemolysis: low
+                      human_cell_cytotoxicity: low
+                    manufacturing:
+                      method: solid_phase_synthesis
+                      max_cost_per_gram_usd: 500
+                    stage: discovery
+                    target_population: []
+                  seed: 42
+                s04_candidate_generation:
+                  tags:
+                  - <AMP>
+                  n_peptides: 100
+                  min_length: 6
+                  max_length: 35
+                  max_new_tokens: 120
+                  batch_size: 16
+                  max_attempts: 20
+                  generator: null
+                  input: null
+                  route_a_ga_params:
+                    pop_size: 3
+                    n_generations: 5
+                    mutation_rate: 0.1
+                    random_seed: 42
+                  route_a_constraint_config:
+                    charge_min: -3
+                    charge_max: 8
+                    hydro_min: -1
+                    hydro_max: 1
+                    aggregation_threshold: 3
+                    ph: 7.4
+                s05_physchem_screening:
+                  ph: 7.4
+                  solubility_solvent: Ultrapure water
+                  aggregation_tendency_flag_max: 0.75
+                  solubility_flag_min: 0.3
+                  amphipathicity_flag_max: 0.8
+                  isoelectric_point_flag_ph_window: 0.5
+                  ss_confidence_unstable_max: 0.5
+                  ss_confidence_ambiguous_max: 0.7
+                  risk_category_low_max: 0
+                  risk_category_medium_max: 2
+                s06_functional_models:
+                  stage6_thresholds:
+                    min_amp_probability: 0.8
+                    min_proliferation_migration: 0.5
+                    min_angiogenic_activity: 0.1
+                    min_anti_inflammatory_probability: 0.5
+                    max_mic:
+                      MRSA: 16
+                      Pseudomonas_aeruginosa: 16
+                      Staphylococcus_aureus: 16
+                    max_mbic:
+                      MRSA: 32
+                      Pseudomonas_aeruginosa: 32
+                      Staphylococcus_aureus: 32
+                s07_structure_mechanism:
+                  plddt_low_confidence_max: 0.5
+                  pathway_engagement_min_probability: 0.5
+                  helix_phi_min: -100
+                  helix_phi_max: -30
+                  helix_psi_min: -77
+                  helix_psi_max: -5
+                  sheet_phi_min: -180
+                  sheet_phi_max: -45
+                  sheet_psi_min: 90
+                  sheet_psi_max: 180
+                s08_safety_developability:
+                  hemolysis_phc50_reject_max: 4
+                  hemolysis_predictor_version: v1
+                  solubility_solvent: Ultrapure water
+                  cytotoxicity_cell_type: DRAMP_aggregate
+                  cytotoxicity_reject_max: 0.5
+                  aggregation_reject_max: 0.7
+                  solubility_flag_min: 0.3
+                  cleavage_stability_reject_min: 0.3
+                  cleavage_decay_rate: 0.5
+                s09_synthesis_cmc:
+                  rejected_difficulty_classes:
+                  - high
+        required: true
+      responses:
+        '202':
+          description: Job submitted and configuration published; pipeline execution
+            is not yet complete.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreateJobResponse'
+              example:
+                request_id: request-001
+                job_id: projects/123/locations/us-central1/customJobs/456
+                config_path: gs://bucket/artifacts/runs/456/config.json
+                result_path: gs://bucket/artifacts/runs/456
+        '422':
+          description: Invalid request or stage parameters.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Request ID already reserved.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '502':
+          description: Google API or config publication failed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '503':
+          description: Missing server configuration or credentials, or invalid storage
+            settings.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+      description: Returns after job submission and publication of config.json. The
+        numeric Vertex job ID becomes the internal run ID. Duplicate reserved request
+        IDs return 409; this is not a replay of an existing result.
+  /api/v1/jobs/{job_id}/status:
+    get:
+      summary: Read the current Vertex job state
+      operationId: getJobStatus
+      parameters:
+      - name: job_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Job Id
+          pattern: ^projects/[^/]+/locations/[^/]+/customJobs/[0-9]+$
+          examples:
+          - projects/123/locations/us-central1/customJobs/456
+        description: Full resource name, e.g. projects/123/locations/us-central1/customJobs/456.
+          Contains slash-separated path segments.
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JobStatusResponse'
+              example:
+                job_id: projects/123/locations/us-central1/customJobs/456
+                status: running
+                vertex_state: JOB_STATE_RUNNING
+                error: null
+        '422':
+          description: Malformed job resource name.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Job not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '502':
+          description: Google API call failed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '503':
+          description: Missing server configuration or credentials.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+      description: job_id is the complete Vertex resource name containing slashes.
+        The server uses a catch-all path parameter; clients must preserve the resource
+        path. Worker output files are not used to determine this status.
+components:
+  schemas:
+    CreateJobRequest:
+      properties:
+        request_id:
+          type: string
+          minLength: 1
+          title: Request Id
+        stages:
+          $ref: '#/components/schemas/E2EStages'
+        use_feature_cache:
+          type: boolean
+          title: Use Feature Cache
+          default: true
+      additionalProperties: false
+      type: object
+      required:
+      - request_id
+      - stages
+      title: CreateJobRequest
+    CreateJobResponse:
+      properties:
+        request_id:
+          type: string
+          title: Request Id
+        job_id:
+          type: string
+          title: Job Id
+        config_path:
+          type: string
+          title: Config Path
+        result_path:
+          type: string
+          title: Result Path
+      type: object
+      required:
+      - request_id
+      - job_id
+      - config_path
+      - result_path
+      title: CreateJobResponse
+    JobStatusResponse:
+      properties:
+        job_id:
+          type: string
+          title: Job Id
+        status:
+          type: string
+          title: Status
+          enum:
+          - pending
+          - running
+          - success
+          - fail
+          - stopped
+        vertex_state:
+          type: string
+          title: Vertex State
+        error:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Error
+      type: object
+      required:
+      - job_id
+      - status
+      - vertex_state
+      title: JobStatusResponse
+    BriefFields:
+      properties:
+        indication:
+          description: Indication for the therapeutic product
+          title: Indication
+          type: string
+        wound_context:
+          description: Context of the wound
+          items:
+            enum:
+            - acute
+            - biofilm_positive
+            - burn
+            - chronic
+            - clean
+            - diabetic
+            - high_exudate
+            - high_glucose
+            - infected
+            - ischemic
+            - low_perfusion
+            - necrotic
+            - radiation_induced
+            - surgical
+            - traumatic
+            type: string
+          title: Wound Context
+          type: array
+        desired_functions:
+          description: Desired functions of the therapeutic product
+          items:
+            enum:
+            - angiogenesis
+            - anti_inflammatory
+            - antimicrobial
+            - antimicrobial action
+            - antimicrobial_action
+            - cell proliferation/migration
+            - collagen synthesis
+            - collagen_remodeling
+            - collagen_synthesis
+            - fibroblast_migration
+            - immunomodulation
+            - keratinocyte_migration
+            type: string
+          title: Desired Functions
+          type: array
+        pathogens:
+          items:
+            enum:
+            - Escherichia_coli
+            - Staphylococcus_aureus
+            - Pseudomonas_aeruginosa
+            type: string
+          title: Pathogens
+          type: array
+        delivery_system:
+          description: Delivery system for the therapeutic product
+          enum:
+          - Hydrogel
+          - Film
+          - Nanofiber
+          - Foam dressing
+          - Collagen matrix
+          - Alginate dressing
+          - Chitosan hydrogel
+          - Hyaluronic-acid system
+          - Liposome
+          - PLGA nanoparticle
+          - PCL microsphere
+          - Microneedle
+          - Spray or topical gel
+          title: Delivery System
+          type: string
+        max_length:
+          maximum: 50
+          minimum: 6
+          title: Max Length
+          type: integer
+        dosing_interval_hours:
+          maximum: 168
+          minimum: 1
+          title: Dosing Interval Hours
+          type: integer
+        release_target_hours:
+          maximum: 168
+          minimum: 1
+          title: Release Target Hours
+          type: integer
+        safety_constraints:
+          $ref: '#/components/schemas/SafetyConstraints'
+          description: Safety constraints for the therapeutic product
+        target_population:
+          description: Target population for the therapeutic product
+          items:
+            type: string
+          title: Target Population
+          type: array
+        manufacturing:
+          $ref: '#/components/schemas/ManufacturingFields'
+          description: Manufacturing details for the therapeutic product
+      required:
+      - indication
+      - wound_context
+      - desired_functions
+      - pathogens
+      - delivery_system
+      - max_length
+      - dosing_interval_hours
+      - release_target_hours
+      - safety_constraints
+      - target_population
+      - manufacturing
+      title: BriefFields
+      type: object
+    ManufacturingFields:
+      description: 'Every existing data/briefs/*.json uses "solid_phase_synthesis"
+        (the
+
+        one exception, "ribosomal_expression", is TC-20''s deliberately-invalid
+
+        edge case) -- hardwired to that single value rather than left as an
+
+        open string. max_cost_per_gram_usd remains the one real, adjustable
+
+        input; the 4 other manufacturing sub-keys seen in brief data
+
+        (protease_resistance_required, ambient_stability_required,
+
+        sterile_filterable, electrospinning_compatible) stay unmodeled/ignored,
+
+        same as today.'
+      properties:
+        method:
+          const: solid_phase_synthesis
+          default: solid_phase_synthesis
+          title: Method
+          type: string
+        max_cost_per_gram_usd:
+          anyOf:
+          - type: number
+          - type: 'null'
+          default: null
+          title: Max Cost Per Gram Usd
+      title: ManufacturingFields
+      type: object
+    SafetyConstraints:
+      properties:
+        hemolysis:
+          enum:
+          - low
+          - moderate
+          - high
+          title: Hemolysis
+          type: string
+        human_cell_cytotoxicity:
+          enum:
+          - low
+          - moderate
+          - high
+          title: Human Cell Cytotoxicity
+          type: string
+      required:
+      - hemolysis
+      - human_cell_cytotoxicity
+      title: SafetyConstraints
+      type: object
+    Stage1Params:
+      properties:
+        brief:
+          $ref: '#/components/schemas/BriefFields'
+        seed:
+          default: 42
+          description: Random seed for reproducibility
+          title: Seed
+          type: integer
+      required:
+      - brief
+      title: Stage1Params
+      type: object
+    Stage2Params:
+      properties:
+        deficit_rules_path:
+          default: ./configs/deficit_rules.config.yaml
+          title: Deficit Rules Path
+          type: string
+      title: Stage2Params
+      type: object
+    RouteAConstraintConfig:
+      properties:
+        charge_min:
+          default: -3.0
+          title: Charge Min
+          type: number
+        charge_max:
+          default: 8.0
+          title: Charge Max
+          type: number
+        hydro_min:
+          default: -1.0
+          title: Hydro Min
+          type: number
+        hydro_max:
+          default: 1.0
+          title: Hydro Max
+          type: number
+        aggregation_threshold:
+          default: 3.0
+          title: Aggregation Threshold
+          type: number
+        ph:
+          default: 7.4
+          title: Ph
+          type: number
+      title: RouteAConstraintConfig
+      type: object
+    RouteAGAParams:
+      properties:
+        pop_size:
+          default: 3
+          title: Pop Size
+          type: integer
+        n_generations:
+          default: 5
+          title: N Generations
+          type: integer
+        mutation_rate:
+          default: 0.1
+          title: Mutation Rate
+          type: number
+        random_seed:
+          default: 42
+          title: Random Seed
+          type: integer
+      title: RouteAGAParams
+      type: object
+    Stage4Params:
+      properties:
+        tags:
+          default:
+          - <AMP>
+          items:
+            type: string
+          title: Tags
+          type: array
+        n_peptides:
+          default: 100
+          title: N Peptides
+          type: integer
+        min_length:
+          default: 6
+          title: Min Length
+          type: integer
+        max_length:
+          default: 35
+          title: Max Length
+          type: integer
+        max_new_tokens:
+          default: 120
+          title: Max New Tokens
+          type: integer
+        batch_size:
+          default: 16
+          title: Batch Size
+          type: integer
+        max_attempts:
+          default: 20
+          title: Max Attempts
+          type: integer
+        generator:
+          anyOf:
+          - type: string
+          - type: 'null'
+          default: null
+          title: Generator
+        route_a_ga_params:
+          $ref: '#/components/schemas/RouteAGAParams'
+          default:
+            pop_size: 3
+            n_generations: 5
+            mutation_rate: 0.1
+            random_seed: 42
+        route_a_constraint_config:
+          $ref: '#/components/schemas/RouteAConstraintConfig'
+          default:
+            charge_min: -3.0
+            charge_max: 8.0
+            hydro_min: -1.0
+            hydro_max: 1.0
+            aggregation_threshold: 3.0
+            ph: 7.4
+      title: Stage4Params
+      type: object
+    Stage5Params:
+      properties:
+        ph:
+          default: 7.4
+          title: Ph
+          type: number
+        solubility_solvent:
+          default: Ultrapure water
+          title: Solubility Solvent
+          type: string
+        max_length:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          default: null
+          title: Max Length
+        aggregation_tendency_flag_max:
+          default: 0.6
+          title: Aggregation Tendency Flag Max
+          type: number
+        solubility_flag_min:
+          default: 0.4
+          title: Solubility Flag Min
+          type: number
+        amphipathicity_flag_max:
+          default: 0.8
+          title: Amphipathicity Flag Max
+          type: number
+        isoelectric_point_flag_ph_window:
+          default: 0.5
+          title: Isoelectric Point Flag Ph Window
+          type: number
+        ss_confidence_unstable_max:
+          default: 0.5
+          title: Ss Confidence Unstable Max
+          type: number
+        ss_confidence_ambiguous_max:
+          default: 0.7
+          title: Ss Confidence Ambiguous Max
+          type: number
+        risk_category_low_max:
+          default: 0
+          title: Risk Category Low Max
+          type: integer
+        risk_category_medium_max:
+          default: 2
+          title: Risk Category Medium Max
+          type: integer
+      title: Stage5Params
+      type: object
+    Stage6Thresholds:
+      properties:
+        min_amp_probability:
+          default: 0.7
+          title: Min Amp Probability
+          type: number
+        min_proliferation_migration:
+          default: 0.65
+          title: Min Proliferation Migration
+          type: number
+        min_angiogenic_activity:
+          default: 0.6
+          title: Min Angiogenic Activity
+          type: number
+        min_anti_inflammatory_probability:
+          default: 0.65
+          title: Min Anti Inflammatory Probability
+          type: number
+        max_mic:
+          additionalProperties:
+            type: number
+          default:
+            Pseudomonas_aeruginosa: 16.0
+          title: Max Mic
+          type: object
+        max_mbic:
+          additionalProperties:
+            type: number
+          default:
+            Pseudomonas_aeruginosa: 32.0
+          title: Max Mbic
+          type: object
+      title: Stage6Thresholds
+      type: object
+    Stage6Params:
+      properties:
+        stage6_thresholds:
+          $ref: '#/components/schemas/Stage6Thresholds'
+          default:
+            min_amp_probability: 0.7
+            min_proliferation_migration: 0.65
+            min_angiogenic_activity: 0.6
+            min_anti_inflammatory_probability: 0.65
+            max_mic:
+              Pseudomonas_aeruginosa: 16.0
+            max_mbic:
+              Pseudomonas_aeruginosa: 32.0
+      title: Stage6Params
+      type: object
+    Stage7Params:
+      properties:
+        plddt_low_confidence_max:
+          default: 0.5
+          title: Plddt Low Confidence Max
+          type: number
+        pathway_engagement_min_probability:
+          default: 0.5
+          title: Pathway Engagement Min Probability
+          type: number
+        helix_phi_min:
+          default: -100.0
+          title: Helix Phi Min
+          type: number
+        helix_phi_max:
+          default: -30.0
+          title: Helix Phi Max
+          type: number
+        helix_psi_min:
+          default: -77.0
+          title: Helix Psi Min
+          type: number
+        helix_psi_max:
+          default: -5.0
+          title: Helix Psi Max
+          type: number
+        sheet_phi_min:
+          default: -180.0
+          title: Sheet Phi Min
+          type: number
+        sheet_phi_max:
+          default: -45.0
+          title: Sheet Phi Max
+          type: number
+        sheet_psi_min:
+          default: 90.0
+          title: Sheet Psi Min
+          type: number
+        sheet_psi_max:
+          default: 180.0
+          title: Sheet Psi Max
+          type: number
+      title: Stage7Params
+      type: object
+    Stage8Params:
+      properties:
+        hemolysis_phc50_reject_max:
+          default: 4.0
+          title: Hemolysis Phc50 Reject Max
+          type: number
+        hemolysis_predictor_version:
+          default: v1
+          title: Hemolysis Predictor Version
+          type: string
+        solubility_solvent:
+          default: Ultrapure water
+          title: Solubility Solvent
+          type: string
+        cytotoxicity_cell_type:
+          default: DRAMP_aggregate
+          enum:
+          - DBAASP_no_cytotoxicity_hit
+          - DRAMP_aggregate
+          - Human PBMC
+          - Human Primary Epidermal Keratinocytes (HEK)
+          - Human keratinocytes HaCat
+          - Human microvascular endothelial cells HMEC-1
+          - Human skin fibroblasts
+          title: Cytotoxicity Cell Type
+          type: string
+        cytotoxicity_reject_max:
+          default: 0.5
+          title: Cytotoxicity Reject Max
+          type: number
+        aggregation_reject_max:
+          default: 0.7
+          title: Aggregation Reject Max
+          type: number
+        solubility_flag_min:
+          default: 0.3
+          title: Solubility Flag Min
+          type: number
+        cleavage_stability_reject_min:
+          default: 0.3
+          title: Cleavage Stability Reject Min
+          type: number
+        cleavage_decay_rate:
+          default: 0.5
+          title: Cleavage Decay Rate
+          type: number
+      title: Stage8Params
+      type: object
+    Stage9Params:
+      properties:
+        rejected_difficulty_classes:
+          default:
+          - high
+          items:
+            type: string
+          title: Rejected Difficulty Classes
+          type: array
+      title: Stage9Params
+      type: object
+    E2EStages:
+      type: object
+      additionalProperties: false
+      required:
+      - s01_therapeutic_product_brief
+      properties:
+        s01_therapeutic_product_brief:
+          anyOf:
+          - properties:
+              brief:
+                $ref: '#/components/schemas/BriefFields'
+              seed:
+                default: 42
+                description: Random seed for reproducibility
+                title: Seed
+                type: integer
+              enabled:
+                type: boolean
+                default: true
+                const: true
+              params: false
+            required:
+            - brief
+            type: object
+          - type: object
+            additionalProperties: false
+            required:
+            - params
+            properties:
+              enabled:
+                type: boolean
+                default: true
+                const: true
+              params:
+                $ref: '#/components/schemas/Stage1Params'
+          description: Flat parameters are the public request format; enabled defaults
+            to true when supplied.
+        s02_wound_biology_and_targets:
+          anyOf:
+          - properties:
+              deficit_rules_path:
+                default: ./configs/deficit_rules.config.yaml
+                title: Deficit Rules Path
+                type: string
+              enabled:
+                type: boolean
+                default: true
+              params: false
+            type: object
+          - type: object
+            additionalProperties: false
+            required:
+            - params
+            properties:
+              enabled:
+                type: boolean
+                default: true
+              params:
+                $ref: '#/components/schemas/Stage2Params'
+          - type: object
+            required:
+            - enabled
+            properties:
+              enabled:
+                const: false
+              params: false
+            additionalProperties: true
+            description: Disabled stages skip parameter validation.
+          - type: object
+            properties:
+              enabled:
+                type: boolean
+                const: false
+              params:
+                type: object
+            required:
+            - enabled
+            - params
+            additionalProperties: false
+          description: Flat parameters are the public request format; enabled defaults
+            to true when supplied.
+        s03_data_integration:
+          type: object
+          additionalProperties: true
+          description: Placeholder stage, disabled when omitted.
+        s04_candidate_generation:
+          anyOf:
+          - properties:
+              tags:
+                default:
+                - <AMP>
+                items:
+                  type: string
+                title: Tags
+                type: array
+              n_peptides:
+                default: 100
+                title: N Peptides
+                type: integer
+              min_length:
+                default: 6
+                title: Min Length
+                type: integer
+              max_length:
+                default: 35
+                title: Max Length
+                type: integer
+              max_new_tokens:
+                default: 120
+                title: Max New Tokens
+                type: integer
+              batch_size:
+                default: 16
+                title: Batch Size
+                type: integer
+              max_attempts:
+                default: 20
+                title: Max Attempts
+                type: integer
+              generator:
+                anyOf:
+                - type: string
+                - type: 'null'
+                default: null
+                title: Generator
+              route_a_ga_params:
+                $ref: '#/components/schemas/RouteAGAParams'
+                default:
+                  pop_size: 3
+                  n_generations: 5
+                  mutation_rate: 0.1
+                  random_seed: 42
+              route_a_constraint_config:
+                $ref: '#/components/schemas/RouteAConstraintConfig'
+                default:
+                  charge_min: -3.0
+                  charge_max: 8.0
+                  hydro_min: -1.0
+                  hydro_max: 1.0
+                  aggregation_threshold: 3.0
+                  ph: 7.4
+              enabled:
+                type: boolean
+                default: true
+              params: false
+            type: object
+          - type: object
+            additionalProperties: false
+            required:
+            - params
+            properties:
+              enabled:
+                type: boolean
+                default: true
+              params:
+                $ref: '#/components/schemas/Stage4Params'
+          - type: object
+            required:
+            - enabled
+            properties:
+              enabled:
+                const: false
+              params: false
+            additionalProperties: true
+            description: Disabled stages skip parameter validation.
+          - type: object
+            properties:
+              enabled:
+                type: boolean
+                const: false
+              params:
+                type: object
+            required:
+            - enabled
+            - params
+            additionalProperties: false
+          description: Flat parameters are the public request format; enabled defaults
+            to true when supplied.
+        s05_physchem_screening:
+          anyOf:
+          - properties:
+              ph:
+                default: 7.4
+                title: Ph
+                type: number
+              solubility_solvent:
+                default: Ultrapure water
+                title: Solubility Solvent
+                type: string
+              max_length:
+                anyOf:
+                - type: integer
+                - type: 'null'
+                default: null
+                title: Max Length
+              aggregation_tendency_flag_max:
+                default: 0.6
+                title: Aggregation Tendency Flag Max
+                type: number
+              solubility_flag_min:
+                default: 0.4
+                title: Solubility Flag Min
+                type: number
+              amphipathicity_flag_max:
+                default: 0.8
+                title: Amphipathicity Flag Max
+                type: number
+              isoelectric_point_flag_ph_window:
+                default: 0.5
+                title: Isoelectric Point Flag Ph Window
+                type: number
+              ss_confidence_unstable_max:
+                default: 0.5
+                title: Ss Confidence Unstable Max
+                type: number
+              ss_confidence_ambiguous_max:
+                default: 0.7
+                title: Ss Confidence Ambiguous Max
+                type: number
+              risk_category_low_max:
+                default: 0
+                title: Risk Category Low Max
+                type: integer
+              risk_category_medium_max:
+                default: 2
+                title: Risk Category Medium Max
+                type: integer
+              enabled:
+                type: boolean
+                default: true
+              params: false
+            type: object
+          - type: object
+            additionalProperties: false
+            required:
+            - params
+            properties:
+              enabled:
+                type: boolean
+                default: true
+              params:
+                $ref: '#/components/schemas/Stage5Params'
+          - type: object
+            required:
+            - enabled
+            properties:
+              enabled:
+                const: false
+              params: false
+            additionalProperties: true
+            description: Disabled stages skip parameter validation.
+          - type: object
+            properties:
+              enabled:
+                type: boolean
+                const: false
+              params:
+                type: object
+            required:
+            - enabled
+            - params
+            additionalProperties: false
+          description: Flat parameters are the public request format; enabled defaults
+            to true when supplied.
+        s06_functional_models:
+          anyOf:
+          - properties:
+              stage6_thresholds:
+                $ref: '#/components/schemas/Stage6Thresholds'
+                default:
+                  min_amp_probability: 0.7
+                  min_proliferation_migration: 0.65
+                  min_angiogenic_activity: 0.6
+                  min_anti_inflammatory_probability: 0.65
+                  max_mic:
+                    Pseudomonas_aeruginosa: 16.0
+                  max_mbic:
+                    Pseudomonas_aeruginosa: 32.0
+              enabled:
+                type: boolean
+                default: true
+              params: false
+            type: object
+          - type: object
+            additionalProperties: false
+            required:
+            - params
+            properties:
+              enabled:
+                type: boolean
+                default: true
+              params:
+                $ref: '#/components/schemas/Stage6Params'
+          - type: object
+            required:
+            - enabled
+            properties:
+              enabled:
+                const: false
+              params: false
+            additionalProperties: true
+            description: Disabled stages skip parameter validation.
+          - type: object
+            properties:
+              enabled:
+                type: boolean
+                const: false
+              params:
+                type: object
+            required:
+            - enabled
+            - params
+            additionalProperties: false
+          description: Flat parameters are the public request format; enabled defaults
+            to true when supplied.
+        s07_structure_mechanism:
+          anyOf:
+          - properties:
+              plddt_low_confidence_max:
+                default: 0.5
+                title: Plddt Low Confidence Max
+                type: number
+              pathway_engagement_min_probability:
+                default: 0.5
+                title: Pathway Engagement Min Probability
+                type: number
+              helix_phi_min:
+                default: -100.0
+                title: Helix Phi Min
+                type: number
+              helix_phi_max:
+                default: -30.0
+                title: Helix Phi Max
+                type: number
+              helix_psi_min:
+                default: -77.0
+                title: Helix Psi Min
+                type: number
+              helix_psi_max:
+                default: -5.0
+                title: Helix Psi Max
+                type: number
+              sheet_phi_min:
+                default: -180.0
+                title: Sheet Phi Min
+                type: number
+              sheet_phi_max:
+                default: -45.0
+                title: Sheet Phi Max
+                type: number
+              sheet_psi_min:
+                default: 90.0
+                title: Sheet Psi Min
+                type: number
+              sheet_psi_max:
+                default: 180.0
+                title: Sheet Psi Max
+                type: number
+              enabled:
+                type: boolean
+                default: true
+              params: false
+            type: object
+          - type: object
+            additionalProperties: false
+            required:
+            - params
+            properties:
+              enabled:
+                type: boolean
+                default: true
+              params:
+                $ref: '#/components/schemas/Stage7Params'
+          - type: object
+            required:
+            - enabled
+            properties:
+              enabled:
+                const: false
+              params: false
+            additionalProperties: true
+            description: Disabled stages skip parameter validation.
+          - type: object
+            properties:
+              enabled:
+                type: boolean
+                const: false
+              params:
+                type: object
+            required:
+            - enabled
+            - params
+            additionalProperties: false
+          description: Flat parameters are the public request format; enabled defaults
+            to true when supplied.
+        s08_safety_developability:
+          anyOf:
+          - properties:
+              hemolysis_phc50_reject_max:
+                default: 4.0
+                title: Hemolysis Phc50 Reject Max
+                type: number
+              hemolysis_predictor_version:
+                type: string
+                const: v1
+                default: v1
+              solubility_solvent:
+                default: Ultrapure water
+                title: Solubility Solvent
+                type: string
+              cytotoxicity_cell_type:
+                default: DRAMP_aggregate
+                enum:
+                - DBAASP_no_cytotoxicity_hit
+                - DRAMP_aggregate
+                - Human PBMC
+                - Human Primary Epidermal Keratinocytes (HEK)
+                - Human keratinocytes HaCat
+                - Human microvascular endothelial cells HMEC-1
+                - Human skin fibroblasts
+                title: Cytotoxicity Cell Type
+                type: string
+              cytotoxicity_reject_max:
+                default: 0.5
+                title: Cytotoxicity Reject Max
+                type: number
+              aggregation_reject_max:
+                default: 0.7
+                title: Aggregation Reject Max
+                type: number
+              solubility_flag_min:
+                default: 0.3
+                title: Solubility Flag Min
+                type: number
+              cleavage_stability_reject_min:
+                default: 0.3
+                title: Cleavage Stability Reject Min
+                type: number
+              cleavage_decay_rate:
+                default: 0.5
+                title: Cleavage Decay Rate
+                type: number
+              enabled:
+                type: boolean
+                default: true
+              params: false
+            type: object
+          - type: object
+            additionalProperties: false
+            required:
+            - params
+            properties:
+              enabled:
+                type: boolean
+                default: true
+              params:
+                allOf:
+                - $ref: '#/components/schemas/Stage8Params'
+                - properties:
+                    hemolysis_predictor_version:
+                      const: v1
+          - type: object
+            required:
+            - enabled
+            properties:
+              enabled:
+                const: false
+              params: false
+            additionalProperties: true
+            description: Disabled stages skip parameter validation.
+          - type: object
+            properties:
+              enabled:
+                type: boolean
+                const: false
+              params:
+                type: object
+            required:
+            - enabled
+            - params
+            additionalProperties: false
+          description: Flat parameters are the public request format; enabled defaults
+            to true when supplied.
+        s09_synthesis_cmc:
+          anyOf:
+          - properties:
+              rejected_difficulty_classes:
+                default:
+                - high
+                items:
+                  type: string
+                title: Rejected Difficulty Classes
+                type: array
+              enabled:
+                type: boolean
+                default: true
+              params: false
+            type: object
+          - type: object
+            additionalProperties: false
+            required:
+            - params
+            properties:
+              enabled:
+                type: boolean
+                default: true
+              params:
+                $ref: '#/components/schemas/Stage9Params'
+          - type: object
+            required:
+            - enabled
+            properties:
+              enabled:
+                const: false
+              params: false
+            additionalProperties: true
+            description: Disabled stages skip parameter validation.
+          - type: object
+            properties:
+              enabled:
+                type: boolean
+                const: false
+              params:
+                type: object
+            required:
+            - enabled
+            - params
+            additionalProperties: false
+          description: Flat parameters are the public request format; enabled defaults
+            to true when supplied.
+        s11_ranking:
+          type: object
+          additionalProperties: true
+          description: Always enabled; supplied parameters are ignored. Send {} or
+            omit.
+      description: Stages 2 and 3 default to disabled. Stage 11 always uses its built-in
+        policy. Other omitted stages execute with schema defaults.
+    ErrorResponse:
+      type: object
+      required:
+      - detail
+      properties:
+        detail:
+          anyOf:
+          - type: string
+          - type: array
+            items:
+              type: object
+              additionalProperties: true

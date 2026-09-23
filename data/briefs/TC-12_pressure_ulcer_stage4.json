@@ -22,7 +22,7 @@
         "Proteus_mirabilis",
         "anaerobes"
     ],
-    "delivery_system": "collagen_matrix",
+    "delivery_system": "Collagen matrix",
     "max_length": 35,
     "dosing_interval_hours": 72,
     "release_target_hours": 96,

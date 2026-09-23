@@ -1,0 +1,93 @@
+{
+  "model_name": "aggregation_predictor_v1",
+  "task": "binary_classification",
+  "target": "seed_bh",
+  "target_description": "Aggregation propensity label (seed_bh) from adt5111_data_files_s1_to_s7.xlsx, sheet SD_2.",
+  "feature_cols": "see feature_columns.json (300 features, top-300 of ~1490 raw descriptors selected by XGBoost gain importance)",
+  "n_features": 300,
+  "n_raw_features_before_selection": 1490,
+  "feature_selection": {
+    "method": "XGBoost gain importance ranking",
+    "selector_params": {
+      "n_estimators": 300,
+      "tree_method": "hist",
+      "eval_metric": "auc",
+      "scale_pos_weight": "(y_train==0).sum() / (y_train==1).sum()",
+      "random_state": 42
+    },
+    "n_selected": 300
+  },
+  "feature_sources": {
+    "biopython": "Bio.SeqUtils.ProtParam.ProteinAnalysis global descriptors (19 dims: MW, aromaticity, instability index, GRAVY, pI, charge at pH7, secondary-structure fractions, molar extinction, compositional fractions)",
+    "propy3_pybiomed": "propy.PyPro.GetProDes: amino-acid composition, dipeptide composition, CTD, Moran/Geary/Moreau-Broto autocorrelation, QSO, SOCN, PAAC, APAAC (~1275 dims; QSO/SOCN/PAAC/APAAC lag=4)",
+    "aaindex1_protscale": "19 curated AAindex1 accessions (mean/std/min/max per sequence, 76 dims) standing in for classic ExPASy ProtScale tables; values bundled in aaindex1_scales.json, extracted from the source project's aaindex1 database file"
+  },
+  "aaindex1_accessions_used": {
+    "hydrophobicity_kd": "KYTJ820101",
+    "hydrophobicity_hw": "HOPT810101",
+    "hydrophobicity_fauchere": "FAUJ830101",
+    "flexibility_vihinen": "VINM940101",
+    "bulkiness_zimmerman": "ZIMJ680102",
+    "polarity_zimmerman": "ZIMJ680103",
+    "polarity_grantham": "GRAR740102",
+    "refractivity_mcmeekin": "MCMT640101",
+    "accessible_surface_area": "JANJ780101",
+    "transmembrane_tendency": "ZHOH040102",
+    "alpha_helix_propensity": "CHOP780201",
+    "beta_sheet_propensity": "CHOP780202",
+    "turn_propensity": "CHOP780203",
+    "coil_propensity": "TANS770103",
+    "volume_zamyatnin": "ZIMJ680104",
+    "compressibility": "NAKH900106",
+    "recognition_factor": "FAUJ880111",
+    "free_energy_solubility": "GUYH850101",
+    "net_charge": "KLEP840101"
+  },
+  "xgb_params": {
+    "objective": "binary:logistic",
+    "eval_metric": "auc",
+    "tree_method": "hist",
+    "max_depth": 8,
+    "learning_rate": 0.03,
+    "subsample": 0.7,
+    "colsample_bytree": 0.6,
+    "min_child_weight": 1,
+    "reg_alpha": 0.01,
+    "reg_lambda": 10.0,
+    "gamma": 1.0,
+    "n_estimators": 800,
+    "scale_pos_weight": 3.635494948489524,
+    "random_state": 42
+  },
+  "xgb_hyperparameter_search": {
+    "method": "RandomizedSearchCV",
+    "n_iter": 40,
+    "scoring": "roc_auc",
+    "cv": "StratifiedKFold(n_splits=5, shuffle=True, random_state=42)",
+    "param_distributions": {
+      "n_estimators": [200, 300, 500, 800],
+      "max_depth": [3, 4, 5, 6, 8],
+      "learning_rate": [0.01, 0.03, 0.05, 0.1, 0.2],
+      "subsample": [0.6, 0.7, 0.8, 0.9, 1.0],
+      "colsample_bytree": [0.5, 0.6, 0.7, 0.8, 1.0],
+      "min_child_weight": [1, 3, 5, 10],
+      "reg_alpha": [0, 0.01, 0.1, 1.0],
+      "reg_lambda": [0.1, 1.0, 5.0, 10.0],
+      "gamma": [0, 0.1, 0.5, 1.0]
+    }
+  },
+  "test_metrics": {
+    "roc_auc": 0.6996802108945839,
+    "pr_auc": 0.44594237824063654,
+    "accuracy": 0.7527653793906462,
+    "balanced_accuracy": 0.6419972957655973,
+    "f1": 0.43777581641659313,
+    "mcc": 0.27952878766640576
+  },
+  "test_set_size": 10306,
+  "train_set_size": 93141,
+  "data_source": "data/adt5111_data_files_s1_to_s7.xlsx (sheet SD_2)",
+  "min_sequence_length": 5,
+  "socn_qso_lag": 4,
+  "paac_lambda": 4
+}

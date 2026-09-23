@@ -13,7 +13,7 @@
         "anti_inflammatory"
     ],
     "pathogens": [],
-    "delivery_system": "nanofiber_dressing",
+    "delivery_system": "Nanofiber",
     "max_length": 18,
     "dosing_interval_hours": 120,
     "release_target_hours": 120,

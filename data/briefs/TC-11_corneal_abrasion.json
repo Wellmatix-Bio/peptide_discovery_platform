@@ -15,12 +15,12 @@
     "pathogens": [
         "Pseudomonas_aeruginosa"
     ],
-    "delivery_system": "eye_drop",
+    "delivery_system": "Spray or topical gel",
     "max_length": 15,
     "dosing_interval_hours": 4,
     "release_target_hours": 4,
     "safety_constraints": {
-        "hemolysis": "not_applicable",
+        "hemolysis": "low",
         "human_cell_cytotoxicity": "low",
         "ocular_irritation": "none"
     },

@@ -18,7 +18,7 @@
         "Staphylococcus_aureus",
         "Pseudomonas_aeruginosa"
     ],
-    "delivery_system": "topical_hydrogel",
+    "delivery_system": "Hydrogel",
     "max_length": 30,
     "dosing_interval_hours": 48,
     "release_target_hours": 48,

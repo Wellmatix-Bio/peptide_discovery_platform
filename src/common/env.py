@@ -20,4 +20,16 @@ def _load_dotenv(path: Path) -> None:
 
 _load_dotenv(_ENV_PATH)
 
-DEV_MODE = os.environ.get("DEV_MODE", False)
+
+def _env_bool(name: str, default: bool = False) -> bool:
+    """os.environ.get(name) is always a string (or missing) -- "False"/"0"
+    are truthy as Python objects, so this parses the value instead of just
+    checking it's set."""
+    raw = os.environ.get(name)
+    if raw is None:
+        return default
+    return raw.strip().lower() in ("1", "true", "yes", "on")
+
+
+DEV_MODE = _env_bool("DEV_MODE")
+SEED_CANDIDATES_FILE = os.environ.get("SEED_CANDIDATES_FILE", "seed_candidates.fasta")

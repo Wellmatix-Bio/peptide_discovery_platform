@@ -9,6 +9,8 @@
 from __future__ import annotations
 
 import hashlib
+import io
+import json
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -20,6 +22,7 @@ from modlamp.descriptors import GlobalDescriptor, PeptideDescriptor
 from propy.PyPro import GetProDes
 from transformers import AutoTokenizer, EsmModel
 
+from common import storage
 from model_store.hemolysis_predictor_v1.predictor import (
     Extractor as _HemolysisV1Extractor,
     normalize_sequences as _normalize_hemolysis_v1_sequences,
@@ -27,6 +30,10 @@ from model_store.hemolysis_predictor_v1.predictor import (
 from model_store.hemolysis_predictor_v1.property_tables import (
     PROPERTY_TABLES as _HEMOLYSIS_V1_PROPERTY_TABLES,
 )
+
+_ESM2_EMBEDDINGS_FILE = "esm2_embeddings.npz"
+_ESM2_MANIFEST_FILE = "esm2_manifest.json"
+_DESCRIPTORS_FILE = "descriptors.json"
 
 DEFAULT_ESM2_MODEL_NAME = "facebook/esm2_t33_650M_UR50D"
 # Sequences per forward pass, chosen to bound GPU memory use -- measured at
@@ -147,6 +154,75 @@ class FeatureExtractor:
         self._esm2_model: Any = None
         self._esm2_device: str | None = None
         self._hemolysis_v1_extractor: _HemolysisV1Extractor | None = None
+
+    # ------------------------------------------------------------------
+    # Persistence: round-trips the four cache dicts through feature_cache/.
+    # ------------------------------------------------------------------
+
+    def save(self, dir: str) -> None:
+        storage.ensure_dir(dir)
+
+        if self._esm2_cache:
+            arrays: dict[str, np.ndarray] = {}
+            for key, embedding in self._esm2_cache.items():
+                arrays[f"{key}__hidden"] = embedding.hidden_states
+                arrays[f"{key}__ids"] = embedding.input_ids
+            buffer = io.BytesIO()
+            np.savez_compressed(buffer, **arrays)
+            storage.write_bytes(
+                storage.join(dir, _ESM2_EMBEDDINGS_FILE), buffer.getvalue()
+            )
+
+            first = next(iter(self._esm2_cache.values()))
+            manifest = {
+                "keys": list(self._esm2_cache.keys()),
+                "cls_token_id": first.cls_token_id,
+                "eos_token_id": first.eos_token_id,
+            }
+            storage.write_text(
+                storage.join(dir, _ESM2_MANIFEST_FILE), json.dumps(manifest)
+            )
+
+        descriptors = {
+            "modlamp": self._modlamp_cache,
+            "propy_biopython": self._propy_biopython_cache,
+            "hemolysis_v1": self._hemolysis_v1_cache,
+        }
+        storage.write_text(
+            storage.join(dir, _DESCRIPTORS_FILE), json.dumps(descriptors)
+        )
+
+    @classmethod
+    def load(
+        cls,
+        dir: str,
+        esm2_model_name: str = DEFAULT_ESM2_MODEL_NAME,
+        esm2_batch_size: int = DEFAULT_ESM2_BATCH_SIZE,
+    ) -> "FeatureExtractor":
+        """Missing files leave the corresponding dict empty, same as a fresh instance."""
+        extractor = cls(esm2_model_name=esm2_model_name, esm2_batch_size=esm2_batch_size)
+
+        embeddings_path = storage.join(dir, _ESM2_EMBEDDINGS_FILE)
+        manifest_path = storage.join(dir, _ESM2_MANIFEST_FILE)
+        if storage.exists(embeddings_path) and storage.exists(manifest_path):
+            manifest = json.loads(storage.read_text(manifest_path))
+            with np.load(io.BytesIO(storage.read_bytes(embeddings_path))) as npz:
+                for key in manifest["keys"]:
+                    extractor._esm2_cache[key] = ESM2Embedding(
+                        hidden_states=npz[f"{key}__hidden"],
+                        input_ids=npz[f"{key}__ids"],
+                        cls_token_id=manifest["cls_token_id"],
+                        eos_token_id=manifest["eos_token_id"],
+                    )
+
+        descriptors_path = storage.join(dir, _DESCRIPTORS_FILE)
+        if storage.exists(descriptors_path):
+            descriptors = json.loads(storage.read_text(descriptors_path))
+            extractor._modlamp_cache = descriptors.get("modlamp", {})
+            extractor._propy_biopython_cache = descriptors.get("propy_biopython", {})
+            extractor._hemolysis_v1_cache = descriptors.get("hemolysis_v1", {})
+
+        return extractor
 
     # ------------------------------------------------------------------
     # ESM2

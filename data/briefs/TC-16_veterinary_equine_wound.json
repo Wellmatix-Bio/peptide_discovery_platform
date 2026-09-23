@@ -16,7 +16,7 @@
         "Staphylococcus_aureus",
         "Streptococcus_equi"
     ],
-    "delivery_system": "topical_gel",
+    "delivery_system": "Spray or topical gel",
     "max_length": 30,
     "dosing_interval_hours": 24,
     "release_target_hours": 24,

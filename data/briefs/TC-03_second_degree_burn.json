@@ -17,7 +17,7 @@
         "Pseudomonas_aeruginosa",
         "Acinetobacter_baumannii"
     ],
-    "delivery_system": "foam_dressing",
+    "delivery_system": "Foam dressing",
     "max_length": 25,
     "dosing_interval_hours": 72,
     "release_target_hours": 72,

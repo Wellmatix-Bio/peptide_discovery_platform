@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Any
 from pydantic import BaseModel
 import yaml
+from common import storage
 
 
 class StageConfig(BaseModel):
@@ -22,12 +23,6 @@ class RunConfig(BaseModel):
     model_store: str
     input: str | None = None
 
-    # Pipeline-wide switch: batch-warm and reuse the shared ESM2/descriptor
-    # cache (FeatureExtractor) across every stage that supports it, instead
-    # of each model re-embedding every sequence independently. A single
-    # run-level flag rather than a per-stage one, since a run should use one
-    # consistent embedding source throughout -- not some stages cached and
-    # others not.
     use_feature_cache: bool = False
 
     entry_stage: str
@@ -55,6 +50,4 @@ class RunConfig(BaseModel):
 
     def snapshot(self, path: str | Path) -> None:
         """Write a snapshot of the run config to a YAML file."""
-        path = Path(path)
-        with open(path, "w") as f:
-            yaml.safe_dump(self.model_dump(), f)
+        storage.write_text(path, yaml.safe_dump(self.model_dump()))

@@ -18,7 +18,7 @@
         "Aspergillus_fumigatus",
         "Staphylococcus_aureus"
     ],
-    "delivery_system": "chitosan_hydrogel",
+    "delivery_system": "Chitosan hydrogel",
     "max_length": 30,
     "dosing_interval_hours": 24,
     "release_target_hours": 48,

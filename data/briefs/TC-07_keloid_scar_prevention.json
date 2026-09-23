@@ -12,7 +12,7 @@
         "scar_reduction"
     ],
     "pathogens": [],
-    "delivery_system": "silicone_film",
+    "delivery_system": "Film",
     "max_length": 15,
     "dosing_interval_hours": 24,
     "release_target_hours": 24,

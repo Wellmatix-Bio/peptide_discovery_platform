@@ -1,0 +1,32 @@
+{
+    "case_id": "TC-28_scald_burn_EGF_alginate_hydrogel",
+    "indication": "partial_thickness_scald_burn",
+    "wound_context": [
+        "acute",
+        "high_exudate"
+    ],
+    "desired_functions": [
+        "cell_proliferation",
+        "wound_closure"
+    ],
+    "pathogens": [],
+    "delivery_system": "Alginate dressing",
+    "max_length": 50,
+    "dosing_interval_hours": 24,
+    "release_target_hours": 24,
+    "safety_constraints": {
+        "hemolysis": "low",
+        "human_cell_cytotoxicity": "low"
+    },
+    "manufacturing": {
+        "method": "solid_phase_synthesis"
+    },
+    "stage": "discovery",
+    "reference_peptide": {
+        "name": "EGF",
+        "sequence": "epidermal_growth_factor",
+        "source_organism": "recombinant"
+    },
+    "literature_source": "Hu et al. 2018 (ref 236)",
+    "notes": "Daily treatment; dual-crosslinked hydrogel didn't impair mechanics, allowed sufficient EGF loading/release, improved scald healing. max_length capped at pipeline's 50-residue ceiling -- EGF is a full growth factor, longer than this pipeline's short-peptide design space."
+}

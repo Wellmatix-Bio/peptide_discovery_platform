@@ -17,7 +17,7 @@
         "Candida_albicans",
         "Streptococcus_mutans"
     ],
-    "delivery_system": "mucoadhesive_gel",
+    "delivery_system": "Spray or topical gel",
     "max_length": 24,
     "dosing_interval_hours": 6,
     "release_target_hours": 6,

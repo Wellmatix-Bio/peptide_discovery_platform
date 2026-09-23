@@ -1,0 +1,33 @@
+{
+    "case_id": "TC-29_excisional_wound_jellyfish_collagen_peptide",
+    "indication": "full_thickness_excisional_wound",
+    "wound_context": [
+        "acute",
+        "clean"
+    ],
+    "desired_functions": [
+        "collagen_synthesis",
+        "tissue_regeneration"
+    ],
+    "pathogens": [],
+    "delivery_system": "Spray or topical gel",
+    "max_length": 50,
+    "dosing_interval_hours": 24,
+    "duration_days": 2,
+    "release_target_hours": 48,
+    "safety_constraints": {
+        "hemolysis": "low",
+        "human_cell_cytotoxicity": "low"
+    },
+    "manufacturing": {
+        "method": "solid_phase_synthesis"
+    },
+    "stage": "discovery",
+    "reference_peptide": {
+        "name": "Type-I collagen peptide",
+        "sequence": "not_disclosed",
+        "source_organism": "Rhopilema_esculentum_jellyfish"
+    },
+    "literature_source": "Felician et al. 2019 (ref 18)",
+    "notes": "6.25 ug/mL for 48h promoted wound closure in full-thickness mouse model; increased beta-FGF and TGF-beta1 expression. max_length capped at pipeline's 50-residue ceiling -- source peptide sequence not disclosed."
+}

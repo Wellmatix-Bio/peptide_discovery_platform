@@ -2,6 +2,8 @@ stages:
   s01_therapeutic_product_brief:
     enabled: true
     params:
+      # Local/dev only (DEV_MODE=true): a file path, not inline JSON.
+      # Deployment (worker.py) always receives the brief inline instead.
       brief_path: ./data/briefs/TC-01_infected_diabetic_foot_ulcer.json
   s02_wound_biology_and_targets:
     enabled: true
@@ -87,10 +89,16 @@ stages:
   s08_safety_developability:
     enabled: true
     params:
-      cytotoxicity_reject_max: 0.5
       hemolysis_phc50_reject_max: 4.0
-      cleavage_decay_rate: 0.5
       hemolysis_predictor_version: "v1"
+      solubility_solvent: Ultrapure water
+      cytotoxicity_cell_type: DRAMP_aggregate
+      cytotoxicity_reject_max: 0.5
+      aggregation_reject_max: 0.7
+      solubility_flag_min: 0.3
+      cleavage_stability_reject_min: 0.3
+      cleavage_decay_rate: 0.5
+      # wound_protease_accessions: null   # unset -> WOUND_PROTEASE_ACCESSIONS panel
 
   s09_synthesis_cmc:
     enabled: true
@@ -100,65 +108,4 @@ stages:
 
   s11_ranking:
     enabled: true
-    params:
-    # Unconfigurable parameters are set in the ranking_config.yaml file
-      ranking_config:
-        baseline_weights:
-          wound_closure: 0.22
-          antimicrobial: 0.18
-          immunomodulation: 0.13
-          angiogenesis: 0.12
-          collagen_ecm: 0.10
-          safety: 0.12
-          stability: 0.08
-          synthesis_feasibility: 0.03
-          mechanistic_confidence: 0.02
-
-        modifier_rules:
-          - reason: antimicrobial_objective
-            field: desired_functions
-            any_of: [antimicrobial, antimicrobial_action, "antimicrobial action"]
-            modifiers: {antimicrobial: 1.25}
-          - reason: migration_objective
-            field: desired_functions
-            any_of: [keratinocyte_migration, fibroblast_migration, "cell proliferation/migration"]
-            modifiers: {wound_closure: 1.25}
-          - reason: angiogenesis_objective
-            field: desired_functions
-            any_of: [angiogenesis]
-            modifiers: {angiogenesis: 1.25}
-          - reason: immunomodulation_objective
-            field: desired_functions
-            any_of: [anti_inflammatory, immunomodulation]
-            modifiers: {immunomodulation: 1.25}
-          - reason: collagen_objective
-            field: desired_functions
-            any_of: [collagen_remodeling, collagen_synthesis, "collagen synthesis"]
-            modifiers: {collagen_ecm: 1.25}
-          - reason: infected_wound
-            field: wound_context
-            any_of: [infected]
-            modifiers: {antimicrobial: 1.25, immunomodulation: 1.15}
-          - reason: diabetic_or_chronic_wound
-            field: wound_context
-            any_of: [diabetic, chronic, high_glucose]
-            modifiers: {wound_closure: 1.20, angiogenesis: 1.20, immunomodulation: 1.15, stability: 1.20}
-          - reason: clean_surgical_wound
-            field: wound_context
-            all_of: [clean, surgical]
-            none_of: [infected]
-            modifiers: {wound_closure: 1.20, collagen_ecm: 1.25, angiogenesis: 1.15, antimicrobial: 0.75}
-        normalizers:
-          safety:
-            kind: probability
-            higher_is_better: false
-        input_sources:
-          scores:
-            antimicrobial: amp_probability
-            immunomodulation: anti_inflammatory_probability
-            angiogenesis: angiogenic_activity.angiogenic
-            wound_closure: proliferation_migration.migration
-            safety: cytotoxicity.score
-            stability: cleavage_stability.score
-            synthesis_feasibility: synthesis_feasibility.ml_feasibility_prior.score
-            mechanistic_confidence: mechanism.structural_confidence
+    params: {}

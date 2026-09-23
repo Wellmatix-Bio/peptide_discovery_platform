@@ -9,14 +9,12 @@
 from __future__ import annotations
 
 import math
-from pathlib import Path
 from typing import Annotated, Any, Literal
 
-import yaml
 from pydantic import BaseModel, ConfigDict, Field, StrictBool, model_validator
 
 from common.logging import get_logger
-from pipeline.base import CandidateStage, RunContext, StageError
+from pipeline.base import CandidateStage, RunContext
 from schemas.candidate import Candidate
 from schemas.run_config import StageConfig
 
@@ -199,6 +197,121 @@ class ModifierRule(StrictModel):
         return True
 
 
+# Built-in adjustments derived from the product brief.
+DEFAULT_DESIRED_FUNCTIONS_RULES: list[ModifierRule] = [
+    ModifierRule(
+        reason="antimicrobial_objective",
+        field="desired_functions",
+        any_of=["antimicrobial", "antimicrobial_action", "antimicrobial action"],
+        modifiers={"antimicrobial": 1.25},
+    ),
+    ModifierRule(
+        reason="migration_objective",
+        field="desired_functions",
+        any_of=[
+            "keratinocyte_migration",
+            "fibroblast_migration",
+            "cell proliferation/migration",
+        ],
+        modifiers={"wound_closure": 1.25},
+    ),
+    ModifierRule(
+        reason="angiogenesis_objective",
+        field="desired_functions",
+        any_of=["angiogenesis"],
+        modifiers={"angiogenesis": 1.25},
+    ),
+    ModifierRule(
+        reason="immunomodulation_objective",
+        field="desired_functions",
+        any_of=["anti_inflammatory", "immunomodulation"],
+        modifiers={"immunomodulation": 1.25},
+    ),
+    ModifierRule(
+        reason="collagen_objective",
+        field="desired_functions",
+        any_of=["collagen_remodeling", "collagen_synthesis", "collagen synthesis"],
+        modifiers={"collagen_ecm": 1.25},
+    ),
+]
+
+
+# Built-in wound-context adjustments, combined with desired-function rules.
+DEFAULT_WOUND_CONTEXT_RULES: list[ModifierRule] = [
+    ModifierRule(
+        reason="infected_wound",
+        field="wound_context",
+        any_of=["infected"],
+        modifiers={"antimicrobial": 1.25, "immunomodulation": 1.15},
+    ),
+    ModifierRule(
+        reason="diabetic_or_chronic_wound",
+        field="wound_context",
+        any_of=["diabetic", "chronic", "high_glucose"],
+        modifiers={
+            "wound_closure": 1.20,
+            "angiogenesis": 1.20,
+            "immunomodulation": 1.15,
+            "stability": 1.20,
+        },
+    ),
+    ModifierRule(
+        reason="clean_surgical_wound",
+        field="wound_context",
+        all_of=["clean", "surgical"],
+        none_of=["infected"],
+        modifiers={
+            "wound_closure": 1.20,
+            "collagen_ecm": 1.25,
+            "angiogenesis": 1.15,
+            "antimicrobial": 0.75,
+        },
+    ),
+    ModifierRule(
+        reason="biofilm_positive_wound",
+        field="wound_context",
+        any_of=["biofilm_positive"],
+        modifiers={"stability": 1.20},
+    ),
+    ModifierRule(
+        reason="acute_wound",
+        field="wound_context",
+        any_of=["acute", "surgical", "traumatic"],
+        modifiers={"wound_closure": 1.20, "collagen_ecm": 1.20, "safety": 1.15},
+    ),
+    ModifierRule(
+        reason="ischemic_or_low_perfusion_wound",
+        field="wound_context",
+        any_of=["ischemic", "low_perfusion"],
+        modifiers={"angiogenesis": 1.35},
+    ),
+    ModifierRule(
+        reason="necrotic_wound",
+        field="wound_context",
+        any_of=["necrotic"],
+        modifiers={"antimicrobial": 1.20, "wound_closure": 0.80},
+    ),
+    ModifierRule(
+        reason="high_exudate_wound",
+        field="wound_context",
+        any_of=["high_exudate"],
+        modifiers={"stability": 1.20},
+    ),
+    ModifierRule(
+        reason="burn_wound",
+        field="wound_context",
+        any_of=["burn"],
+        modifiers={"antimicrobial": 1.20, "immunomodulation": 1.20, "safety": 1.15},
+    ),
+    ModifierRule(
+        reason="radiation_induced_wound",
+        field="wound_context",
+        any_of=["radiation_induced"],
+        modifiers={"angiogenesis": 1.25, "collagen_ecm": 1.15},
+    ),
+]
+
+
 class InputSources(StrictModel):
     """Dot paths (relative to Candidate.predictions) telling Stage 11 where
     to read each component score from. No implicit composites and no
@@ -220,11 +333,16 @@ class InputSources(StrictModel):
 
 class RankingConfig(StrictModel):
     """The full Stage 11 policy: weights, modifiers, normalizers, and input
-    wiring, loadable from YAML/JSON. Validation enforces: baseline weights
+    wiring, constructed in code. Validation enforces: baseline weights
     sum to 1, are non-negative, unknown score names raise."""
 
     baseline_weights: dict[Component, Nonnegative]
-    modifier_rules: list[ModifierRule] = Field(default_factory=list)
+    modifier_rules: list[ModifierRule] = Field(
+        default_factory=lambda: [
+            *DEFAULT_DESIRED_FUNCTIONS_RULES,
+            *DEFAULT_WOUND_CONTEXT_RULES,
+        ]
+    )
     normalizers: dict[Component, NormalizerConfig] = Field(default_factory=dict)
     input_sources: InputSources = Field(default_factory=InputSources)
 
@@ -244,21 +362,48 @@ class RankingConfig(StrictModel):
             raise ValueError("modifier rule reasons must be unique")
         return self
 
-    @classmethod
-    def load(cls, path: str | Path) -> "RankingConfig":
-        """Load a ranking policy from a YAML file. No implicit default path
-        -- like every other stage's config file (e.g. Stage 2's
-        deficit_rules_path), the path must come from config.params."""
-        source = Path(path)
-        if not source.exists():
-            raise FileNotFoundError(f"Ranking config file not found: {source}")
-        return cls.model_validate(yaml.safe_load(source.read_text(encoding="utf-8")))
 
 
 # ----------------------------------------------------------------------
 # ScoreNormalizer: converts a raw value into a [0,1] score, higher = better.
 # Missing values pass through untouched.
 # ----------------------------------------------------------------------
+
+
+# Code-owned ranking policy; run configs cannot override it.
+BUILTIN_RANKING_POLICY = RankingConfig.model_validate(
+    {
+        "baseline_weights": {
+            "wound_closure": 0.22,
+            "antimicrobial": 0.18,
+            "immunomodulation": 0.13,
+            "angiogenesis": 0.12,
+            "collagen_ecm": 0.1,
+            "safety": 0.12,
+            "stability": 0.08,
+            "synthesis_feasibility": 0.03,
+            "mechanistic_confidence": 0.02
+        },
+        "normalizers": {
+            "safety": {
+                "kind": "probability",
+                "higher_is_better": False
+            }
+        },
+        "input_sources": {
+            "scores": {
+                "antimicrobial": "amp_probability",
+                "immunomodulation": "anti_inflammatory_probability",
+                "angiogenesis": "angiogenic_activity.angiogenic",
+                "wound_closure": "proliferation_migration.migration",
+                "safety": "cytotoxicity.score",
+                "stability": "cleavage_stability.score",
+                "synthesis_feasibility": "synthesis_feasibility.ml_feasibility_prior.score",
+                "mechanistic_confidence": "mechanism.structural_confidence"
+            }
+        }
+    }
+)
 
 
 class ScoreNormalizer:
@@ -509,25 +654,9 @@ class Stage11(CandidateStage):
         self, candidates: list[Candidate], config: StageConfig, ctx: RunContext
     ) -> list[Candidate]:
         self.last_batch_result = None
-        unknown = set(config.params) - {"ranking_config", "ranking_config_path"}
-        if unknown:
-            raise ValueError(f"unknown Stage 11 parameters: {sorted(unknown)}")
-        if "ranking_config" in config.params and "ranking_config_path" in config.params:
-            raise ValueError("provide ranking_config or ranking_config_path, not both")
-        if (
-            "ranking_config" not in config.params
-            and "ranking_config_path" not in config.params
-        ):
-            raise StageError(
-                self.name,
-                "ranking_config or ranking_config_path is not specified in the config.",
-            )
-
-        policy = (
-            RankingConfig.model_validate(config.params["ranking_config"])
-            if "ranking_config" in config.params
-            else RankingConfig.load(config.params["ranking_config_path"])
-        )
+        if config.params:
+            raise ValueError("Stage 11 ranking policy is built into the code; parameters are not accepted")
+        policy = BUILTIN_RANKING_POLICY.model_copy(deep=True)
         stage1 = ProductObjective(
             wound_context=ctx.brief.wound_context if ctx.brief else [],
             desired_functions=ctx.brief.desired_functions if ctx.brief else [],

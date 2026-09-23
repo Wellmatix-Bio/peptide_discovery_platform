@@ -1,0 +1,31 @@
+{
+  "model_name": "cleavage_site_predictor_v1",
+  "task": "Per-residue P1 protease cleavage-site probability for a candidate peptide (substrate), against a bundled panel of enzymes (proteases).",
+  "architecture": "UniZyme joint model (UniZyme\\SE structure-only ablation): shared EnzymeEncoder + ActiveSiteHead produce a pooled enzyme representation h^e; SubstrateEncoder produces per-residue substrate hidden states H^s; CleavageSiteHead gathers a +/-15-residue window of H^s around each candidate position, concatenates with h^e, and scores a per-residue logit via MLP. See architecture.py and README.md.",
+  "inference_inputs_required": {
+    "sequence": "candidate peptide amino-acid sequence, standard 20 AAs",
+    "distance_matrix": "(len(sequence), len(sequence)) float array, pairwise C-alpha Euclidean distance in Angstroms, from a resolved or predicted 3D structure of the candidate peptide -- NOT computed by this predictor, must be supplied by the caller",
+    "enzyme_accession": "UniProt accession of a bundled enzyme (see enzymes/enzyme_catalog.csv), or omit to score against the full 118-enzyme panel via predict()"
+  },
+  "enzyme_side_backbone": "facebook/esm2_t12_35M_UR50D, PCA-reduced to 128 dims by enzymes/pca_model.joblib (IncrementalPCA fit on the source project's enzyme train split -- reused unmodified, not refit here)",
+  "substrate_side_backbone": "facebook/esm2_t12_35M_UR50D, same pca_model.joblib transform applied (pca_model.transform(...), not a separately fit model)",
+  "esm_raw_embed_dim": 480,
+  "pca_target_dim": 128,
+  "encoder_num_layers": 5,
+  "encoder_num_heads": 4,
+  "local_attention_span": 128,
+  "cleavage_window_radius": 15,
+  "enzyme_panel_size": 118,
+  "enzyme_panel_selection": "Curated from the source project's aligned+verified enzyme manifest (8,921 of 9,807 candidate UniProt EC 3.4 entries) by matching protein_name/enzyme_id against wound-healing-relevant protease families: matrix metalloproteinases (MMPs)/collagenases/gelatinases/stromelysins, cathepsins, elastases, plasminogen activators. Not the full manifest -- the full manifest is genome-wide EC 3.4 proteases (~1.1GB embeddings alone) and mostly irrelevant to wound biology.",
+  "known_coverage_gap": "Human MMP-1 (P03956), MMP-2 (P08253), MMP-3 (P08254), MMP-8 (P22894), MMP-9 (P14780), MMP-12 (P39900), and human neutrophil elastase (P08246) are NOT in the bundled panel -- their structures failed the source pipeline's aligned+verified check (structure length did not match sequence length) and were dropped upstream, before this migration. The panel does include their non-human orthologs (rat/mouse/rabbit MMPs, mouse neutrophil elastase Q3UP87) and a handful of human family members (MMP-11, MMP-19, MMP-24, MMP-26, ELA1_HUMAN, EL2A_HUMAN). Treat cleavage-site predictions against non-human orthologs as directional evidence of protease-family susceptibility, not a substitute for the specific human enzyme.",
+  "checkpoint_provenance": "unizyme model/joint_model/best_model.pt from the source project -- selected during training by best combined validation PR-AUC/AUPR (val_pr_auc_cleavage + 10 * val_aupr_active_site), epoch 13 (retrained; supersedes an earlier epoch-6 checkpoint migrated 2026-09-15). Re-saved here (joint_model_best.pt) with optimizer state stripped (22MB -> 7.6MB); model_state_dict, epoch, and best_score are unchanged from the source checkpoint.",
+  "checkpoint_val_metrics_epoch13": {
+    "val_pr_auc_cleavage": 0.8298,
+    "val_aupr_active_site": 0.9916,
+    "val_combined_pr_auc": 5.7876,
+    "val_combined_loss": 0.1061,
+    "note": "From the source checkpoint's own training-time history (14 epochs, 0-13); val_pr_auc_cleavage rose from 0.05 (epoch 0) to 0.83 (epoch 13), a large improvement over the previously migrated epoch-6 checkpoint (val_pr_auc_cleavage 0.14). No independent held-out evaluation was re-run for this update -- these are the source project's own validation-split metrics, not a fresh test-set score."
+  },
+  "training_data_scale": "~7,844 UniProt-labeled enzymes (active-site task), ~52 aligned enzymes with MEROPS cleavage data (cleavage task) -- see source MODEL_ARCHITECTURE.md section 3.4 for why only 52 enzymes have usable cleavage training data despite the much larger active-site set.",
+  "caveat": "The cleavage task's training set is small (52 enzymes) relative to the active-site task's; the joint loss (loss_c + 10*loss_a) leans on the active-site task to shape the shared enzyme encoder. Treat cleavage-site probabilities as a screening signal for protease susceptibility, not a validated high-confidence prediction -- especially for enzyme accessions far from the training distribution (non-human orthologs, unusual families)."
+}

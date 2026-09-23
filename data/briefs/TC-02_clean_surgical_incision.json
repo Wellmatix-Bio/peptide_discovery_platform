@@ -13,7 +13,7 @@
         "scar_reduction"
     ],
     "pathogens": [],
-    "delivery_system": "film_dressing",
+    "delivery_system": "Film",
     "max_length": 20,
     "dosing_interval_hours": 24,
     "release_target_hours": 24,

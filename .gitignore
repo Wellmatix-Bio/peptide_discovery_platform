@@ -15,17 +15,17 @@ logs/
 *.log
 
 # ---------- Models ----------
-model_store/
-!model_store/manifest.example.yaml
-model_store/hemolysis_predictor_v2
-*.pt
-*.pth
-*.ckpt
-*.onnx
-*.safetensors
-*.pkl
-*.joblib
-*.h5
+# Predictor code (predictor.py, __init__.py, README.md, model_card.json)
+# lives in model_store/<name>/ and is tracked. Weight files live in
+# model_store/model_weights/<name>/ (moved there by common/model_sync.py's
+# sync_model_weights(); see each predictor's MODEL_DIR) and are synced from
+# GCS at runtime -- that whole tree is gitignored. hemolysis_predictor_v2
+# is excluded from the split entirely (vendored GPL-3.0 CLI tool, not
+# synced) and stays wholly gitignored, code included.
+model_store/model_weights/
+model_store/hemolysis_predictor_v2/
+model_store/__pycache__/
+model_store/*/__pycache__/
 
 # ---------- Data ----------
 data/raw/
@@ -52,6 +52,10 @@ data/external/
 
 # Keep small test fixtures tracked
 !tests/fixtures/**
+
+# ---------- Generated test case configs ----------
+configs/test_cases/
+configs/runs/TC-*.yaml
 
 # ---------- Structure / docking scratch ----------
 scratch/
@@ -126,3 +130,19 @@ site/
 *.pdf
 docs/
 !docs/**/*.pdf
+**/rationale.md
+scripts/
+
+# --------- Under development / experimental ----------
+backend/api_stage/
+backend/worker_stage/
+src/backend/worker_stage/__init__.py
+src/backend/worker_stage/Dockerfile
+src/backend/worker_stage/worker.py
+src/backend/api_stage/api.py
+src/backend/api_stage/Dockerfile
+
+
+# --------- Miscellaneous ----------
+src/backend/worker_e2e/example_run.json
+src/backend/api_e2e/example_request.json

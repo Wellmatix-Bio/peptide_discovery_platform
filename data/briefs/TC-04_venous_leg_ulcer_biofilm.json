@@ -18,7 +18,7 @@
         "Pseudomonas_aeruginosa",
         "Enterococcus_faecalis"
     ],
-    "delivery_system": "alginate_dressing",
+    "delivery_system": "Alginate dressing",
     "max_length": 35,
     "dosing_interval_hours": 72,
     "release_target_hours": 96,

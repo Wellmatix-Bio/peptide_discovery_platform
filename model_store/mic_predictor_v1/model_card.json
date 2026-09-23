@@ -1,0 +1,72 @@
+{
+  "task": "regression: log10(MIC, uM) for a peptide against one of 3 ATCC reference organisms",
+  "target_transform": "log10(MIC_uM). Inverse: MIC_uM = 10 ** prediction",
+  "supported_organisms": ["Escherichia coli", "Staphylococcus aureus", "Pseudomonas aeruginosa"],
+  "organism_source_strains": {
+    "Escherichia coli": "ATCC 25922",
+    "Staphylococcus aureus": "ATCC 25923",
+    "Pseudomonas aeruginosa": "ATCC 27853"
+  },
+  "ensemble_method": "simple unweighted mean of BiLSTM, CNN, and Random Forest predictions (not computed by the source notebook; combined here per export instructions)",
+  "esm_model_name": "facebook/esm2_t33_650M_UR50D",
+  "esm_embedding_dim": 1280,
+  "esm_embedding_type": "per-residue (last_hidden_state), BOS/EOS dropped, left-aligned into a fixed MAX_SEQ_LEN=50 slot with zero padding",
+  "max_sequence_length": 50,
+  "genome_feature_scheme": {
+    "name": "NAC + DNC + TNC genomic nucleotide composition",
+    "dims": 84,
+    "components": {
+      "NAC": "mononucleotide composition, 4 dims (A, C, G, T frequency)",
+      "DNC": "dinucleotide composition, 16 dims (all AA..TT pairs, normalized frequency)",
+      "TNC": "trinucleotide composition, 64 dims (all AAA..TTT triplets, normalized frequency)"
+    },
+    "source": "precomputed once per organism from genome FASTA files in the source project's genomes/ directory; stored as genome_vectors.json in this package (no FASTA files shipped)",
+    "genome_lengths_bp": {
+      "Escherichia coli": 5130767,
+      "Staphylococcus aureus": 2778854,
+      "Pseudomonas aeruginosa": 6827737
+    }
+  },
+  "models": {
+    "bilstm": {
+      "file": "bilstm_model.pt",
+      "architecture": "BiLSTM(esm_dim=1280, hidden=128, bidirectional) over per-residue ESM2 embeddings (packed by true residue length) concatenated with a GenomicANN(84->64->32) branch over the genome vector, BatchNorm, then a 2-layer MLP regressor (288->64->1)",
+      "test_r2": 0.4838,
+      "training": "AdamW lr=1e-3 wd=1e-4, batch=64, up to 150 epochs, early stopping patience=20 on val weighted-Huber loss, best checkpoint restored"
+    },
+    "cnn": {
+      "file": "cnn_model.pt",
+      "architecture": "Conv1D(1280->128,k=5)+ReLU+MaxPool2, Conv1D(128->64,k=5)+ReLU+MaxPool2 over per-residue ESM2 embeddings (padded positions zeroed pre-conv), flattened, concatenated with the same GenomicANN(84->64->32) branch, BatchNorm, then a 2-layer MLP regressor (800->64->1)",
+      "test_r2": 0.4562,
+      "training": "AdamW lr=1e-3 wd=1e-4, batch=64, up to 100 epochs, early stopping patience=10 on val weighted-Huber loss, best checkpoint restored"
+    },
+    "random_forest": {
+      "file": "rf_model.joblib",
+      "architecture": "sklearn RandomForestRegressor, n_estimators=400, random_state=42",
+      "n_input_features": 403,
+      "feature_composition": "319 iFeature protein descriptors + 84 genome NAC/DNC/TNC features",
+      "ifeature_descriptor_set": {
+        "AAC": "20 dims, amino acid composition (order ACDEFGHIKLMNPQRSTVWY)",
+        "GAAC": "5 dims, grouped amino acid composition (alphatic/aromatic/postivecharge/negativecharge/uncharge)",
+        "CTDC": "39 dims, composition/transition/distribution - composition (13 physicochemical properties x 3 groups)",
+        "CTDT": "39 dims, CTD - transition (13 properties x 3 transitions)",
+        "CTDD": "195 dims, CTD - distribution (13 properties x 3 groups x 5 percentile cutoffs)",
+        "PAAC": "20 dims (Xc1, amino acid composition term) + 1 dim (Xc2, lambda=1 sequence-order term), pseudo amino acid composition with lambda=1 (source project peptides too short for the PAAC default lambda=30)",
+        "vendored_from": "iFeature (Chen et al., https://github.com/Superzchen/iFeature), reimplemented in predictor.py so no external iFeature install is needed at inference time; numerically validated against the original iFeature codebase output on multiple test sequences (exact match)"
+      },
+      "test_r2": 0.4306,
+      "training": "fit directly on point-estimate log10_mic_um target (no censored-loss variant for RF; all rows, including censored ones, trained on their point estimate)"
+    }
+  },
+  "loss_function": "weighted Huber loss (delta=1.0) used to train BiLSTM and CNN; censored rows (MIC reported as '<' or '>' a bound) down-weighted to 0.5x vs 1.0x for uncensored rows -- NOT bound-aware (does not enforce the prediction stay on the correct side of the bound), simply reduces the influence of uncertain targets",
+  "training_data": {
+    "sources": "CAMP + DRAMP + DBAASP, combined and deduplicated with CAMP > DBAASP > DRAMP priority",
+    "restricted_to": "3 ATCC reference organisms only (Escherichia coli, Staphylococcus aureus, Pseudomonas aeruginosa)",
+    "n_rows": 6518,
+    "n_unique_sequences": 2812,
+    "split": "75/12.5/12.5 train/val/test by CD-HIT 90%-identity cluster (whole clusters assigned to one split, greedy balance of split size + per-split species mix)",
+    "sequence_length_filter": "<=50 aa, standard amino acids only"
+  },
+  "source_notebook": "mic_prediction_pipelineB.ipynb",
+  "source_artifact_dir": "saved_model_huber_loss/"
+}

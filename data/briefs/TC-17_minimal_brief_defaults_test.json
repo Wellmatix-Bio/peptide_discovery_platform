@@ -6,11 +6,14 @@
         "wound_healing"
     ],
     "pathogens": [],
-    "delivery_system": null,
-    "max_length": null,
+    "delivery_system": "Hydrogel",
+    "max_length": 30,
     "dosing_interval_hours": null,
-    "release_target_hours": null,
-    "safety_constraints": {},
+    "release_target_hours": 24,
+    "safety_constraints": {
+        "hemolysis": "low",
+        "human_cell_cytotoxicity": "low"
+    },
     "manufacturing": {},
     "stage": "discovery"
 }

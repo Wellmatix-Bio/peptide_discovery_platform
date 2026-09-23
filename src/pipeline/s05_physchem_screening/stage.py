@@ -129,7 +129,7 @@ OXIDATION_RESIDUES = ("M", "C", "W")
 
 # Guruprasad et al. 1990 DIWV table used by ExPASy ProtParam; unlisted dipeptides default to 1.0.
 
-with open(r"src\pipeline\s05_physchem_screening\diwv.json", "r") as f:
+with open(Path(__file__).with_name("diwv.json"), "r") as f:
     DIWV = json.load(f)
 
 

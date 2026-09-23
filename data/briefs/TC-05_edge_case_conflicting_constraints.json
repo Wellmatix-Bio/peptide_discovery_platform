@@ -16,7 +16,7 @@
         "MRSA",
         "VRE"
     ],
-    "delivery_system": "microneedle_patch",
+    "delivery_system": "Microneedle",
     "max_length": 8,
     "dosing_interval_hours": 168,
     "release_target_hours": 168,

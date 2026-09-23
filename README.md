@@ -14,7 +14,7 @@ The platform is a **linear stage pipeline**, split into two kinds of stage:
   config and produce a payload (brief, wound-biology objectives, standardized records)
   that later stages read back out of `RunContext`.
 - **Candidate stages** (`s04`-`s14`) take the current candidate list, enrich it, and
-  return the survivors — a stage may filter candidates out directly based on its own
+  return the survivors â€” a stage may filter candidates out directly based on its own
   thresholds, and logs what it removed and why.
 
 ```
@@ -41,7 +41,7 @@ s09, s11** (`src/registry.py`). s03, s10, s12-s14 exist as directories under
 Two rules keep this structure from degrading:
 
 1. **No cross-stage imports.** A stage may import from `common/`, `schemas/`, and
-   `model_store/` — never from another `sNN_*` package.
+   `model_store/` â€” never from another `sNN_*` package.
 2. **Every stage boundary is serialisable.** Stage output is written to
    `artifacts/runs/<run_id>/<stage_name>.jsonl` via `BoundaryWriter`, alongside a
    per-stage/per-prediction entry in `audit_log.jsonl`.
@@ -51,14 +51,14 @@ Two rules keep this structure from degrading:
 `src/pipeline/feature_extractor.py` provides `FeatureExtractor`, a pipeline-run-scoped
 cache (one instance lives on `RunContext` for the whole run) that memoizes the raw
 per-sequence ESM2 embeddings and modlAMP/propy descriptors that several models under
-`model_store/` would otherwise recompute independently — keyed by a hash of the sequence
+`model_store/` would otherwise recompute independently â€” keyed by a hash of the sequence
 plus a fingerprint of which extractor/checkpoint produced it. Every model keeps its own
 original tokenizer/pooling/descriptor code as the default path; each accepts a
 `use_feature_cache: bool = False` constructor flag that switches it onto the shared cache
 instead, with no change to its own pooling, scaling, or PCA logic.
 
 This is controlled by a single **pipeline-level** switch, `use_feature_cache` in the run
-manifest (`configs/test_run.yaml`), not a per-stage setting — a run uses one consistent
+manifest (`configs/test_run.yaml`), not a per-stage setting â€” a run uses one consistent
 embedding source throughout, never some stages cached and others not. When on, each of
 Stages 5, 6, 8, and 9 batch-warms the cache once for every candidate right before its
 per-candidate loop (one batched ESM2 forward pass per stage instead of one per model per
@@ -73,21 +73,22 @@ git clone <repo-url> wellmatix-peptide-platform
 cd wellmatix-peptide-platform
 
 python -m venv .venv && source .venv/bin/activate
-pip install -e ".[dev]"
+pip install -r requirements.txt
+pip install pytest
 
 cp .env.example .env    # DEV_MODE and any local overrides
 ```
 
-Requires Python 3.11+ (see `pyproject.toml` for the full dependency list: PyTorch,
+Requires Python 3.11+ (see the root `requirements.txt` for runtime dependencies: PyTorch,
 transformers, XGBoost, scikit-learn, modlAMP, biopython, propy3, DEAP, freesasa,
 fair-esm). Stage 7's structure prediction uses `esmfold_v1` from `model_store/` directly
-— no external tool install required.
+â€” no external tool install required.
 
 ---
 
 ## Quickstart
 
-There is no packaged CLI yet — the entry point is `main.py`, which takes a single run
+There is no packaged CLI yet â€” the entry point is `main.py`, which takes a single run
 config path:
 
 ```bash
@@ -97,19 +98,19 @@ python main.py configs/test_run.yaml
 `configs/test_run.yaml` is the run **manifest**: `run_id`, `seed`, `seed_candidates_path`,
 `artifacts_dir`, `model_store`, `entry_stage`, and the pipeline-wide `use_feature_cache`
 switch. The actual per-stage `enabled`/`params` block lives in a matching file under
-`configs/runs/`, named `<run_id>.yaml` (`RunConfig.load` reads both and merges them — see
+`configs/runs/`, named `<run_id>.yaml` (`RunConfig.load` reads both and merges them â€” see
 `src/schemas/run_config.py`).
 
 `configs/runs/` currently has:
 
-- `test_run.yaml` — the working end-to-end config, all implemented stages enabled.
-- `dfu_full.yaml` — a diabetic-foot-ulcer-oriented variant (has some stale/unused keys
+- `test_run.yaml` â€” the working end-to-end config, all implemented stages enabled.
+- `dfu_full.yaml` â€” a diabetic-foot-ulcer-oriented variant (has some stale/unused keys
   from an earlier stage-naming convention; not guaranteed to run as-is).
-- `score_only.yaml`, `rescore_existing.yaml` — placeholder stubs (header comment only,
+- `score_only.yaml`, `rescore_existing.yaml` â€” placeholder stubs (header comment only,
   no `stages:` block yet) for a future mid-pipeline-entry workflow.
 
 A separate FastAPI stub for Vertex AI job management lives at `src/api/api.py`
-(`uvicorn api:app --reload`) — unrelated to the `main.py` pipeline path, and not wired to
+(`uvicorn api:app --reload`) â€” unrelated to the `main.py` pipeline path, and not wired to
 real GCP config yet.
 
 Sample product briefs for manual testing live in `data/briefs/TC-01...TC-20*.json`,
@@ -121,7 +122,7 @@ covering a range of wound contexts and several deliberate edge cases; point a ru
 ## Configuration
 
 Run behaviour is entirely config-driven, with every stage's tunable thresholds living in
-`configs/runs/<run_id>.yaml` — nothing is hardcoded with no override path. A handful of
+`configs/runs/<run_id>.yaml` â€” nothing is hardcoded with no override path. A handful of
 run-wide (not per-stage) settings live in the manifest instead (`configs/test_run.yaml`):
 
 ```yaml
@@ -159,9 +160,7 @@ stages:
 
   s11_ranking:
     enabled: true
-    params:
-      ranking_config:            # inline policy: baseline_weights, modifier_rules,
-        baseline_weights: {...}  # normalizers, input_sources -- see s11_ranking/stage.py
+    params: {}  # ranking policy is built into s11_ranking/stage.py
 ```
 
 Disabling a stage (`enabled: false`) skips it entirely. `RunConfig.for_stage(name)`
@@ -184,7 +183,7 @@ class CandidateStage(Stage):
 
 Before execution, `PipelineRunner._validate_contracts` checks that every enabled stage's
 `requires` is satisfiable by the incoming candidate fields plus the `produces` of every
-preceding enabled stage — a mismatch raises `ConfigError` at startup, not partway through
+preceding enabled stage â€” a mismatch raises `ConfigError` at startup, not partway through
 a run. See `src/pipeline/base.py` for the full `CandidateStage`/`SetupStage` contract,
 including the pre/postcondition checks `execute()` runs around every stage's `run()`.
 
@@ -197,7 +196,7 @@ Every candidate stage's execution is recorded via `AuditWriter`
 the fully resolved run config (`config_snapshot.yaml`) written at run start. Each
 candidate's individual model predictions are recorded inline on
 `candidate.predictions`, which is itself serialised at every stage boundary
-(`artifacts/runs/<run_id>/<stage_name>.jsonl`) — so a run's full decision trail is
+(`artifacts/runs/<run_id>/<stage_name>.jsonl`) â€” so a run's full decision trail is
 reconstructable from the boundary files plus the audit log and config snapshot.
 
 A final `candidates_final.json` and a `stats_<run_id>.txt` summary are also written to
@@ -242,7 +241,7 @@ Adding a stage or model:
    `CandidateStage` (or `SetupStage` for s01-s03) subclass.
 2. Declare `requires` / `produces`, implement `run()`.
 3. Register the class in `src/registry.py`'s `SETUP_STAGE_CLASSES` or
-   `CANDIDATE_STAGE_CLASSES` — a stage with no registry entry never executes, even if
+   `CANDIDATE_STAGE_CLASSES` â€” a stage with no registry entry never executes, even if
    fully implemented (this has bitten this project once already).
 4. Add a unit test under `tests/unit/pipeline/test_sNN_<name>.py`.
 5. If the stage calls a model, add it under `model_store/<model_name>_v1/` with its own
@@ -252,11 +251,11 @@ Adding a stage or model:
 
 ## Status
 
-Pre-MVP, actively evolving. Implemented and wired: brief loading (s01) → wound-biology
-deficit rules (s02) → GA/de-novo generation (s04) → physicochemical screening (s05) →
-antimicrobial/migration/angiogenesis/immunomodulation prediction (s06) → ESMFold
-structure + mechanism (s07) → hemolysis/cytotoxicity/aggregation/cleavage-stability
-safety screening (s08) → rule-based synthesis feasibility (s09) → pure multi-objective
+Pre-MVP, actively evolving. Implemented and wired: brief loading (s01) â†’ wound-biology
+deficit rules (s02) â†’ GA/de-novo generation (s04) â†’ physicochemical screening (s05) â†’
+antimicrobial/migration/angiogenesis/immunomodulation prediction (s06) â†’ ESMFold
+structure + mechanism (s07) â†’ hemolysis/cytotoxicity/aggregation/cleavage-stability
+safety screening (s08) â†’ rule-based synthesis feasibility (s09) â†’ pure multi-objective
 ranking with no hard gates (s11). Not yet implemented: s03 (data integration), s10
 (formulation), s12 (diversity/IP), s13 (validation planning), s14 (active learning).
 
@@ -264,4 +263,4 @@ ranking with no hard gates (s11). Not yet implemented: s03 (data integration), s
 
 ## Licence
 
-Proprietary — Wellmatix. Internal use only.
+Proprietary â€” Wellmatix. Internal use only.

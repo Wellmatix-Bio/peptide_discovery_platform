@@ -183,8 +183,8 @@ Errors use `{"detail": "message"}` or FastAPI's validation-error list under
 |---|---|---|
 | `404` | Not applicable | Job not found |
 | `422` | Invalid request, stage parameters, brief, or unsupported hemolysis version | Invalid job resource name |
-| `502` | Google API or config-publication failure | Google API failure |
-| `503` | Missing server settings/credentials or configured paths not using GCS | Missing server settings/credentials |
+| `502` | Google API or config-publication failure or missing credentials | Google API failure |
+| `503` | Missing server settings or configured paths not using GCS | Missing server settings |
 
 ## Artifacts
 

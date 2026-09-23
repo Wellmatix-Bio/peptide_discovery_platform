@@ -1,0 +1,13 @@
+# Submit from the repository root, supplying _IMAGE_URI.
+# gcloud builds submit . --config=src/backend/worker_e2e/cloudbuild.yaml --substitutions=_IMAGE_URI=REGION-docker.pkg.dev/PROJECT/REPOSITORY/worker-e2e:TAG
+steps:
+  - name: gcr.io/cloud-builders/docker
+    args:
+      - build
+      - -f
+      - src/backend/worker_e2e/Dockerfile
+      - -t
+      - ${_IMAGE_URI}
+      - .
+images:
+  - ${_IMAGE_URI}

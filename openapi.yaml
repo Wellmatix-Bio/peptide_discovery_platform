@@ -20,7 +20,6 @@ paths:
               stages:
                 s01_therapeutic_product_brief:
                   brief:
-                    case_id: TC-01_infected_diabetic_foot_ulcer
                     indication: diabetic_foot_ulcer
                     wound_context:
                     - chronic
@@ -315,10 +314,7 @@ components:
             - angiogenesis
             - anti_inflammatory
             - antimicrobial
-            - antimicrobial action
-            - antimicrobial_action
-            - cell proliferation/migration
-            - collagen synthesis
+            - cell_proliferation/migration
             - collagen_remodeling
             - collagen_synthesis
             - fibroblast_migration
@@ -522,6 +518,10 @@ components:
           default:
           - <AMP>
           items:
+            enum:
+            - <AMP>
+            - <ANTIBIOFILM>
+            - <ANTIBACTERIAL>
             type: string
           title: Tags
           type: array
@@ -723,6 +723,7 @@ components:
           title: Hemolysis Phc50 Reject Max
           type: number
         hemolysis_predictor_version:
+          const: v1
           default: v1
           title: Hemolysis Predictor Version
           type: string
@@ -812,54 +813,6 @@ components:
                 $ref: '#/components/schemas/Stage1Params'
           description: Flat parameters are the public request format; enabled defaults
             to true when supplied.
-        s02_wound_biology_and_targets:
-          anyOf:
-          - properties:
-              deficit_rules_path:
-                default: ./configs/deficit_rules.config.yaml
-                title: Deficit Rules Path
-                type: string
-              enabled:
-                type: boolean
-                default: true
-              params: false
-            type: object
-          - type: object
-            additionalProperties: false
-            required:
-            - params
-            properties:
-              enabled:
-                type: boolean
-                default: true
-              params:
-                $ref: '#/components/schemas/Stage2Params'
-          - type: object
-            required:
-            - enabled
-            properties:
-              enabled:
-                const: false
-              params: false
-            additionalProperties: true
-            description: Disabled stages skip parameter validation.
-          - type: object
-            properties:
-              enabled:
-                type: boolean
-                const: false
-              params:
-                type: object
-            required:
-            - enabled
-            - params
-            additionalProperties: false
-          description: Flat parameters are the public request format; enabled defaults
-            to true when supplied.
-        s03_data_integration:
-          type: object
-          additionalProperties: true
-          description: Placeholder stage, disabled when omitted.
         s04_candidate_generation:
           anyOf:
           - properties:
@@ -867,6 +820,10 @@ components:
                 default:
                 - <AMP>
                 items:
+                  enum:
+                  - <AMP>
+                  - <ANTIBIOFILM>
+                  - <ANTIBACTERIAL>
                   type: string
                 title: Tags
                 type: array

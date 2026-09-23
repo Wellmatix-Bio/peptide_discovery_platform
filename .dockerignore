@@ -17,6 +17,10 @@ model_store/hemolysis_predictor_v2/*
 # Local run artifacts, not part of either image.
 artifacts/
 data/raw/
+configs/runs/
+configs/test_cases/
+configs/base.yaml
+configs/test_run.yaml
 
 .env
 .env.example

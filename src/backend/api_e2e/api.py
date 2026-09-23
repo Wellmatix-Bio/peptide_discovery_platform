@@ -8,7 +8,7 @@ from fastapi import FastAPI, HTTPException
 from google.api_core.exceptions import GoogleAPICallError, NotFound
 from google.auth.exceptions import GoogleAuthError
 from pydantic import BaseModel, ConfigDict, Field
-from common import storage
+from common import env, storage
 from schemas.brief import Brief
 from schemas.e2e_config import validate_job_config
 from schemas.stage_configs import E2ERequest
@@ -122,7 +122,9 @@ def create_job(request: CreateJobRequest):
                     "machine_spec": {
                         "machine_type": os.environ.get(
                             "MACHINE_TYPE", "n1-standard-4"
-                        ).strip()
+                        ).strip(),
+                        "accelerator_type": "NVIDIA_TESLA_T4",
+                        "accelerator_count": 1,
                     },
                     "disk_spec": {"boot_disk_type": "pd-ssd", "boot_disk_size_gb": 200},
                     "container_spec": {
@@ -135,7 +137,11 @@ def create_job(request: CreateJobRequest):
                         ],
                         "env": [
                             {"name": "DEV_MODE", "value": "false"},
-                            {"name": "VERTEX_MODEL_STORE", "value": models},
+                            *(
+                                {"name": key, "value": os.environ[key]}
+                                for key in env.DOTENV_KEYS
+                                if key != "DEV_MODE" and key in os.environ
+                            ),
                         ],
                     },
                 }

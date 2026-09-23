@@ -46,10 +46,7 @@ DesiredFunction = Literal[
     "angiogenesis",
     "anti_inflammatory",
     "antimicrobial",
-    "antimicrobial action",
-    "antimicrobial_action",
-    "cell proliferation/migration",
-    "collagen synthesis",
+    "cell_proliferation/migration",
     "collagen_remodeling",
     "collagen_synthesis",
     "fibroblast_migration",
@@ -161,7 +158,7 @@ class RouteAConstraintConfig(BaseStageParams):
 
 
 class Stage4Params(BaseStageParams):
-    tags: list[str] = ["<AMP>"]
+    tags: list[Literal["<AMP>", "<ANTIBIOFILM>", "<ANTIBACTERIAL>"]] = ["<AMP>"]
     n_peptides: int = 100
     min_length: int = 6
     max_length: int = 35
@@ -230,7 +227,7 @@ CytotoxicityCellType = Literal[
 
 class Stage8Params(BaseStageParams):
     hemolysis_phc50_reject_max: float = 4.0
-    hemolysis_predictor_version: str = "v1"
+    hemolysis_predictor_version: Literal["v1"] = "v1"
     solubility_solvent: str = "Ultrapure water"
     cytotoxicity_cell_type: CytotoxicityCellType = "DRAMP_aggregate"
     cytotoxicity_reject_max: float = 0.5

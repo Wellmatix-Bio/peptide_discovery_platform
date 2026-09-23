@@ -44,24 +44,6 @@ def write_text(path: str | Path, data: str, *, encoding: str = "utf-8") -> None:
     p.write_text(data, encoding=encoding)
 
 
-def create_text(path: str | Path, data: str) -> None:
-    """Create once atomically; duplicate requests must not share a worker config."""
-    if is_gcs_path(path):
-        from google.api_core.exceptions import PreconditionFailed
-        bucket_name, blob_path = _split_gcs_uri(str(path))
-        try:
-            _gcs_client().bucket(bucket_name).blob(blob_path).upload_from_string(
-                data.encode("utf-8"), if_generation_match=0
-            )
-        except PreconditionFailed as exc:
-            raise FileExistsError(str(path)) from exc
-        return
-    p = Path(path)
-    p.parent.mkdir(parents=True, exist_ok=True)
-    with p.open("x", encoding="utf-8") as stream:
-        stream.write(data)
-
-
 def append_text(path: str | Path, data: str, *, encoding: str = "utf-8") -> None:
     """GCS has no native append; reads then rewrites the whole blob."""
     if is_gcs_path(path):

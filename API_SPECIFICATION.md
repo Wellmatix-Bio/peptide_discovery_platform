@@ -70,14 +70,12 @@ is also accepted, but flat parameter keys cannot be mixed with `params`.
 | Stage | Default when omitted |
 |---|---|
 | `s01_therapeutic_product_brief` | Required; omission is rejected |
-| `s02_wound_biology_and_targets` | Disabled |
-| `s03_data_integration` | Disabled; placeholder implementation |
-| `s04_candidate_generation` | Enabled, schema defaults |
-| `s05_physchem_screening` | Enabled, schema defaults |
-| `s06_functional_models` | Enabled, schema defaults |
-| `s07_structure_mechanism` | Enabled, schema defaults |
-| `s08_safety_developability` | Enabled, schema defaults; hemolysis v1 only |
-| `s09_synthesis_cmc` | Enabled, schema defaults |
+| `s04_candidate_generation` | Schema defaults |
+| `s05_physchem_screening` | Schema defaults |
+| `s06_functional_models` | Schema defaults |
+| `s07_structure_mechanism` | Schema defaults |
+| `s08_safety_developability` | Schema defaults; hemolysis v1 only |
+| `s09_synthesis_cmc` | Schema defaults |
 | `s11_ranking` | Always enabled with the built-in ranking policy |
 
 Enabled stages use the exact model selected by `STAGE_PARAMS_MODELS`, including
@@ -98,21 +96,19 @@ Stage 11 settings and always uses an enabled stage with no parameters.
 
 ### Submission and configuration
 
-1. Atomically reserve `<artifacts_dir>/requests/<request_id>/reserved.json`.
-2. Submit the job with `--config <artifacts_dir>/requests/<request_id>/config.json`
+1. Submit the job with `--config <artifacts_dir>/requests/<request_id>/config.json`
    and `--wait-for-config 120`.
-3. Receive the Vertex resource name and extract its numeric job ID.
-4. Set the internal pipeline `run_id` to that numeric ID.
-5. Write identical JSON configs to the request path and
+2. Receive the Vertex resource name and extract its numeric job ID.
+3. Set the internal pipeline `run_id` to that numeric ID.
+4. Write identical JSON configs to the request path and
    `<artifacts_dir>/runs/<numeric_job_id>/config.json`.
 
 The worker starts when the request-path config appears, waiting at most 120 seconds
 for a missing file. The API returns only after both writes complete. A config
 publication failure returns 502 and triggers a best-effort attempt to stop the job.
 
-Reservations are retained, including after failures. Reusing a reserved request
-ID returns 409; it does not replay the previous response. Inspect Vertex after
-an ambiguous submission error before submitting another request.
+Request IDs are not deduplicated. Use a unique `request_id` for each submission,
+since reusing one shares the request-path config with earlier jobs.
 
 ### Response: 202 Accepted
 
@@ -185,8 +181,7 @@ Errors use `{"detail": "message"}` or FastAPI's validation-error list under
 
 | HTTP status | Create | Status check |
 |---|---|---|
-| `404` | ? | Job not found |
-| `409` | Request ID already reserved | ? |
+| `404` | Not applicable | Job not found |
 | `422` | Invalid request, stage parameters, brief, or unsupported hemolysis version | Invalid job resource name |
 | `502` | Google API or config-publication failure | Google API failure |
 | `503` | Missing server settings/credentials or configured paths not using GCS | Missing server settings/credentials |
@@ -212,7 +207,7 @@ forced termination; Vertex is authoritative.
 
 ## Server settings
 
-Required: `WMX_PROJECT`, `VERTEX_LOCATION`, `WMX_ARTIFACTS_DIR`, `VERTEX_MODEL_STORE`,
+Required: `VERTEX_CLOUD_PROJECT`, `VERTEX_LOCATION`, `WMX_ARTIFACTS_DIR`, `VERTEX_MODEL_STORE`,
 `SEED_CANDIDATES_FILE`, `WORKER_IMAGE_URI`, `WORKER_SERVICE_ACCOUNT`.
 Use the project ID or number, not the display name. Artifact/model/seed paths
 must be GCS URIs. The service-account setting is an email, not a key file.

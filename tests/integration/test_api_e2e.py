@@ -15,9 +15,9 @@ JOB = "projects/123/locations/us-central1/customJobs/456"
 @pytest.fixture
 def service(monkeypatch):
     settings = {
-        "WMX_PROJECT": "123",
+        "VERTEX_CLOUD_PROJECT": "123",
         "VERTEX_LOCATION": "us-central1",
-        "WMX_ARTIFACTS_DIR": "gs://test/artifacts",
+        "VERTEX_ARTIFACTS_DIR": "gs://test/artifacts",
         "VERTEX_MODEL_STORE": "gs://test/models",
         "SEED_CANDIDATES_FILE": "gs://test/seeds.fasta",
         "WORKER_IMAGE_URI": "us-central1-docker.pkg.dev/test/images/worker:latest",
@@ -36,7 +36,8 @@ def service(monkeypatch):
         path = kwargs["custom_job"]["job_spec"]["worker_pool_specs"][0][
             "container_spec"
         ]["args"][1]
-        assert path not in objects  # Vertex assigns the ID before config publication.
+        if not calls:
+            assert path not in objects  # First config is published after submission.
         calls.append(kwargs)
         return job
 
@@ -47,12 +48,6 @@ def service(monkeypatch):
     )
     monkeypatch.setattr(api, "job_client", lambda: sdk)
 
-    def reserve(path, data):
-        if path in objects:
-            raise FileExistsError(path)
-        objects[path] = data
-
-    monkeypatch.setattr(api.storage, "create_text", reserve)
     monkeypatch.setattr(
         api.storage, "write_text", lambda path, data: objects.__setitem__(path, data)
     )
@@ -173,13 +168,16 @@ def test_cancel(service):
     assert calls[-1]["name"] == JOB
 
 
-def test_duplicate_request_cannot_overwrite_job_config(service):
+def test_repeated_request_id_submits_another_job(service):
     client, sdk, job, objects, calls, payload = service
     assert client.post("/api/v1/jobs/create", json=payload).status_code == 202
-    before = dict(objects)
-    assert client.post("/api/v1/jobs/create", json=payload).status_code == 409
-    assert len(calls) == 1
-    assert objects == before
+    job.name = "projects/123/locations/us-central1/customJobs/789"
+    response = client.post("/api/v1/jobs/create", json=payload)
+    assert response.status_code == 202
+    assert response.json()["job_id"] == job.name
+    assert len(calls) == 2
+    assert not any(path.endswith("reserved.json") for path in objects)
+
 
 
 def test_config_upload_failure_cancels_created_job(service, monkeypatch):

@@ -144,7 +144,6 @@ def create_job(request: CreateJobRequest):
     }
     try:
         client = job_client()
-        storage.create_text(storage.join(staging_dir, "reserved.json"), "{}")
         job = client.create_custom_job(parent=parent, custom_job=custom_job)
         job_id = job.name.rsplit("/", 1)[-1]
         config.run_id = job_id
@@ -164,11 +163,6 @@ def create_job(request: CreateJobRequest):
             raise HTTPException(
                 502, f"Config upload failed for {job.name}; cancellation requested"
             ) from exc
-    except FileExistsError as exc:
-        raise HTTPException(
-            409,
-            "request_id has already been submitted; use a new request_id for a new job",
-        ) from exc
     except GoogleAuthError as exc:
         raise HTTPException(503, "Google credentials are unavailable") from exc
     except GoogleAPICallError as exc:

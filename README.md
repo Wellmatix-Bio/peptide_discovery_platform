@@ -19,19 +19,13 @@ The platform is a **linear stage pipeline**, split into two kinds of stage:
 
 ```
 s01_brief                  Therapeutic product brief -> machine-readable Brief
-s02_target_definition      Wound biology -> deficit-rule-driven objective vector
-s03_data_integration       Reference knowledge base (not yet implemented)
 s04_generation              Route A (GA, reference-guided) + Route B (ProtGPT2 LoRA, de novo)
 s05_physchem_screening     Physicochemical properties, soft flags + 2 hard rejects
 s06_functional_models      Antimicrobial, migration, angiogenesis, immunomodulation
 s07_structure_mechanism    ESMFold structure + pathway-engagement mechanism summary
 s08_safety_developability  Hemolysis, cytotoxicity, aggregation, cleavage stability
 s09_synthesis_cmc          Rule-based synthesis difficulty, cost bands, purity ceiling
-s10_formulation            Delivery/formulation co-design (not yet implemented)
 s11_ranking                Pure weighted multi-objective ranking (no hard gates)
-s12_diversity_ip           Diversity/novelty/IP selection (not yet implemented)
-s13_validation_plan        Experimental validation protocol (not yet implemented)
-s14_active_learning        Experimental-result feedback loop (not yet implemented)
 ```
 
 Stages currently registered and runnable end-to-end: **s01, s02, s04, s05, s06, s07, s08,
@@ -100,23 +94,6 @@ python main.py configs/test_run.yaml
 switch. The actual per-stage `enabled`/`params` block lives in a matching file under
 `configs/runs/`, named `<run_id>.yaml` (`RunConfig.load` reads both and merges them â€” see
 `src/schemas/run_config.py`).
-
-`configs/runs/` currently has:
-
-- `test_run.yaml` â€” the working end-to-end config, all implemented stages enabled.
-- `dfu_full.yaml` â€” a diabetic-foot-ulcer-oriented variant (has some stale/unused keys
-  from an earlier stage-naming convention; not guaranteed to run as-is).
-- `score_only.yaml`, `rescore_existing.yaml` â€” placeholder stubs (header comment only,
-  no `stages:` block yet) for a future mid-pipeline-entry workflow.
-
-A separate FastAPI stub for Vertex AI job management lives at `src/api/api.py`
-(`uvicorn api:app --reload`) â€” unrelated to the `main.py` pipeline path, and not wired to
-real GCP config yet.
-
-Sample product briefs for manual testing live in `data/briefs/TC-01...TC-20*.json`,
-covering a range of wound contexts and several deliberate edge cases; point a run's
-`s01_therapeutic_product_brief.params.brief_path` at one of these.
-
 ---
 
 ## Configuration
@@ -239,28 +216,11 @@ Adding a stage or model:
 
 1. Create the package under `src/pipeline/sNN_<name>/` with a `stage.py` defining a
    `CandidateStage` (or `SetupStage` for s01-s03) subclass.
-2. Declare `requires` / `produces`, implement `run()`.
-3. Register the class in `src/registry.py`'s `SETUP_STAGE_CLASSES` or
+2. Register the class in `src/registry.py`'s `SETUP_STAGE_CLASSES` or
    `CANDIDATE_STAGE_CLASSES` â€” a stage with no registry entry never executes, even if
    fully implemented (this has bitten this project once already).
-4. Add a unit test under `tests/unit/pipeline/test_sNN_<name>.py`.
-5. If the stage calls a model, add it under `model_store/<model_name>_v1/` with its own
+3. [Optional] Add a unit test under `tests/unit/pipeline/test_sNN_<name>.py`.
+4. If the stage calls a model, add it under `model_store/<model_name>_vN/` with its own
    `predictor.py`, following the existing lazy-load-on-first-`predict()` pattern.
 
 ---
-
-## Status
-
-Pre-MVP, actively evolving. Implemented and wired: brief loading (s01) â†’ wound-biology
-deficit rules (s02) â†’ GA/de-novo generation (s04) â†’ physicochemical screening (s05) â†’
-antimicrobial/migration/angiogenesis/immunomodulation prediction (s06) â†’ ESMFold
-structure + mechanism (s07) â†’ hemolysis/cytotoxicity/aggregation/cleavage-stability
-safety screening (s08) â†’ rule-based synthesis feasibility (s09) â†’ pure multi-objective
-ranking with no hard gates (s11). Not yet implemented: s03 (data integration), s10
-(formulation), s12 (diversity/IP), s13 (validation planning), s14 (active learning).
-
----
-
-## Licence
-
-Proprietary â€” Wellmatix. Internal use only.

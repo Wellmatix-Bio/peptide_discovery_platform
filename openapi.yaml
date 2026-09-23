@@ -140,12 +140,6 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
-        '409':
-          description: Request ID already reserved.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
         '502':
           description: Google API or config publication failed.
           content:
@@ -160,8 +154,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
       description: Returns after job submission and publication of config.json. The
-        numeric Vertex job ID becomes the internal run ID. Duplicate reserved request
-        IDs return 409; this is not a replay of an existing result.
+        numeric Vertex job ID becomes the internal run ID. Request IDs are not deduplicated;
+        use a unique request ID per submission to avoid sharing the request-path config.
   /api/v1/jobs/{job_id}/status:
     get:
       summary: Read the current Vertex job state

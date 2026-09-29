@@ -1,6 +1,5 @@
 {
     "case_id": "TC-28_scald_burn_EGF_alginate_hydrogel",
-    "indication": "partial_thickness_scald_burn",
     "wound_context": [
         "acute",
         "high_exudate"
@@ -10,14 +9,9 @@
         "wound_closure"
     ],
     "pathogens": [],
-    "delivery_system": "Alginate dressing",
+    "min_length": 6,
     "max_length": 50,
     "dosing_interval_hours": 24,
-    "release_target_hours": 24,
-    "safety_constraints": {
-        "hemolysis": "low",
-        "human_cell_cytotoxicity": "low"
-    },
     "manufacturing": {
         "method": "solid_phase_synthesis"
     },

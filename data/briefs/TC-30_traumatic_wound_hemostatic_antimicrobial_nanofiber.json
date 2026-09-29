@@ -1,6 +1,5 @@
 {
     "case_id": "TC-30_traumatic_wound_hemostatic_antimicrobial_nanofiber",
-    "indication": "traumatic_wound_bleeding",
     "wound_context": [
         "acute",
         "bleeding",
@@ -14,15 +13,9 @@
         "Staphylococcus_aureus",
         "Pseudomonas_aeruginosa"
     ],
-    "delivery_system": "Nanofiber",
+    "min_length": 6,
     "max_length": 11,
     "dosing_interval_hours": null,
-    "release_target_hours": 24,
-    "safety_constraints": {
-        "hemolysis": "low",
-        "human_cell_cytotoxicity": "low",
-        "thrombogenicity": "controlled"
-    },
     "manufacturing": {
         "method": "solid_phase_synthesis"
     },

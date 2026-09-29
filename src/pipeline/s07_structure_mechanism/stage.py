@@ -102,6 +102,8 @@ class Stage7(CandidateStage):
         ctx: RunContext,
     ) -> list[Candidate]:
         """Predicts 3D structure (ESMFold) and pathway involvement, then combines them into a mechanistic evidence summary."""
+        if any(not candidate.sequence for candidate in candidates):
+            raise ValueError("Stage 7 received a candidate with no sequence")
         models = build_models()
         t = {
             **DEFAULT_THRESHOLDS,

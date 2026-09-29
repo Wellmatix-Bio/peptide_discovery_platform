@@ -51,12 +51,12 @@ original tokenizer/pooling/descriptor code as the default path; each accepts a
 `use_feature_cache: bool = False` constructor flag that switches it onto the shared cache
 instead, with no change to its own pooling, scaling, or PCA logic.
 
-This is controlled by a single **pipeline-level** switch, `use_feature_cache` in the run
-manifest (`configs/test_run.yaml`), not a per-stage setting â€” a run uses one consistent
-embedding source throughout, never some stages cached and others not. When on, each of
-Stages 5, 6, 8, and 9 batch-warms the cache once for every candidate right before its
-per-candidate loop (one batched ESM2 forward pass per stage instead of one per model per
-candidate), then every model call in that loop hits the warm cache. Off by default.
+This is controlled by a single **pipeline-level** switch, `use_feature_cache` on
+`RunConfig`, not a per-stage setting â€” a run uses one consistent embedding source
+throughout, never some stages cached and others not. Each of Stages 5, 6, 8, and 9
+batch-warms the cache once for every candidate right before its per-candidate loop (one
+batched ESM2 forward pass per stage instead of one per model per candidate), then every
+model call in that loop hits the warm cache. Always on; not a client-facing config knob.
 
 ---
 
@@ -89,11 +89,14 @@ config path:
 python main.py configs/test_run.yaml
 ```
 
-`configs/test_run.yaml` is the run **manifest**: `run_id`, `seed`, `seed_candidates_path`,
-`artifacts_dir`, `model_store`, `entry_stage`, and the pipeline-wide `use_feature_cache`
-switch. The actual per-stage `enabled`/`params` block lives in a matching file under
-`configs/runs/`, named `<run_id>.yaml` (`RunConfig.load` reads both and merges them â€” see
+`configs/test_run.yaml` is the run **manifest**: `run_id` (dev mode only â€” see below),
+`seed`, `seed_candidates_path`, `artifacts_dir`, `model_store`. The actual per-stage
+`enabled`/`params` block lives in a matching file under `configs/runs/`, named
+`<run_id>.yaml` (`RunConfig.load` reads both and merges them â€” see
 `src/schemas/run_config.py`).
+
+`run_id` is only read from this manifest when `DEV_MODE=true`; a production run sets it
+itself after construction (e.g. from the Vertex job id â€” see `src/backend/api_e2e/api.py`).
 ---
 
 ## Configuration
@@ -103,13 +106,11 @@ Run behaviour is entirely config-driven, with every stage's tunable thresholds l
 run-wide (not per-stage) settings live in the manifest instead (`configs/test_run.yaml`):
 
 ```yaml
-run_id: test_run
+run_id: test_run   # DEV_MODE only; ignored otherwise
 seed: 42
 seed_candidates_path: ./data/raw/curated_peptides_machine_readable.fasta
 artifacts_dir: ./artifacts
 model_store: ./model_store
-use_feature_cache: false   # pipeline-wide FeatureExtractor switch, see above
-entry_stage: s01_brief
 ```
 
 Per-stage config (trimmed from `configs/runs/test_run.yaml`):
@@ -133,7 +134,6 @@ stages:
     enabled: true
     params:
       hemolysis_phc50_reject_max: 4.0
-      hemolysis_predictor_version: "v1"   # or "v2" (HemoPI2 CLI subprocess)
 
   s11_ranking:
     enabled: true

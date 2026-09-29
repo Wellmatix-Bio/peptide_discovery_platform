@@ -1,6 +1,5 @@
 {
     "case_id": "TC-16_veterinary_equine_wound",
-    "indication": "equine_distal_limb_wound",
     "wound_context": [
         "chronic",
         "exuberant_granulation",
@@ -16,14 +15,9 @@
         "Staphylococcus_aureus",
         "Streptococcus_equi"
     ],
-    "delivery_system": "Spray or topical gel",
+    "min_length": 6,
     "max_length": 30,
     "dosing_interval_hours": 24,
-    "release_target_hours": 24,
-    "safety_constraints": {
-        "hemolysis": "low",
-        "human_cell_cytotoxicity": "low"
-    },
     "manufacturing": {
         "method": "solid_phase_synthesis",
         "max_cost_per_gram_usd": 80

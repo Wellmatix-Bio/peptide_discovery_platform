@@ -17,10 +17,8 @@ stages:
   s04_candidate_generation:
     enabled: true
     params:
-      tags: ["<AMP>"]
+      tags: ["<AMP>", "<ANTIBACTERIAL>"]
       n_peptides: 100
-      min_length: 6
-      max_length: 35
       max_new_tokens: 120
       batch_size: 16
       max_attempts: 20
@@ -31,8 +29,7 @@ stages:
         n_generations: 5
         mutation_rate: 0.1
         random_seed: 42
-      # Route A hard-reject thresholds (physicochemical_filter / ConstraintConfig).
-      # min_length/max_length above take precedence if also set there.
+      # min_length/max_length come from the Stage 1 brief, not here.
       route_a_constraint_config:
         charge_min: -3.0
         charge_max: 8.0
@@ -58,14 +55,14 @@ stages:
     enabled: true
     params:
       stage6_thresholds:
-        min_amp_probability: 0.8
+        min_amp_probability: 0.7
         min_proliferation_migration: 0.5
         min_angiogenic_activity: 0.1
         min_anti_inflammatory_probability: 0.5
         max_mic:
-          MRSA: 16.0
-          Pseudomonas_aeruginosa: 16.0
-          Staphylococcus_aureus: 16.0
+          MRSA: 32.0
+          Pseudomonas_aeruginosa: 32.0
+          Staphylococcus_aureus: 32.0
         max_mbic:
           MRSA: 32.0
           Pseudomonas_aeruginosa: 32.0
@@ -90,7 +87,6 @@ stages:
     enabled: true
     params:
       hemolysis_phc50_reject_max: 4.0
-      hemolysis_predictor_version: "v1"
       solubility_solvent: Ultrapure water
       cytotoxicity_cell_type: DRAMP_aggregate
       cytotoxicity_reject_max: 0.5
@@ -103,7 +99,6 @@ stages:
   s09_synthesis_cmc:
     enabled: true
     params:
-      max_length: 35
       rejected_difficulty_classes: ["high"]
 
   s11_ranking:

@@ -199,15 +199,6 @@ def test_yaml_is_rejected(tmp_path):
         worker.load_job_config(str(path))
 
 
-def test_reject_midway_entry(tmp_path):
-    path = config_file(tmp_path)
-    data = json.loads(Path(path).read_text())
-    data["entry_stage"] = "s11_ranking"
-    Path(path).write_text(json.dumps(data))
-    with pytest.raises(ValueError, match="full runs"):
-        worker.load_job_config(path)
-
-
 def test_wait_for_config_publication(tmp_path, monkeypatch):
     body = Path(config_file(tmp_path)).read_text()
     reads = []

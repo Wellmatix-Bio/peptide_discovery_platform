@@ -1,6 +1,5 @@
 {
     "case_id": "TC-31_excisional_wound_ERK_activating_pentapeptide",
-    "indication": "full_thickness_excisional_wound",
     "wound_context": [
         "acute",
         "clean"
@@ -9,14 +8,9 @@
         "keratinocyte_migration"
     ],
     "pathogens": [],
-    "delivery_system": "Spray or topical gel",
+    "min_length": 5,
     "max_length": 5,
     "dosing_interval_hours": 24,
-    "release_target_hours": 24,
-    "safety_constraints": {
-        "hemolysis": "low",
-        "human_cell_cytotoxicity": "low"
-    },
     "manufacturing": {
         "method": "solid_phase_synthesis"
     },

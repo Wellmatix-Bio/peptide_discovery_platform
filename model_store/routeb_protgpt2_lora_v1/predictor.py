@@ -45,7 +45,9 @@ class ProtGPT2Generator:
         bnb_config = BitsAndBytesConfig(
             load_in_4bit=True,
             bnb_4bit_quant_type="nf4",
-            bnb_4bit_compute_dtype=torch.bfloat16,
+            # float16, not bfloat16 -- bfloat16 has no native hardware support
+            # on T4 (Turing, compute capability 7.5; bfloat16 needs Ampere+).
+            bnb_4bit_compute_dtype=torch.float16,
             bnb_4bit_use_double_quant=True,
         )
         base_model = AutoModelForCausalLM.from_pretrained(

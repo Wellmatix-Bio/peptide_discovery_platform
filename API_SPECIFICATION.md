@@ -37,20 +37,12 @@ top-level `seed`, `run_id`, or `job_id` input. The pipeline seed comes from
     "s01_therapeutic_product_brief": {
       "seed": 42,
       "brief": {
-        "indication": "diabetic_foot_ulcer",
         "wound_context": ["chronic", "infected"],
         "desired_functions": ["antimicrobial"],
         "pathogens": ["Staphylococcus_aureus"],
-        "delivery_system": "Hydrogel",
+        "min_length": 6,
         "max_length": 30,
-        "dosing_interval_hours": 48,
-        "release_target_hours": 48,
-        "safety_constraints": {
-          "hemolysis": "low",
-          "human_cell_cytotoxicity": "low"
-        },
-        "target_population": [],
-        "manufacturing": {"method": "solid_phase_synthesis"}
+        "dosing_interval_hours": 48
       }
     },
     "s04_candidate_generation": {"n_peptides": 100},
@@ -83,12 +75,12 @@ nested validation and defaults. Unknown parameter keys are ignored according to
 `BaseStageParams`. Disabled stages skip parameter validation. Add `"enabled": false`
 inside a stage to disable it, except Stage 1 (required) and Stage 11 (forced enabled).
 
-`BriefFields` requires indication, wound context, desired functions, pathogens,
-delivery system, length, dosing/release intervals, safety constraints, target
-population, and manufacturing. Length is 6-50 residues; intervals are 1-168 hours.
-The OpenAPI component schemas enumerate allowed vocabularies. `antibiofilm` is
-not currently an accepted desired function. Extra brief fields are ignored.
-Some validated brief fields are not retained by the narrower runtime `Brief` model.
+`BriefFields` requires wound context, desired functions, pathogens, min/max
+length, and dosing interval hours. Length is 6-50 residues; dosing interval is
+1-168 hours. The OpenAPI component schemas enumerate allowed vocabularies.
+`antibiofilm` is not currently an accepted desired function. Extra brief fields
+are ignored. Some validated brief fields are not retained by the narrower
+runtime `Brief` model.
 
 Stage 11 weights, modifiers, normalization, and input mappings live in code.
 Send `"s11_ranking": {}` or omit it. The current normalizer discards supplied

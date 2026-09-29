@@ -1,6 +1,5 @@
 {
     "case_id": "TC-22_infected_wound_scorpion_peptide",
-    "indication": "infected_epithelial_wound",
     "wound_context": [
         "acute",
         "infected"
@@ -12,14 +11,9 @@
     "pathogens": [
         "Staphylococcus_aureus"
     ],
-    "delivery_system": "Spray or topical gel",
+    "min_length": 6,
     "max_length": 17,
     "dosing_interval_hours": 24,
-    "release_target_hours": 24,
-    "safety_constraints": {
-        "hemolysis": "low",
-        "human_cell_cytotoxicity": "low"
-    },
     "manufacturing": {
         "method": "solid_phase_synthesis"
     },

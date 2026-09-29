@@ -1,6 +1,5 @@
 {
     "case_id": "TC-11_corneal_abrasion",
-    "indication": "corneal_epithelial_defect",
     "wound_context": [
         "acute",
         "avascular",
@@ -15,15 +14,9 @@
     "pathogens": [
         "Pseudomonas_aeruginosa"
     ],
-    "delivery_system": "Spray or topical gel",
+    "min_length": 6,
     "max_length": 15,
     "dosing_interval_hours": 4,
-    "release_target_hours": 4,
-    "safety_constraints": {
-        "hemolysis": "low",
-        "human_cell_cytotoxicity": "low",
-        "ocular_irritation": "none"
-    },
     "manufacturing": {
         "method": "solid_phase_synthesis",
         "sterile_filterable": true

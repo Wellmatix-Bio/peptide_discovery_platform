@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
+import json
 import time
 from dataclasses import replace
 from pathlib import Path
 
-import os
 from common.audit import AuditWriter
+from common.env import DEV_MODE
 from common import storage
 from common.io import BoundaryWriter, load_candidates_fasta, write_final_candidates
 from common.logging import get_logger
@@ -18,7 +19,7 @@ from pipeline.feature_extractor import FeatureExtractor
 from registry import build_stages
 from schemas.candidate import Candidate
 from schemas.knowledge_base import KnowledgeBase
-from schemas.run_config import RunConfig
+from schemas.run_config import SCHEMA_VERSION, RunConfig
 
 logger = get_logger(__name__)
 
@@ -36,23 +37,19 @@ class ConfigError(RuntimeError):
 
 def build_run_services(
     run_id: str,
-    schema_version: int,
     run_dir: str,
     model_store: str,
     feature_extractor: FeatureExtractor,
     *,
-    use_feature_cache: bool = False,
     seed: int = 42,
 ) -> RunContext:
     """Shared by PipelineRunner._build_context and worker.py's run_job."""
     return RunContext(
         run_id=run_id,
-        schema_version=schema_version,
         audit=AuditWriter(f"{run_dir}/audit_log.jsonl"),
         boundary=BoundaryWriter(run_dir),
         models=ModelRegistry(model_store),
         feature_extractor=feature_extractor,
-        use_feature_cache=use_feature_cache,
         seed=seed,
     )
 
@@ -60,17 +57,34 @@ def build_run_services(
 class PipelineRunner:
     """Executes setup stages, then candidate stages, for one run config."""
 
-    def __init__(self, config: RunConfig) -> None:
+    def __init__(self, config: RunConfig, status_path: str | None = None) -> None:
         self.config = config
         self.ctx = self._build_context(config)
         self.setup_stages, self.candidate_stages = build_stages(config)
         self._cancelled = False
+        self._progress_path = status_path
 
     # ------------------------------------------------------------------
+    def _update_progress(self, stage: str, progress: float) -> None:
+        if self._progress_path:
+            storage.write_text(
+                self._progress_path,
+                json.dumps(
+                    {
+                        "run_id": self.config.run_id,
+                        "status": "running",
+                        "progress": progress,
+                        "stage": stage,
+                    }
+                ),
+            )
 
     def run(self) -> list[Candidate]:
-        for stage in self.setup_stages:
+        num_stages = len(self.setup_stages) + len(self.candidate_stages)
+        for idx, stage in enumerate(self.setup_stages):
             self._check_cancelled()
+            if not DEV_MODE:
+                self._update_progress(stage.name, idx / num_stages)
             result = stage.execute(self.config.for_stage(stage.name), self.ctx)
             target_field = SETUP_STAGE_TARGET_FIELD.get(stage.name)
             if target_field is not None:
@@ -82,8 +96,12 @@ class PipelineRunner:
         stage_results: list[CandidateStageResult] = []
         run_started = time.perf_counter()
 
-        for stage in self.candidate_stages:
+        for idx, stage in enumerate(self.candidate_stages):
             self._check_cancelled()
+            if not DEV_MODE:
+                self._update_progress(
+                    stage.name, (len(self.setup_stages) + idx) / num_stages
+                )
             stage_result = stage.execute(
                 candidates, self.config.for_stage(stage.name), self.ctx
             )
@@ -99,15 +117,16 @@ class PipelineRunner:
         )
 
         run_dir = storage.join(self.config.artifacts_dir, "runs", self.config.run_id)
-        stats_path = write_run_stats(
-            run_dir,
-            run_id=self.config.run_id,
-            n_start=n_start,
-            n_final=len(candidates),
-            duration_s=run_duration,
-            stage_results=stage_results,
-        )
-        logger.info("run.stats_written", extra={"path": str(stats_path)})
+        if DEV_MODE:
+            stats_path = write_run_stats(
+                run_dir,
+                run_id=self.config.run_id,
+                n_start=n_start,
+                n_final=len(candidates),
+                duration_s=run_duration,
+                stage_results=stage_results,
+            )
+            logger.info("run.stats_written", extra={"path": str(stats_path)})
 
         final_path = write_final_candidates(run_dir, candidates)
         logger.info("run.candidates_written", extra={"path": str(final_path)})
@@ -127,18 +146,16 @@ class PipelineRunner:
 
         return build_run_services(
             run_id=config.run_id,
-            schema_version=config.schema_version,
             run_dir=str(run_dir),
             model_store=config.model_store,
             feature_extractor=FeatureExtractor(),
-            use_feature_cache=config.use_feature_cache,
             seed=config.seed,
         )
 
     def _load_entry_candidates(self) -> list[Candidate]:
         """Empty for a full run (s04 generates them); loaded when entering mid-pipeline."""
         candidates = load_candidates_fasta(
-            self.config.seed_candidates_path, schema_version=self.ctx.schema_version
+            self.config.seed_candidates_path, schema_version=SCHEMA_VERSION
         )
         logger.info("run.input_loaded", extra={"n": len(candidates)})
         return candidates

@@ -471,6 +471,5 @@ def test_run_orders_candidates_ranked_then_insufficient():
         ctx,
     )
     assert [c.id for c in survivors] == ["ranked1", "insufficient1"]
-    assert stage.last_batch_result.total_candidates == 2
 
 

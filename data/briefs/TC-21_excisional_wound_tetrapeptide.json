@@ -1,6 +1,5 @@
 {
     "case_id": "TC-21_excisional_wound_tetrapeptide",
-    "indication": "full_thickness_excisional_wound",
     "wound_context": [
         "acute",
         "clean"
@@ -12,16 +11,10 @@
         "scar_reduction"
     ],
     "pathogens": [],
-    "delivery_system": "Spray or topical gel",
+    "min_length": 4,
     "max_length": 4,
     "dosing_interval_hours": 24,
     "duration_days": 18,
-    "release_target_hours": 432,
-    "safety_constraints": {
-        "hemolysis": "low",
-        "human_cell_cytotoxicity": "low",
-        "systemic_toxicity": "none_observed_liver_kidney_pancreas"
-    },
     "manufacturing": {
         "method": "solid_phase_synthesis"
     },

@@ -132,14 +132,14 @@ def test_mixed_stage_format_rejected(service):
 
 
 def test_ranking_policy_is_always_builtin(service):
+    """s11_ranking is excluded from E2ERequest entirely -- ranking is always
+    the builtin, code-owned policy (see s11_ranking/stage.py), so a client
+    including it at all is a 422, not a silently-discarded field."""
     client, sdk, job, objects, calls, payload = service
     payload["stages"]["s11_ranking"] = {"ranking_config": {}}
     response = client.post("/api/v1/jobs/create", json=payload)
-    assert response.status_code == 202, response.text
-    assert (
-        load_job_config(response.json()["config_path"]).for_stage("s11_ranking").params
-        == {}
-    )
+    assert response.status_code == 422
+    assert not objects and not calls
 
 
 def test_missing_job(service):

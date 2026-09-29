@@ -10,9 +10,6 @@ def validate_job_config(payload: dict) -> RunConfig:
     if not isinstance(payload, dict):
         raise ValueError("job config must be a mapping")
     payload = deepcopy(payload)
-    payload.setdefault("schema_version", 1)
-    payload.setdefault("entry_stage", "s01_brief")
-    payload.setdefault("use_feature_cache", True)
     stages = payload.setdefault("stages", {})
     if not isinstance(stages, dict):
         raise ValueError("stages must be a mapping")
@@ -49,18 +46,8 @@ def validate_job_config(payload: dict) -> RunConfig:
             config.stages[name] = stage
     if "seed" not in payload:
         config.seed = config.for_stage("s01_therapeutic_product_brief").params.get("seed", 42)
-    if config.entry_stage != "s01_brief" or config.input is not None:
-        raise ValueError("the e2e worker supports full runs starting at s01_brief only")
     if not config.for_stage("s01_therapeutic_product_brief").enabled:
         raise ValueError("the e2e worker requires Stage 1")
     if not config.for_stage("s01_therapeutic_product_brief").params.get("brief"):
         raise ValueError("the e2e worker requires an inline Stage 1 brief")
-    safety = config.for_stage("s08_safety_developability")
-    if (
-        safety.enabled
-        and safety.params.get("hemolysis_predictor_version", "v1") != "v1"
-    ):
-        raise ValueError(
-            "the e2e image supports hemolysis v1; the v2 CLI is not bundled"
-        )
     return config

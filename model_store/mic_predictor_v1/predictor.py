@@ -13,7 +13,6 @@ import numpy as np
 import pandas as pd
 import torch
 import torch.nn as nn
-from transformers import AutoTokenizer, EsmModel
 
 from common.model_sync import sync_model_weights, weights_dir_for
 from pipeline.feature_extractor import FeatureExtractor
@@ -23,8 +22,8 @@ MODEL_DIR = weights_dir_for(CODE_DIR)
 
 AMINO_ACID_SET = set("ACDEFGHIKLMNPQRSTVWY")
 
-ESM_MODEL_NAME = "facebook/esm2_t33_650M_UR50D"
-ESM_DIM = 1280
+ESM_MODEL_NAME = "facebook/esm2_t30_150M_UR50D"
+ESM_DIM = 640
 MAX_SEQ_LEN = 50
 GENOME_DIM = 84
 
@@ -306,9 +305,8 @@ class MICPredictorEnsemble:
     and Random Forest (iFeature descriptors + genome features). Predicts
     log10(MIC, uM) for one of 3 ATCC reference organisms. See README.md."""
 
-    def __init__(self, model_dir: Path = MODEL_DIR, use_feature_cache: bool = False):
+    def __init__(self, model_dir: Path = MODEL_DIR):
         self.model_dir = Path(model_dir)
-        self.use_feature_cache = use_feature_cache
         self.loaded = False
 
     def _load(self) -> None:
@@ -316,9 +314,6 @@ class MICPredictorEnsemble:
             return
         sync_model_weights(CODE_DIR)
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        if not self.use_feature_cache:
-            self.tokenizer = AutoTokenizer.from_pretrained(ESM_MODEL_NAME)
-            self.esm_model = EsmModel.from_pretrained(ESM_MODEL_NAME).to(self.device).eval()
 
         self.bilstm_model = BiLSTMModel().to(self.device)
         self.bilstm_model.load_state_dict(
@@ -340,53 +335,28 @@ class MICPredictorEnsemble:
 
         self.loaded = True
 
-    def _residue_embedding(
-        self, sequence: str, feature_extractor: FeatureExtractor | None = None
-    ):
+    def _residue_embedding(self, sequence: str, feature_extractor: FeatureExtractor):
         batch_arr, batch_mask = self._residue_embedding_batch(
             [sequence], feature_extractor
         )
         return batch_arr, batch_mask
 
     def _residue_embedding_batch(
-        self, sequences: list[str], feature_extractor: FeatureExtractor | None = None
+        self, sequences: list[str], feature_extractor: FeatureExtractor
     ):
         n = len(sequences)
-        if self.use_feature_cache:
-            embeddings = feature_extractor.get_esm2_embedding_batch(sequences)
-            with torch.no_grad():
-                # Cached hidden_states are already trimmed to each sequence's
-                # own valid length (BOS + residues + EOS, no padding) --
-                # stripping BOS/EOS (positions 0 and -1) leaves exactly the
-                # same valid residues the original CLS/EOS-id masking selected.
-                batch_arr = torch.zeros((n, MAX_SEQ_LEN, ESM_DIM), dtype=torch.float32, device=self.device)
-                batch_mask = torch.zeros((n, MAX_SEQ_LEN), dtype=torch.float32, device=self.device)
-                for row, embedding in enumerate(embeddings):
-                    residues = torch.from_numpy(embedding.hidden_states[1:-1]).to(self.device)
-                    n_valid = min(residues.shape[0], MAX_SEQ_LEN)
-                    batch_arr[row, :n_valid] = residues[:n_valid]
-                    batch_mask[row, :n_valid] = 1.0
-            return batch_arr, batch_mask
-
+        embeddings = feature_extractor.get_esm2_embedding_batch(sequences)
         with torch.no_grad():
-            enc = self.tokenizer(
-                sequences, return_tensors="pt", padding="max_length",
-                max_length=MAX_SEQ_LEN + 2, truncation=True,
-            ).to(self.device)
-            out = self.esm_model(**enc)
-            hidden = out.last_hidden_state
-
-            residue_mask = torch.ones_like(enc["attention_mask"])
-            residue_mask[enc["input_ids"] == self.tokenizer.cls_token_id] = 0
-            residue_mask[enc["input_ids"] == self.tokenizer.eos_token_id] = 0
-            residue_mask = residue_mask * enc["attention_mask"]
-
+            # Cached hidden_states are already trimmed to each sequence's
+            # own valid length (BOS + residues + EOS, no padding) --
+            # stripping BOS/EOS (positions 0 and -1) leaves exactly the
+            # same valid residues the original CLS/EOS-id masking selected.
             batch_arr = torch.zeros((n, MAX_SEQ_LEN, ESM_DIM), dtype=torch.float32, device=self.device)
             batch_mask = torch.zeros((n, MAX_SEQ_LEN), dtype=torch.float32, device=self.device)
-            for row in range(n):
-                valid_positions = torch.where(residue_mask[row] == 1)[0]
-                n_valid = min(len(valid_positions), MAX_SEQ_LEN)
-                batch_arr[row, :n_valid] = hidden[row, valid_positions[:n_valid]]
+            for row, embedding in enumerate(embeddings):
+                residues = torch.from_numpy(embedding.hidden_states[1:-1]).to(self.device)
+                n_valid = min(residues.shape[0], MAX_SEQ_LEN)
+                batch_arr[row, :n_valid] = residues[:n_valid]
                 batch_mask[row, :n_valid] = 1.0
         return batch_arr, batch_mask
 
@@ -394,7 +364,7 @@ class MICPredictorEnsemble:
         self,
         sequence: str,
         genome_vec: np.ndarray,
-        feature_extractor: FeatureExtractor | None = None,
+        feature_extractor: FeatureExtractor,
     ) -> tuple:
         residue_emb, residue_mask = self._residue_embedding(sequence, feature_extractor)
         genome_t = torch.tensor(genome_vec, dtype=torch.float32, device=self.device).unsqueeze(0)
@@ -407,7 +377,7 @@ class MICPredictorEnsemble:
         self,
         sequences: list[str],
         genome_vec: np.ndarray,
-        feature_extractor: FeatureExtractor | None = None,
+        feature_extractor: FeatureExtractor,
     ) -> tuple:
         n = len(sequences)
         residue_emb, residue_mask = self._residue_embedding_batch(sequences, feature_extractor)
@@ -434,7 +404,7 @@ class MICPredictorEnsemble:
         self,
         sequence: str,
         organism: str,
-        feature_extractor: FeatureExtractor | None = None,
+        feature_extractor: FeatureExtractor,
     ) -> float:
         """Predicted log10(MIC, uM) against `organism`, averaged over the
         3-model ensemble. Convert with MIC_uM = 10 ** result."""
@@ -451,7 +421,7 @@ class MICPredictorEnsemble:
         self,
         sequences: list[str],
         organism: str,
-        feature_extractor: FeatureExtractor | None = None,
+        feature_extractor: FeatureExtractor,
     ) -> list[float]:
         """Batched predict_log_mic: one ESM2 forward pass for the whole batch,
         same genome vector (per `organism`) applied to every row."""
@@ -479,7 +449,7 @@ class MICPredictorEnsemble:
         self,
         sequence: str,
         organism: str,
-        feature_extractor: FeatureExtractor | None = None,
+        feature_extractor: FeatureExtractor,
     ) -> float:
         """Predicted MIC in micromolar (inverse of predict_log_mic)."""
         return float(10 ** self.predict_log_mic(sequence, organism, feature_extractor))

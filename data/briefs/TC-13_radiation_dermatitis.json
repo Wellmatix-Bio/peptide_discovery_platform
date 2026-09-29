@@ -1,6 +1,5 @@
 {
     "case_id": "TC-13_radiation_dermatitis",
-    "indication": "radiation_induced_skin_injury",
     "wound_context": [
         "chronic",
         "poor_vascularity",
@@ -14,15 +13,9 @@
         "antioxidant"
     ],
     "pathogens": [],
-    "delivery_system": "Hyaluronic-acid system",
+    "min_length": 6,
     "max_length": 28,
     "dosing_interval_hours": 24,
-    "release_target_hours": 24,
-    "safety_constraints": {
-        "hemolysis": "low",
-        "human_cell_cytotoxicity": "low",
-        "genotoxicity": "none"
-    },
     "manufacturing": {
         "method": "solid_phase_synthesis",
         "max_cost_per_gram_usd": 450

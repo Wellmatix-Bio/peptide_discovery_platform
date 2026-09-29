@@ -1,6 +1,5 @@
 {
     "case_id": "TC-32_diabetic_aged_wound_thymosin_fragment",
-    "indication": "diabetic_foot_ulcer",
     "wound_context": [
         "chronic",
         "high_glucose",
@@ -12,14 +11,9 @@
         "collagen_synthesis"
     ],
     "pathogens": [],
-    "delivery_system": "Spray or topical gel",
+    "min_length": 6,
     "max_length": 7,
     "dosing_interval_hours": 24,
-    "release_target_hours": 24,
-    "safety_constraints": {
-        "hemolysis": "low",
-        "human_cell_cytotoxicity": "low"
-    },
     "manufacturing": {
         "method": "solid_phase_synthesis"
     },

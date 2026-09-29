@@ -12,7 +12,6 @@ import joblib
 import torch
 import xgboost as xgb
 from modlamp.descriptors import GlobalDescriptor, PeptideDescriptor
-from transformers import AutoTokenizer, EsmModel
 
 from common.model_sync import sync_model_weights, weights_dir_for
 from pipeline.feature_extractor import FeatureExtractor
@@ -21,27 +20,6 @@ CODE_DIR = Path(__file__).resolve().parent
 MODEL_DIR = weights_dir_for(CODE_DIR)
 
 AMINO_ACID_SET = set("ACDEFGHIKLMNPQRSTVWY")
-
-def esm_features(sequence: str, tokenizer, esm_model, device: str, torch, normalize_amino: bool) -> pd.DataFrame:
-    model_sequence = sequence.upper() if normalize_amino else sequence
-    with torch.no_grad():
-        inputs = tokenizer([model_sequence], return_tensors="pt", padding=True).to(device)
-        out = esm_model(**inputs)
-        mask = inputs["attention_mask"].unsqueeze(-1)
-        pooled = (out.last_hidden_state * mask).sum(1) / mask.sum(1)
-    values = pooled.cpu().numpy()[0]
-    return pd.DataFrame([{f"esm2_{i}": value for i, value in enumerate(values)}])
-
-
-def esm_features_batch(sequences: list[str], tokenizer, esm_model, device: str, torch, normalize_amino: bool) -> pd.DataFrame:
-    model_sequences = [s.upper() if normalize_amino else s for s in sequences]
-    with torch.no_grad():
-        inputs = tokenizer(model_sequences, return_tensors="pt", padding=True).to(device)
-        out = esm_model(**inputs)
-        mask = inputs["attention_mask"].unsqueeze(-1)
-        pooled = (out.last_hidden_state * mask).sum(1) / mask.sum(1)
-    values = pooled.cpu().numpy()
-    return pd.DataFrame(values, columns=[f"esm2_{i}" for i in range(values.shape[1])])
 
 
 def esm_features_cached(sequence: str, feature_extractor: FeatureExtractor, normalize_amino: bool) -> pd.DataFrame:
@@ -101,9 +79,8 @@ class AMPClassifier:
     """Lazy-loaded 5-fold XGBoost + meta-model ensemble. Returns a calibrated
     AMP probability in [0, 1]. See README.md for architecture details."""
 
-    def __init__(self, model_dir: Path = MODEL_DIR, use_feature_cache: bool = False):
+    def __init__(self, model_dir: Path = MODEL_DIR):
         self.model_dir = Path(model_dir)
-        self.use_feature_cache = use_feature_cache
         self.loaded = False
 
     def _load(self) -> None:
@@ -117,11 +94,6 @@ class AMPClassifier:
         self.normalize_amino = bool(self.model_card.get("normalize_amino", True))
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
         self.torch = torch
-        if not self.use_feature_cache:
-            self.tokenizer = AutoTokenizer.from_pretrained(self.model_card["esm_model_name"])
-            self.esm_model = (
-                EsmModel.from_pretrained(self.model_card["esm_model_name"]).to(self.device).eval()
-            )
         self.fold_models = []
         for i in range(int(self.model_card["n_folds"])):
             model = xgb.XGBClassifier()
@@ -132,16 +104,10 @@ class AMPClassifier:
         self.meta_model = joblib.load(self.model_dir / "meta_model.joblib")
         self.loaded = True
 
-    def predict_proba(self, sequence: str, feature_extractor: FeatureExtractor | None = None) -> float:
+    def predict_proba(self, sequence: str, feature_extractor: FeatureExtractor) -> float:
         _validate_sequence(sequence)
         self._load()
-        esm_feats = (
-            esm_features_cached(sequence, feature_extractor, self.normalize_amino)
-            if self.use_feature_cache
-            else esm_features(
-                sequence, self.tokenizer, self.esm_model, self.device, self.torch, self.normalize_amino
-            )
-        )
+        esm_feats = esm_features_cached(sequence, feature_extractor, self.normalize_amino)
         features = pd.concat([esm_feats, modlamp_features(sequence)], axis=1)
         missing = [col for col in self.feature_cols if col not in features.columns]
         if missing:
@@ -154,7 +120,7 @@ class AMPClassifier:
         return float(np.clip(calibrated[0], 0.0, 1.0))
 
     def predict_proba_batch(
-        self, sequences: list[str], feature_extractor: FeatureExtractor | None = None
+        self, sequences: list[str], feature_extractor: FeatureExtractor
     ) -> list[float]:
         """Batched predict_proba: one ESM2 forward pass for all sequences."""
         for i, sequence in enumerate(sequences):
@@ -165,13 +131,7 @@ class AMPClassifier:
         if not sequences:
             return []
         self._load()
-        esm_feats = (
-            esm_features_cached_batch(sequences, feature_extractor, self.normalize_amino)
-            if self.use_feature_cache
-            else esm_features_batch(
-                sequences, self.tokenizer, self.esm_model, self.device, self.torch, self.normalize_amino
-            )
-        )
+        esm_feats = esm_features_cached_batch(sequences, feature_extractor, self.normalize_amino)
         features = pd.concat([esm_feats, modlamp_features_batch(sequences)], axis=1)
         missing = [col for col in self.feature_cols if col not in features.columns]
         if missing:

@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 class BaseStageParams(BaseModel):
@@ -17,11 +17,6 @@ class BaseStageParams(BaseModel):
     defaults-merge model, not a strict schema."""
 
     model_config = ConfigDict(extra="ignore")
-
-
-class SafetyConstraints(BaseModel):
-    hemolysis: Literal["low", "moderate", "high"]
-    human_cell_cytotoxicity: Literal["low", "moderate", "high"]
 
 
 WoundContext = Literal[
@@ -71,64 +66,40 @@ Pathogens = Literal[
     "Pseudomonas_aeruginosa",
 ]
 
-#: Product delivery-option catalog. Not read by any stage today (see
-#: s05_physchem_screening/stage.py:393-394 -- Stage 5's solvent always comes
-#: from config.params, never Brief.delivery_system) -- this is a fixed
-#: business/product vocabulary, not a model-derived one like Pathogens/
-#: WoundContext/DesiredFunction above.
-DeliverySystem = Literal[
-    "Hydrogel",
-    "Film",
-    "Nanofiber",
-    "Foam dressing",
-    "Collagen matrix",
-    "Alginate dressing",
-    "Chitosan hydrogel",
-    "Hyaluronic-acid system",
-    "Liposome",
-    "PLGA nanoparticle",
-    "PCL microsphere",
-    "Microneedle",
-    "Spray or topical gel",
-]
 
-
-class ManufacturingFields(BaseModel):
-    """Every existing data/briefs/*.json uses "solid_phase_synthesis" (the
-    one exception, "ribosomal_expression", is TC-20's deliberately-invalid
-    edge case) -- hardwired to that single value rather than left as an
-    open string. max_cost_per_gram_usd remains the one real, adjustable
-    input; the 4 other manufacturing sub-keys seen in brief data
-    (protease_resistance_required, ambient_stability_required,
-    sterile_filterable, electrospinning_compatible) stay unmodeled/ignored,
-    same as today."""
-
-    method: Literal["solid_phase_synthesis"] = "solid_phase_synthesis"
-    max_cost_per_gram_usd: float | None = None
-
+# Manufacturing inputs are unused by the pipeline; disabled for now.
+# class ManufacturingFields(BaseModel):
+#     """Every existing data/briefs/*.json uses "solid_phase_synthesis" (the
+#     one exception, "ribosomal_expression", is TC-20's deliberately-invalid
+#     edge case) -- hardwired to that single value rather than left as an
+#     open string. max_cost_per_gram_usd remains the one real, adjustable
+#     input; the 4 other manufacturing sub-keys seen in brief data
+#     (protease_resistance_required, ambient_stability_required,
+#     sterile_filterable, electrospinning_compatible) stay unmodeled/ignored,
+#     same as today."""
+#
+#     method: Literal["solid_phase_synthesis"] = "solid_phase_synthesis"
+#     max_cost_per_gram_usd: float | None = None
+#
 
 class BriefFields(BaseModel):
-    indication: str = Field(..., description="Indication for the therapeutic product")
     wound_context: list[WoundContext] = Field(..., description="Context of the wound")
     desired_functions: list[DesiredFunction] = Field(
         ..., description="Desired functions of the therapeutic product"
     )
     pathogens: list[Pathogens]
-    delivery_system: DeliverySystem = Field(
-        ..., description="Delivery system for the therapeutic product"
-    )
+    min_length: int = Field(ge=6, le=50)
     max_length: int = Field(ge=6, le=50)
     dosing_interval_hours: int = Field(ge=1, le=168)
-    release_target_hours: int = Field(ge=1, le=168)
-    safety_constraints: SafetyConstraints = Field(
-        ..., description="Safety constraints for the therapeutic product"
-    )
-    target_population: list[str] = Field(
-        ..., description="Target population for the therapeutic product"
-    )
-    manufacturing: ManufacturingFields = Field(
-        ..., description="Manufacturing details for the therapeutic product"
-    )
+    # manufacturing: ManufacturingFields = Field(
+    #     ..., description="Manufacturing details for the therapeutic product"
+    # )
+
+    @model_validator(mode="after")
+    def _check_length_bounds(self) -> "BriefFields":
+        if self.min_length > self.max_length:
+            raise ValueError("min_length must be <= max_length")
+        return self
 
 
 class Stage1Params(BaseStageParams):
@@ -160,8 +131,6 @@ class RouteAConstraintConfig(BaseStageParams):
 class Stage4Params(BaseStageParams):
     tags: list[Literal["<AMP>", "<ANTIBIOFILM>", "<ANTIBACTERIAL>"]] = ["<AMP>"]
     n_peptides: int = 100
-    min_length: int = 6
-    max_length: int = 35
     max_new_tokens: int = 120
     batch_size: int = 16
     max_attempts: int = 20
@@ -173,7 +142,6 @@ class Stage4Params(BaseStageParams):
 class Stage5Params(BaseStageParams):
     ph: float = 7.4
     solubility_solvent: str = "Ultrapure water"
-    max_length: int | None = None
     aggregation_tendency_flag_max: float = 0.6
     solubility_flag_min: float = 0.4
     amphipathicity_flag_max: float = 0.8
@@ -185,15 +153,19 @@ class Stage5Params(BaseStageParams):
 
 
 class Stage6Thresholds(BaseStageParams):
-    min_amp_probability: float = 0.70
-    min_proliferation_migration: float = 0.65
-    min_angiogenic_activity: float = 0.60
-    min_anti_inflammatory_probability: float = 0.65
+    min_amp_probability: float = 0.7
+    min_proliferation_migration: float = 0.5
+    min_angiogenic_activity: float = 0.1
+    min_anti_inflammatory_probability: float = 0.5
     max_mic: dict[str, float] = {
-        "Pseudomonas_aeruginosa": 16.0,
+        "Escherichia_coli": 32.0,
+        "Staphylococcus_aureus": 32.0,
+        "Pseudomonas_aeruginosa": 32.0,
     }
     max_mbic: dict[str, float] = {
         "Pseudomonas_aeruginosa": 32.0,
+        "Staphylococcus_aureus": 32.0,
+        "Candida_albicans": 32.0,
     }
 
 
@@ -227,7 +199,6 @@ CytotoxicityCellType = Literal[
 
 class Stage8Params(BaseStageParams):
     hemolysis_phc50_reject_max: float = 4.0
-    hemolysis_predictor_version: Literal["v1"] = "v1"
     solubility_solvent: str = "Ultrapure water"
     cytotoxicity_cell_type: CytotoxicityCellType = "DRAMP_aggregate"
     cytotoxicity_reject_max: float = 0.5
@@ -264,23 +235,65 @@ STAGE_PARAMS_MODELS: dict[str, type[BaseStageParams]] = {
 }
 
 
-StageRequest = (
-    BaseStageParams
-    | Stage1Params
-    | Stage2Params
-    | Stage4Params
-    | Stage5Params
-    | Stage6Params
-    | Stage7Params
-    | Stage8Params
-    | Stage9Params
-    | Stage11Params
-)
+#: Stricter than the Stage*Params they wrap: a client request rejects an
+#: unrecognized key outright (e.g. a typo, or the internal {"params": {...}}
+#: shape) instead of silently dropping it the way a defaults-merge does.
+class Stage1Request(Stage1Params):
+    model_config = ConfigDict(extra="forbid")
+    enabled: bool = True
 
 
-# Keep the raw parameters until the stage name selects its exact schema.
-# A union with BaseStageParams can silently accept invalid stage-specific fields.
-E2ERequest = dict[str, dict[str, Any]]
+class Stage4Request(Stage4Params):
+    model_config = ConfigDict(extra="forbid")
+    enabled: bool = True
+
+
+class Stage5Request(Stage5Params):
+    model_config = ConfigDict(extra="forbid")
+    enabled: bool = True
+
+
+class Stage6Request(Stage6Params):
+    model_config = ConfigDict(extra="forbid")
+    enabled: bool = True
+
+
+class Stage7Request(Stage7Params):
+    model_config = ConfigDict(extra="forbid")
+    enabled: bool = True
+
+
+class Stage8Request(Stage8Params):
+    model_config = ConfigDict(extra="forbid")
+    enabled: bool = True
+
+
+class Stage9Request(Stage9Params):
+    model_config = ConfigDict(extra="forbid")
+    enabled: bool = True
+
+
+class E2ERequest(BaseModel):
+    """The public e2e job request shape: one field per client-configurable
+    stage, each stage's own params flattened together with its `enabled`
+    flag (no {"params": {...}} wrapper). Every field is required to be
+    present (a bare {} accepts that stage's defaults) so the OpenAPI schema
+    and pydantic validation reflect the real per-stage shape directly,
+    instead of a generic dict a stage name could otherwise be mismatched
+    against. s02_wound_biology_and_targets, s03_data_integration, and
+    s11_ranking are deliberately absent -- e2e_config.py always overrides
+    them itself (s02/s03 force-disabled, s11 force-default), so nothing a
+    client sends for them would ever be used."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    s01_therapeutic_product_brief: Stage1Request
+    s04_candidate_generation: Stage4Request
+    s05_physchem_screening: Stage5Request
+    s06_functional_models: Stage6Request
+    s07_structure_mechanism: Stage7Request
+    s08_safety_developability: Stage8Request
+    s09_synthesis_cmc: Stage9Request
 
 
 def resolve_params(stage_name: str, raw_params: dict[str, Any]) -> dict[str, Any]:

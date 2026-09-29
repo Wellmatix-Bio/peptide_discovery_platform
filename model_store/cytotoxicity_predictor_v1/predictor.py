@@ -7,7 +7,6 @@ from pathlib import Path
 import numpy as np
 import torch
 import torch.nn as nn
-from transformers import AutoTokenizer, EsmModel
 
 from common.model_sync import sync_model_weights, weights_dir_for
 from pipeline.feature_extractor import FeatureExtractor
@@ -17,15 +16,15 @@ MODEL_DIR = weights_dir_for(CODE_DIR)
 
 AMINO_ACID_SET = set("ACDEFGHIKLMNPQRSTVWY")
 
-ESM_MODEL_NAME = "facebook/esm2_t33_650M_UR50D"
-ESM_DIM = 1280
+ESM_MODEL_NAME = "facebook/esm2_t30_150M_UR50D"
+ESM_DIM = 640
 
 # Fixed architecture hyperparameters — identical across all 4 fold checkpoints
 # (verified against each checkpoint's saved "config" dict), so hardcoded here
 # rather than re-read from each checkpoint at load time.
-HIDDEN_DIM = 600
+HIDDEN_DIM = 400
 D_MODEL = 120
-N_HEADS = 5
+N_HEADS = 1
 DROPOUT = 0.2
 LSTM_LAYERS = 1
 MAX_LEN = 50
@@ -104,9 +103,8 @@ class CytotoxicityClassifier:
     probability in [0, 1] (sigmoid already applied) — see README.md for the
     cell_type context requirement."""
 
-    def __init__(self, model_dir: Path = MODEL_DIR, use_feature_cache: bool = False):
+    def __init__(self, model_dir: Path = MODEL_DIR):
         self.model_dir = Path(model_dir)
-        self.use_feature_cache = use_feature_cache
         self.loaded = False
 
     def _load(self) -> None:
@@ -114,9 +112,6 @@ class CytotoxicityClassifier:
             return
         sync_model_weights(CODE_DIR)
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        if not self.use_feature_cache:
-            self.tokenizer = AutoTokenizer.from_pretrained(ESM_MODEL_NAME)
-            self.esm_model = EsmModel.from_pretrained(ESM_MODEL_NAME).to(self.device).eval()
         self.models = []
         self.cell_type_to_id = None
         for checkpoint_path in sorted(self.model_dir.glob("cytotoxicity_predictor_fold*.pt")):
@@ -131,20 +126,13 @@ class CytotoxicityClassifier:
             raise FileNotFoundError(f"No cytotoxicity checkpoints found in {self.model_dir}")
         self.loaded = True
 
-    def _embed(self, sequence: str, feature_extractor: FeatureExtractor | None = None):
-        if self.use_feature_cache:
-            embedding = feature_extractor.get_esm2_embedding(sequence)
-            with torch.no_grad():
-                # Cached hidden_states are already trimmed to this sequence's
-                # own valid length (BOS + residues + EOS, no padding) --
-                # strip BOS/EOS the same way the original per-call tokenize did.
-                residues = torch.from_numpy(embedding.hidden_states[1:-1]).to(self.device)
-        else:
-            with torch.no_grad():
-                enc = self.tokenizer([sequence], return_tensors="pt", padding=True).to(self.device)
-                hidden = self.esm_model(**enc).last_hidden_state[0]
-                n_tok = int(enc["attention_mask"][0].sum().item())
-                residues = hidden[1 : n_tok - 1]
+    def _embed(self, sequence: str, feature_extractor: FeatureExtractor):
+        embedding = feature_extractor.get_esm2_embedding(sequence)
+        with torch.no_grad():
+            # Cached hidden_states are already trimmed to this sequence's
+            # own valid length (BOS + residues + EOS, no padding) --
+            # strip BOS/EOS the same way the original per-call tokenize did.
+            residues = torch.from_numpy(embedding.hidden_states[1:-1]).to(self.device)
         with torch.no_grad():
             lengths = torch.tensor([residues.shape[0]], device=self.device)
             residue_emb = residues.unsqueeze(0)
@@ -155,7 +143,7 @@ class CytotoxicityClassifier:
     def predict_cytotoxicity(
         self,
         sequence: str,
-        feature_extractor: FeatureExtractor | None = None,
+        feature_extractor: FeatureExtractor,
         cell_type: str = DEFAULT_CELL_TYPE,
     ) -> float:
         _validate_sequence(sequence)

@@ -104,53 +104,31 @@ CLEAVAGE_DECAY_RATE = 0.5
 IDEALIZED_CA_STEP_ANGSTROM = 3.8  # extended-chain Ca-Ca spacing along backbone
 
 
-def _get_hemolysis_v1_model(
-    use_feature_cache: bool = False,
-) -> ReplicatedHemoPI2Predictor:
+def _get_hemolysis_v1_model() -> ReplicatedHemoPI2Predictor:
     global _hemolysis_v1_model
-    # Rebuild if the cached instance's mode doesn't match what's asked for
-    # now, not just when it's unset -- otherwise a stale instance built with
-    # the opposite use_feature_cache silently ignores this call's flag and
-    # crashes on a mismatched feature_extractor.
-    if (
-        _hemolysis_v1_model is None
-        or _hemolysis_v1_model.use_feature_cache != use_feature_cache
-    ):
-        _hemolysis_v1_model = ReplicatedHemoPI2Predictor(
-            use_feature_cache=use_feature_cache
-        )
+    if _hemolysis_v1_model is None:
+        _hemolysis_v1_model = ReplicatedHemoPI2Predictor()
     return _hemolysis_v1_model
 
 
-def _get_cytotoxicity_model(use_feature_cache: bool = False) -> CytotoxicityClassifier:
+def _get_cytotoxicity_model() -> CytotoxicityClassifier:
     global _cytotoxicity_model
-    if (
-        _cytotoxicity_model is None
-        or _cytotoxicity_model.use_feature_cache != use_feature_cache
-    ):
-        _cytotoxicity_model = CytotoxicityClassifier(
-            use_feature_cache=use_feature_cache
-        )
+    if _cytotoxicity_model is None:
+        _cytotoxicity_model = CytotoxicityClassifier()
     return _cytotoxicity_model
 
 
-def _get_solubility_model(use_feature_cache: bool = False) -> SolubilityPredictor:
+def _get_solubility_model() -> SolubilityPredictor:
     global _solubility_model
-    if (
-        _solubility_model is None
-        or _solubility_model.use_feature_cache != use_feature_cache
-    ):
-        _solubility_model = SolubilityPredictor(use_feature_cache=use_feature_cache)
+    if _solubility_model is None:
+        _solubility_model = SolubilityPredictor()
     return _solubility_model
 
 
-def _get_aggregation_model(use_feature_cache: bool = False) -> AggregationPredictor:
+def _get_aggregation_model() -> AggregationPredictor:
     global _aggregation_model
-    if (
-        _aggregation_model is None
-        or _aggregation_model.use_feature_cache != use_feature_cache
-    ):
-        _aggregation_model = AggregationPredictor(use_feature_cache=use_feature_cache)
+    if _aggregation_model is None:
+        _aggregation_model = AggregationPredictor()
     return _aggregation_model
 
 
@@ -179,24 +157,18 @@ class Stage8Models:
     cleavage: CleavageSitePredictor
 
 
-def build_models(config_params: dict, use_feature_cache: bool = False) -> Stage8Models:
+def build_models(config_params: dict) -> Stage8Models:
     """Factory: import and initialize every Stage 8 model.
 
     Each predictor lazy-loads its own weights on first predict() call, so
     construction here is cheap; this just fixes the one place that knows how
     to build each of them.
     """
-    hemolysis_version = config_params.get("hemolysis_predictor_version", "v1")
-    if hemolysis_version != "v1":
-        raise ValueError(
-            f"unsupported hemolysis_predictor_version {hemolysis_version!r}; expected 'v1'"
-        )
-    hemolysis_model = _get_hemolysis_v1_model(use_feature_cache)
     return Stage8Models(
-        hemolysis=hemolysis_model,
-        cytotoxicity=_get_cytotoxicity_model(use_feature_cache),
-        solubility=_get_solubility_model(use_feature_cache),
-        aggregation=_get_aggregation_model(use_feature_cache),
+        hemolysis=_get_hemolysis_v1_model(),
+        cytotoxicity=_get_cytotoxicity_model(),
+        solubility=_get_solubility_model(),
+        aggregation=_get_aggregation_model(),
         cleavage=_get_cleavage_model(),
     )
 
@@ -221,7 +193,7 @@ class Stage8(CandidateStage):
         cleavage stability, then rejects candidates that fail any hard
         safety/developability threshold (CLAUDE.md: hard thresholds override
         score, applied throughout -- not as a late add-on)."""
-        models = build_models(config.params, ctx.use_feature_cache)
+        models = build_models(config.params)
         solvent = config.params.get("solubility_solvent", "Ultrapure water")
         # DRAMP_aggregate -> maps to mammalian cell
         cell_type = config.params.get("cytotoxicity_cell_type", "DRAMP_aggregate")
@@ -234,12 +206,10 @@ class Stage8(CandidateStage):
         if len(sequences) != len(candidates):
             raise ValueError("Stage 8 received a candidate with no sequence")
 
-        use_feature_cache = ctx.use_feature_cache
-        feature_extractor = ctx.feature_extractor if use_feature_cache else None
-        if use_feature_cache:
-            # Warm the shared ESM2 cache once for the whole stage instead of
-            # once per candidate inside compute_cytotoxicity/compute_solubility.
-            ctx.feature_extractor.get_esm2_embedding_batch(sequences)
+        feature_extractor = ctx.feature_extractor
+        # Warm the shared ESM2 cache once for the whole stage instead of
+        # once per candidate inside compute_cytotoxicity/compute_solubility.
+        ctx.feature_extractor.get_esm2_embedding_batch(sequences)
 
         hemolysis_results = self.compute_hemolysis_batch(
             sequences, models.hemolysis, feature_extractor

@@ -1,6 +1,5 @@
 {
     "case_id": "TC-26_diabetic_wound_bFGF_chitosan_film",
-    "indication": "diabetic_foot_ulcer",
     "wound_context": [
         "chronic",
         "genetically_diabetic_model"
@@ -10,14 +9,9 @@
         "granulation_tissue_formation"
     ],
     "pathogens": [],
-    "delivery_system": "Chitosan hydrogel",
+    "min_length": 6,
     "max_length": 50,
     "dosing_interval_hours": null,
-    "release_target_hours": 24,
-    "safety_constraints": {
-        "hemolysis": "low",
-        "human_cell_cytotoxicity": "low"
-    },
     "manufacturing": {
         "method": "solid_phase_synthesis"
     },

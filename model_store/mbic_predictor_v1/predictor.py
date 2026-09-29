@@ -1,4 +1,4 @@
-"""Loader/inference wrapper for the MBIC (biofilm inhibition) SVR model.
+"""Loader/inference wrapper for the MBIC (biofilm inhibition) SVR+RF ensemble.
 
 Predicts pMBIC = 6 - log10(activity_uM), a pIC50-style log-scale potency
 value against biofilm, NOT a raw concentration and NOT a [0, 1] probability.
@@ -16,7 +16,6 @@ import pandas as pd
 import joblib
 import torch
 from modlamp.descriptors import GlobalDescriptor, PeptideDescriptor
-from transformers import AutoTokenizer, EsmModel
 
 from common.model_sync import sync_model_weights, weights_dir_for
 from pipeline.feature_extractor import FeatureExtractor
@@ -26,7 +25,7 @@ MODEL_DIR = weights_dir_for(CODE_DIR)
 
 AMINO_ACID_SET = set("ACDEFGHIKLMNPQRSTVWY")
 
-ESM_MODEL_NAME = "facebook/esm2_t33_650M_UR50D"
+ESM_MODEL_NAME = "facebook/esm2_t30_150M_UR50D"
 
 PHYSCHEM_COLS = [
     "charge", "charge_density", "gravy", "hydrophobic_moment", "amphipathicity",
@@ -45,32 +44,6 @@ def _validate_sequence(sequence: str) -> None:
         )
 
 
-def esm_embedding(sequence: str, tokenizer, esm_model, device: str) -> np.ndarray:
-    return esm_embedding_batch([sequence], tokenizer, esm_model, device)[0]
-
-
-def esm_embedding_batch(sequences: list[str], tokenizer, esm_model, device: str) -> np.ndarray:
-    seqs = [s.strip().upper() for s in sequences]
-    with torch.no_grad():
-        enc = tokenizer(seqs, return_tensors="pt", padding=True, add_special_tokens=True)
-        enc = {k: v.to(device) for k, v in enc.items()}
-        hidden = esm_model(**enc).last_hidden_state
-        # Exclude padding and the BOS/EOS special tokens from the mean pool.
-        # EOS position varies per row (each sequence has its own length), so
-        # it must be zeroed per-row, not with a single batch-wide index.
-        mask = enc["attention_mask"].clone()
-        mask[:, 0] = 0
-        lengths = enc["attention_mask"].sum(dim=1)
-        mask[torch.arange(mask.size(0), device=device), lengths - 1] = 0
-        mask = mask.unsqueeze(-1).float()
-        pooled = (hidden * mask).sum(dim=1) / mask.sum(dim=1).clamp(min=1e-9)
-    return pooled.float().cpu().numpy()
-
-
-def esm_embedding_cached(sequence: str, feature_extractor: FeatureExtractor) -> np.ndarray:
-    return esm_embedding_cached_batch([sequence], feature_extractor)[0]
-
-
 def esm_embedding_cached_batch(
     sequences: list[str], feature_extractor: FeatureExtractor
 ) -> np.ndarray:
@@ -81,10 +54,6 @@ def esm_embedding_cached_batch(
     embeddings = feature_extractor.get_esm2_embedding_batch(seqs)
     pooled = np.stack([e.hidden_states[1:-1].mean(axis=0) for e in embeddings])
     return pooled.astype(np.float32)
-
-
-def physchem_descriptors(sequence: str, ph: float = 7.4, amide: bool = False, window: int = 18, angle: int = 100) -> dict:
-    return physchem_descriptors_batch([sequence], ph=ph, amide=amide, window=window, angle=angle)[0]
 
 
 def physchem_descriptors_batch(sequences: list[str], ph: float = 7.4, amide: bool = False, window: int = 18, angle: int = 100) -> list[dict]:
@@ -109,11 +78,14 @@ def physchem_descriptors_batch(sequences: list[str], ph: float = 7.4, amide: boo
     moment = _scaled("eisenberg", "calculate_moment", window=window, angle=angle, modality="max")
 
     # Amphipathicity = <uH> normalized by mean |H|; distinguishes a genuinely
-    # faced helix from a peptide that is merely uniformly hydrophobic.
+    # faced helix from a peptide that is merely uniformly hydrophobic. When
+    # mean |H| is ~0 the ratio is undefined -- fall back to mean_h itself
+    # (already ~0 there) rather than NaN, which would otherwise reach the
+    # SVR/RF models undefined and crash sklearn's input validation.
     p_abs = PeptideDescriptor(seqs, "eisenberg")
     p_abs.calculate_global(modality="mean")
     mean_h = np.abs(p_abs.descriptor.ravel())
-    amphipathicity = np.where(mean_h > 1e-9, moment / np.where(mean_h > 1e-9, mean_h, 1.0), np.nan)
+    amphipathicity = np.where(mean_h > 1e-9, moment / np.where(mean_h > 1e-9, mean_h, 1.0), mean_h)
 
     charge = _global("calculate_charge", ph=ph, amide=amide)
     charge_density = _global("charge_density", ph=ph, amide=amide)
@@ -149,38 +121,56 @@ def physchem_descriptors_batch(sequences: list[str], ph: float = 7.4, amide: boo
 
 
 class MBICPredictor:
-    """Lazy-loaded SVR over ESM2 embeddings + modlAMP physchem descriptors +
-    one-hot species. Returns pMBIC (log-scale potency), not a probability or
-    raw concentration — see README.md for the inverse transform."""
+    """Lazy-loaded SVR+RandomForest ensemble over ESM2 embeddings + modlAMP
+    physchem descriptors + one-hot species. Returns pMBIC (log-scale potency),
+    not a probability or raw concentration — see README.md for the inverse
+    transform. Each regressor carries its own preprocessing bundle (species
+    one-hot encoder, physchem/ESM2 scalers, ESM2 PCA) as fit in the source
+    notebook, applied independently before averaging the two predictions."""
 
-    def __init__(self, model_dir: Path = MODEL_DIR, use_feature_cache: bool = False):
+    def __init__(self, model_dir: Path = MODEL_DIR):
         self.model_dir = Path(model_dir)
-        self.use_feature_cache = use_feature_cache
         self.loaded = False
 
     def _load(self) -> None:
         if self.loaded:
             return
         sync_model_weights(CODE_DIR)
-        bundle = joblib.load(self.model_dir / "svr.joblib")
-        self.model = bundle["model"]
-        prep = bundle["preprocessing"]
-        self.species_ohe = prep["species_ohe"]
-        self.physchem_scaler = prep["physchem_scaler"]
-        self.esm2_scaler = prep["esm2_scaler"]
-        self.esm2_pca = prep["esm2_pca"]
-        self.physchem_cols = prep["physchem_cols"]
-        self.known_species = set(self.species_ohe.categories_[0])
-        if not self.use_feature_cache:
-            self.device = "cuda" if torch.cuda.is_available() else "cpu"
-            self.tokenizer = AutoTokenizer.from_pretrained(ESM_MODEL_NAME)
-            self.esm_model = EsmModel.from_pretrained(ESM_MODEL_NAME).to(self.device).eval()
+        svr_bundle = joblib.load(self.model_dir / "svr.joblib")
+        rf_bundle = joblib.load(self.model_dir / "random_forest.joblib")
+        self.svr_model = svr_bundle["model"]
+        self.svr_prep = svr_bundle["preprocessing"]
+        self.rf_model = rf_bundle["model"]
+        self.rf_prep = rf_bundle["preprocessing"]
+        self.known_species = set(self.svr_prep["species_ohe"].categories_[0])
         self.loaded = True
 
+    def _featurize(
+        self,
+        sequences: list[str],
+        species: str,
+        feature_extractor: FeatureExtractor,
+        prep: dict,
+    ) -> np.ndarray:
+        physchem_rows = physchem_descriptors_batch(sequences)
+        physchem_matrix = pd.DataFrame(physchem_rows)[prep["physchem_cols"]].to_numpy(dtype=np.float32)
+        physchem_scaled = prep["physchem_scaler"].transform(physchem_matrix)
+
+        esm2_raw = esm_embedding_cached_batch(sequences, feature_extractor)
+        esm2_scaled = prep["esm2_scaler"].transform(esm2_raw)
+        esm2_pcs = prep["esm2_pca"].transform(esm2_scaled)
+
+        species_oh = prep["species_ohe"].transform(
+            pd.DataFrame([{"target_species": species}] * len(sequences))
+        )
+
+        return np.concatenate([species_oh, physchem_scaled, esm2_pcs], axis=1)
+
     def predict_pmbic(
-        self, sequence: str, species: str, feature_extractor: FeatureExtractor | None = None
+        self, sequence: str, species: str, feature_extractor: FeatureExtractor
     ) -> float:
-        """Predict pMBIC = 6 - log10(activity_uM) for `sequence` against `species`.
+        """Predict pMBIC = 6 - log10(activity_uM) for `sequence` against `species`,
+        averaged over the SVR + RandomForest ensemble.
 
         `species` should match a training-set organism name (see README.md /
         model_card.json for the vocabulary, e.g. "Pseudomonas aeruginosa").
@@ -190,31 +180,13 @@ class MBICPredictor:
         than raising or matching any specific organism. Treat predictions for
         out-of-vocabulary species with extra caution.
         """
-        _validate_sequence(sequence)
-        self._load()
-
-        physchem = physchem_descriptors(sequence)
-        physchem_row = pd.DataFrame([physchem])[self.physchem_cols].to_numpy(dtype=np.float32)
-        physchem_scaled = self.physchem_scaler.transform(physchem_row)
-
-        esm2_raw = (
-            esm_embedding_cached(sequence, feature_extractor)
-            if self.use_feature_cache
-            else esm_embedding(sequence, self.tokenizer, self.esm_model, self.device)
-        ).reshape(1, -1)
-        esm2_scaled = self.esm2_scaler.transform(esm2_raw)
-        esm2_pcs = self.esm2_pca.transform(esm2_scaled)
-
-        species_oh = self.species_ohe.transform(pd.DataFrame([{"target_species": species}]))
-
-        X = np.concatenate([species_oh, physchem_scaled, esm2_pcs], axis=1)
-        return float(self.model.predict(X)[0])
+        return self.predict_pmbic_batch([sequence], species, feature_extractor)[0]
 
     def predict_pmbic_batch(
         self,
         sequences: list[str],
         species: str,
-        feature_extractor: FeatureExtractor | None = None,
+        feature_extractor: FeatureExtractor,
     ) -> list[float]:
         """Batched predict_pmbic: one ESM2 forward pass for the whole batch,
         against one fixed `species` applied to every sequence (matches how
@@ -228,21 +200,12 @@ class MBICPredictor:
             return []
         self._load()
 
-        physchem_rows = physchem_descriptors_batch(sequences)
-        physchem_matrix = pd.DataFrame(physchem_rows)[self.physchem_cols].to_numpy(dtype=np.float32)
-        physchem_scaled = self.physchem_scaler.transform(physchem_matrix)
+        seqs = [s.strip().upper() for s in sequences]
 
-        esm2_raw = (
-            esm_embedding_cached_batch(sequences, feature_extractor)
-            if self.use_feature_cache
-            else esm_embedding_batch(sequences, self.tokenizer, self.esm_model, self.device)
-        )
-        esm2_scaled = self.esm2_scaler.transform(esm2_raw)
-        esm2_pcs = self.esm2_pca.transform(esm2_scaled)
+        X_svr = self._featurize(seqs, species, feature_extractor, self.svr_prep)
+        X_rf = self._featurize(seqs, species, feature_extractor, self.rf_prep)
 
-        species_oh = self.species_ohe.transform(
-            pd.DataFrame([{"target_species": species}] * len(sequences))
-        )
+        svr_preds = self.svr_model.predict(X_svr)
+        rf_preds = self.rf_model.predict(X_rf)
 
-        X = np.concatenate([species_oh, physchem_scaled, esm2_pcs], axis=1)
-        return [float(v) for v in self.model.predict(X)]
+        return [float((s + r) / 2.0) for s, r in zip(svr_preds, rf_preds)]

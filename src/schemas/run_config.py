@@ -5,6 +5,16 @@ from typing import Any
 from pydantic import BaseModel
 import yaml
 from common import storage
+from common.env import DEV_MODE
+
+#: Internal candidate-file schema version. Not a client-facing knob -- there
+#: is only ever one version in play at a time.
+SCHEMA_VERSION = 1
+
+# TODO: production run_id should be set by the caller (e.g. the Vertex job
+# id) after job creation, not read from client config. Replace this
+# placeholder once that wiring is in place.
+_PLACEHOLDER_RUN_ID = "<your_run_id>"
 
 
 class StageConfig(BaseModel):
@@ -14,18 +24,15 @@ class StageConfig(BaseModel):
 
 class RunConfig(BaseModel):
 
-    run_id: str
-    schema_version: int
+    #: Only read from client config in DEV_MODE; production runs must set
+    #: this themselves after construction (see _PLACEHOLDER_RUN_ID above).
+    run_id: str = _PLACEHOLDER_RUN_ID
     seed: int = 42
     seed_candidates_path: str
 
     artifacts_dir: str
     model_store: str
-    input: str | None = None
 
-    use_feature_cache: bool = False
-
-    entry_stage: str
     stages: dict[str, StageConfig]
 
     def for_stage(self, name: str) -> StageConfig:
@@ -41,7 +48,11 @@ class RunConfig(BaseModel):
         with open(path, "r") as f:
             data = yaml.safe_load(f)
 
-        stages_path = Path("./configs/runs", data.get("run_id") + ".yaml")
+        if not DEV_MODE:
+            data.pop("run_id", None)
+
+        run_id = data.get("run_id", _PLACEHOLDER_RUN_ID)
+        stages_path = Path("./configs/runs", run_id + ".yaml")
         with open(stages_path, "r") as f:
             stages_data = yaml.safe_load(f)
 

@@ -2,12 +2,18 @@
 # FeatureExtractor.save/load. Local under DEV_MODE, gs://bucket/prefix otherwise.
 from __future__ import annotations
 
+import functools
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
 from common.env import DEV_MODE
 from tqdm import tqdm
 
 _GCS_PREFIX = "gs://"
+
+#: download_dir fans out per-blob GETs across this many threads -- I/O-bound
+#: (network latency, not CPU), so threads parallelize fine despite the GIL.
+_DOWNLOAD_WORKERS = 16
 
 
 def is_gcs_path(path: str | Path) -> bool:
@@ -20,10 +26,24 @@ def _split_gcs_uri(uri: str) -> tuple[str, str]:
     return bucket, blob_path
 
 
+@functools.lru_cache(maxsize=1)
 def _gcs_client():
-    from google.cloud import storage  # local import: optional dependency, GCS-mode only
+    # Local imports: optional dependency, GCS-mode only.
+    import google.auth
+    import google.auth.transport.requests
+    from google.cloud import storage
+    from requests.adapters import HTTPAdapter
 
-    return storage.Client()
+    # Cached (not one-per-call) so concurrent downloads in download_dir share
+    # a single client/credentials/session instead of each thread making its
+    # own -- the default session's connection pool (10) is smaller than
+    # _DOWNLOAD_WORKERS, so without this, concurrent requests exceed it and
+    # get logged as "Connection pool is full, discarding connection".
+    credentials, project = google.auth.default()
+    session = google.auth.transport.requests.AuthorizedSession(credentials)
+    adapter = HTTPAdapter(pool_maxsize=_DOWNLOAD_WORKERS)
+    session.mount("https://", adapter)
+    return storage.Client(project=project, credentials=credentials, _http=session)
 
 
 def ensure_dir(path: str | Path) -> None:
@@ -108,14 +128,25 @@ def list_blobs(prefix: str) -> list[str]:
 def download_dir(gcs_prefix: str, local_dir: str | Path) -> None:
     """Download every object under `gcs_prefix` into `local_dir`, preserving
     the path structure below the prefix (e.g. gs://.../weights/model.bin ->
-    local_dir/weights/model.bin)."""
+    local_dir/weights/model.bin). Fetches blobs concurrently -- this is
+    network-latency bound, not throughput bound, so it matters most for
+    models stored as many small files (e.g. per-label/per-bag joblib dumps)."""
     local_dir = Path(local_dir)
     _, blob_prefix = _split_gcs_uri(gcs_prefix)
-    for blob_path in tqdm(list_blobs(gcs_prefix), desc=f"downloading {gcs_prefix}"):
+
+    def _download_one(blob_path: str) -> None:
         _, full_blob_name = _split_gcs_uri(blob_path)
         relative = full_blob_name[len(blob_prefix) :].lstrip("/")
         if not relative:
-            continue
+            return
         dest = local_dir / relative
         dest.parent.mkdir(parents=True, exist_ok=True)
         dest.write_bytes(read_bytes(blob_path))
+
+    blob_paths = list_blobs(gcs_prefix)
+    with ThreadPoolExecutor(max_workers=_DOWNLOAD_WORKERS) as pool:
+        futures = [pool.submit(_download_one, blob_path) for blob_path in blob_paths]
+        for future in tqdm(
+            as_completed(futures), total=len(futures), desc=f"downloading {gcs_prefix}"
+        ):
+            future.result()  # re-raise here so a failed download isn't silently dropped

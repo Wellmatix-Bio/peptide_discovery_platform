@@ -12,6 +12,7 @@ import math
 import pandas as pd
 import pytest
 
+from pipeline.feature_extractor import FeatureExtractor
 from pipeline.s04_generation.routeA import (
     REJECTED_FITNESS_FLOOR,
     REQUIRED_HISTORY_COLUMNS,
@@ -252,7 +253,8 @@ class TestRouteA:
                     "pop_size": pop_size,
                     "n_generations": 1,
                 }
-            ]
+            ],
+            "feature_extractor": FeatureExtractor(),
         })
         candidates = route.run()
 

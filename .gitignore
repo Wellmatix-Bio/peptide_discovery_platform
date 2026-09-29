@@ -21,9 +21,12 @@ logs/
 # sync_model_weights(); see each predictor's MODEL_DIR) and are synced from
 # GCS at runtime -- that whole tree is gitignored. hemolysis_predictor_v2
 # is excluded from the split entirely (vendored GPL-3.0 CLI tool, not
-# synced) and stays wholly gitignored, code included.
+# synced) and stays wholly gitignored, code included. omegafold_v1 is
+# in-progress vendoring (see model_store/omegafold_v1/README.md) -- not
+# yet wired into the pipeline; remove this line once it's ready to commit.
 model_store/model_weights/
 model_store/hemolysis_predictor_v2/
+model_store/omegafold_v1/
 model_store/__pycache__/
 model_store/*/__pycache__/
 

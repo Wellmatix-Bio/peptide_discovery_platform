@@ -27,8 +27,8 @@ CHECKPOINT_PATH = MODEL_DIR / "joint_model_best.pt"
 
 AMINO_ACID_SET = set("ACDEFGHIKLMNPQRSTVWY")
 
-ESM_MODEL_NAME = "facebook/esm2_t12_35M_UR50D"
-ESM_RAW_EMBED_DIM = 480
+ESM_MODEL_NAME = "facebook/esm2_t30_150M_UR50D"
+ESM_RAW_EMBED_DIM = 640
 
 # Cleavage logit -> probability, per substrate residue; P1 cleavage site at
 # residue t means the peptide bond C-terminal to t is cut by this enzyme.

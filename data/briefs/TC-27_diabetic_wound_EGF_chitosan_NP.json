@@ -1,6 +1,5 @@
 {
     "case_id": "TC-27_diabetic_wound_EGF_chitosan_NP",
-    "indication": "diabetic_foot_ulcer",
     "wound_context": [
         "chronic",
         "high_glucose"
@@ -10,16 +9,10 @@
         "keratinocyte_migration"
     ],
     "pathogens": [],
-    "delivery_system": "Chitosan hydrogel",
+    "min_length": 6,
     "max_length": 50,
     "dosing_interval_hours": 48,
     "duration_days": 15,
-    "release_target_hours": 360,
-    "safety_constraints": {
-        "hemolysis": "low",
-        "human_cell_cytotoxicity": "low",
-        "proteolysis_resistance": "improved_vs_free_EGF"
-    },
     "manufacturing": {
         "method": "solid_phase_synthesis"
     },

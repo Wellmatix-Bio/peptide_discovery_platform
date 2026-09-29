@@ -12,6 +12,7 @@ import hashlib
 import io
 import json
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any
 
 import numpy as np
@@ -23,6 +24,7 @@ from propy.PyPro import GetProDes
 from transformers import AutoTokenizer, EsmModel
 
 from common import storage
+from common.model_sync import sync_model_weights, weights_dir_for
 from model_store.hemolysis_predictor_v1.predictor import (
     Extractor as _HemolysisV1Extractor,
     normalize_sequences as _normalize_hemolysis_v1_sequences,
@@ -35,11 +37,9 @@ _ESM2_EMBEDDINGS_FILE = "esm2_embeddings.npz"
 _ESM2_MANIFEST_FILE = "esm2_manifest.json"
 _DESCRIPTORS_FILE = "descriptors.json"
 
-DEFAULT_ESM2_MODEL_NAME = "facebook/esm2_t33_650M_UR50D"
-# Sequences per forward pass, chosen to bound GPU memory use -- measured at
-# ~4.6GB peak reserved on an 8GB card for 256 sequences of the pipeline's max
-# length (50 residues), leaving headroom against fragmentation/other processes.
-DEFAULT_ESM2_BATCH_SIZE = 256
+_ESM2_CODE_DIR = Path(__file__).resolve().parents[2] / "model_store" / "esm2_t30_150M"
+DEFAULT_ESM2_MODEL_PATH = weights_dir_for(_ESM2_CODE_DIR)
+
 
 _AROMATIC = set("FWY")
 _HYDROPHOBIC = set("AVLIMFW")
@@ -79,7 +79,10 @@ def _biopython_features(seq: str) -> dict[str, float]:
         "bp_positive_frac": sum(c in _POSITIVE for c in seq) / n,
         "bp_negative_frac": sum(c in _NEGATIVE for c in seq) / n,
         "bp_small_frac": sum(c in _SMALL for c in seq) / n,
-        "bp_net_charge_frac": (sum(c in _POSITIVE for c in seq) - sum(c in _NEGATIVE for c in seq)) / n,
+        "bp_net_charge_frac": (
+            sum(c in _POSITIVE for c in seq) - sum(c in _NEGATIVE for c in seq)
+        )
+        / n,
     }
 
 
@@ -139,12 +142,12 @@ class FeatureExtractor:
 
     def __init__(
         self,
-        esm2_model_name: str = DEFAULT_ESM2_MODEL_NAME,
-        esm2_batch_size: int = DEFAULT_ESM2_BATCH_SIZE,
+        esm2_model_path: Path = DEFAULT_ESM2_MODEL_PATH,
+        esm2_batch_size: int = 256,
     ) -> None:
-        self.esm2_model_name = esm2_model_name
+        self.esm2_model_path = Path(esm2_model_path)
         self.esm2_batch_size = esm2_batch_size
-        self._esm2_fingerprint = f"esm2:{esm2_model_name}"
+        self._esm2_fingerprint = f"esm2:{self.esm2_model_path.name}"
         self._esm2_cache: dict[str, ESM2Embedding] = {}
         self._modlamp_cache: dict[str, dict[str, float]] = {}
         self._propy_biopython_cache: dict[str, dict[str, float]] = {}
@@ -196,11 +199,13 @@ class FeatureExtractor:
     def load(
         cls,
         dir: str,
-        esm2_model_name: str = DEFAULT_ESM2_MODEL_NAME,
-        esm2_batch_size: int = DEFAULT_ESM2_BATCH_SIZE,
+        esm2_model_path: Path = DEFAULT_ESM2_MODEL_PATH,
+        esm2_batch_size: int = 256,
     ) -> "FeatureExtractor":
         """Missing files leave the corresponding dict empty, same as a fresh instance."""
-        extractor = cls(esm2_model_name=esm2_model_name, esm2_batch_size=esm2_batch_size)
+        extractor = cls(
+            esm2_model_path=esm2_model_path, esm2_batch_size=esm2_batch_size
+        )
 
         embeddings_path = storage.join(dir, _ESM2_EMBEDDINGS_FILE)
         manifest_path = storage.join(dir, _ESM2_MANIFEST_FILE)
@@ -231,12 +236,11 @@ class FeatureExtractor:
     def _load_esm2(self) -> None:
         if self._esm2_model is not None:
             return
+        sync_model_weights(_ESM2_CODE_DIR)
         self._esm2_device = "cuda" if torch.cuda.is_available() else "cpu"
-        self._esm2_tokenizer = AutoTokenizer.from_pretrained(self.esm2_model_name)
+        self._esm2_tokenizer = AutoTokenizer.from_pretrained(self.esm2_model_path)
         self._esm2_model = (
-            EsmModel.from_pretrained(self.esm2_model_name)
-            .to(self._esm2_device)
-            .eval()
+            EsmModel.from_pretrained(self.esm2_model_path).to(self._esm2_device).eval()
         )
 
     def get_esm2_embedding(self, sequence: str) -> ESM2Embedding:
@@ -302,7 +306,9 @@ class FeatureExtractor:
     ) -> list[dict[str, float]]:
         fingerprint = "modlamp"
         keys = [_sequence_cache_key(s, fingerprint) for s in sequences]
-        missing_indices = [i for i, k in enumerate(keys) if k not in self._modlamp_cache]
+        missing_indices = [
+            i for i, k in enumerate(keys) if k not in self._modlamp_cache
+        ]
 
         if missing_indices:
             missing_sequences = [sequences[i].upper() for i in missing_indices]

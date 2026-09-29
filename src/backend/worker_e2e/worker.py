@@ -40,7 +40,15 @@ def run_job(config_path: str, wait_seconds: float = 0) -> list:
     storage.ensure_dir(run_dir)
     status_path = storage.join(run_dir, "results.json")
     storage.write_text(
-        status_path, json.dumps({"run_id": config.run_id, "status": "running"})
+        status_path,
+        json.dumps(
+            {
+                "run_id": config.run_id,
+                "status": "running",
+                "progress": 0.0,
+                "stage": "initializing",
+            }
+        ),
     )
     try:
         import numpy as np
@@ -50,7 +58,7 @@ def run_job(config_path: str, wait_seconds: float = 0) -> list:
         random.seed(config.seed)
         np.random.seed(config.seed)
         torch.manual_seed(config.seed)
-        runner = PipelineRunner(config)
+        runner = PipelineRunner(config, status_path=status_path)
         candidates = runner.run()
         ctx = runner.ctx
         storage.write_text(
@@ -66,8 +74,7 @@ def run_job(config_path: str, wait_seconds: float = 0) -> list:
                 }
             ),
         )
-        if config.use_feature_cache:
-            ctx.feature_extractor.save(storage.join(run_dir, "feature_cache"))
+        ctx.feature_extractor.save(storage.join(run_dir, "feature_cache"))
         storage.write_text(
             status_path,
             json.dumps(
@@ -75,6 +82,8 @@ def run_job(config_path: str, wait_seconds: float = 0) -> list:
                     "run_id": config.run_id,
                     "status": "success",
                     "n_final": len(candidates),
+                    "progress": 1.0,
+                    "stage": None,
                 }
             ),
         )
@@ -101,8 +110,12 @@ def run_job(config_path: str, wait_seconds: float = 0) -> list:
 
 def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--wait-for-config", type=int, default=0,
-                        help="Seconds to wait for the API to publish the job-ID config")
+    parser.add_argument(
+        "--wait-for-config",
+        type=int,
+        default=0,
+        help="Seconds to wait for the API to publish the job-ID config",
+    )
     parser.add_argument(
         "--config",
         required=True,

@@ -78,12 +78,10 @@ class RunContext:
     """
 
     run_id: str
-    schema_version: int
     audit: AuditWriter
     boundary: BoundaryWriter
     models: ModelRegistry
     feature_extractor: FeatureExtractor
-    use_feature_cache: bool = False
     seed: int = 42
 
     # populated by setup stages / loaded at startup

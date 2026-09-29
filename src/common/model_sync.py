@@ -42,7 +42,7 @@ def sync_model_weights(code_dir: Path) -> Path:
         _synced.add(model_name)
         return weights_dir
 
-    gcs_prefix = storage.join(VERTEX_MODEL_STORE, MODEL_WEIGHTS_DIRNAME, model_name)
+    gcs_prefix = storage.join(VERTEX_MODEL_STORE, model_name)
     storage.download_dir(gcs_prefix, weights_dir)
     _synced.add(model_name)
     return weights_dir

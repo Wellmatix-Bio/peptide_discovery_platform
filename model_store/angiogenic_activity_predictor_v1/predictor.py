@@ -1,7 +1,8 @@
-"""Loader/inference wrapper for the angiogenic-activity SVM+RF+MLP ensemble."""
+"""Loader/inference wrapper for the angiogenic-activity SVM+MLP ensemble."""
 
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 
 import numpy as np
@@ -10,7 +11,6 @@ import torch
 import torch.nn as nn
 from sklearn.base import BaseEstimator, ClassifierMixin
 from sklearn.preprocessing import StandardScaler
-from transformers import AutoTokenizer, AutoModel
 
 from common.model_sync import sync_model_weights, weights_dir_for
 from pipeline.feature_extractor import FeatureExtractor
@@ -20,8 +20,8 @@ MODEL_DIR = weights_dir_for(CODE_DIR)
 
 AMINO_ACID_SET = set("ACDEFGHIKLMNPQRSTVWY")
 
-ESM_MODEL_NAME = "facebook/esm2_t33_650M_UR50D"
-ESM_EMBED_DIM = 1280
+ESM_MODEL_NAME = "facebook/esm2_t30_150M_UR50D"
+ESM_EMBED_DIM = 640
 
 # Kyte-Doolittle hydrophobicity
 KD = {
@@ -165,21 +165,6 @@ def featurize(seq: str) -> dict:
     }
 
 
-def esm_embedding(sequence: str, tokenizer, esm_model, device: str) -> np.ndarray:
-    # mean-pool per-residue hidden states, excluding BOS/EOS, matching source pipeline.ipynb
-    with torch.no_grad():
-        encoded = tokenizer([sequence], return_tensors="pt", padding=True).to(device)
-        hidden_states = esm_model(**encoded).last_hidden_state
-        mask = encoded["attention_mask"].clone()
-        seq_lengths = mask.sum(dim=1)
-        for i, length in enumerate(seq_lengths):
-            mask[i, 0] = 0
-            mask[i, length - 1] = 0
-        mask = mask.unsqueeze(-1).float()
-        pooled = (hidden_states * mask).sum(dim=1) / mask.sum(dim=1).clamp(min=1)
-    return pooled.cpu().numpy()[0]
-
-
 def esm_embedding_cached(sequence: str, feature_extractor: FeatureExtractor) -> np.ndarray:
     # mean-pool cached per-token hidden states, excluding BOS/EOS (positions 0
     # and -1 of the cache's already-trimmed tensor), matching source pipeline.ipynb
@@ -244,33 +229,30 @@ class TorchMLPClassifier(BaseEstimator, ClassifierMixin):
 
 
 class AngiogenicActivityPredictor:
-    """Lazy-loaded 3-model ensemble (SVM, RandomForest, MLP) over 16 physicochemical
+    """Lazy-loaded 2-model ensemble (SVM, MLP) over 16 physicochemical
     descriptors + PCA-reduced ESM2 embeddings. Returns per-model and averaged
     P(angiogenic-dominant) in [0, 1]. See README.md for architecture and provenance."""
 
-    def __init__(self, model_dir: Path = MODEL_DIR, use_feature_cache: bool = False):
+    def __init__(self, model_dir: Path = MODEL_DIR):
         self.model_dir = Path(model_dir)
-        self.use_feature_cache = use_feature_cache
         self.loaded = False
 
     def _load(self) -> None:
         if self.loaded:
             return
         sync_model_weights(CODE_DIR)
-        if not self.use_feature_cache:
-            self.device = "cuda" if torch.cuda.is_available() else "cpu"
-            self.tokenizer = AutoTokenizer.from_pretrained(ESM_MODEL_NAME)
-            self.esm_model = (
-                AutoModel.from_pretrained(ESM_MODEL_NAME).to(self.device).eval()
-            )
         self.svm_model = joblib.load(self.model_dir / "production_svm.joblib")
-        self.rf_model = joblib.load(self.model_dir / "production_rf.joblib")
+        # production_mlp.joblib was pickled from inside the training notebook,
+        # where TorchMLPClassifier/MLPNet are top-level __main__ classes -- the
+        # pickle records that module path, so unpickling anywhere else needs
+        # these names aliased into sys.modules["__main__"] first.
+        main_module = sys.modules["__main__"]
+        main_module.TorchMLPClassifier = TorchMLPClassifier
+        main_module.MLPNet = MLPNet
         self.mlp_model = joblib.load(self.model_dir / "production_mlp.joblib")
         self.loaded = True
 
-    def predict(
-        self, sequence: str, feature_extractor: FeatureExtractor | None = None
-    ) -> dict:
+    def predict(self, sequence: str, feature_extractor: FeatureExtractor) -> dict:
         _validate_sequence(sequence)
         self._load()
 
@@ -278,21 +260,15 @@ class AngiogenicActivityPredictor:
         descriptor_vec = np.array(
             [[feats[col] for col in FEATURE_COLS]], dtype=np.float64
         )
-        embedding = (
-            esm_embedding_cached(sequence, feature_extractor)
-            if self.use_feature_cache
-            else esm_embedding(sequence, self.tokenizer, self.esm_model, self.device)
-        )
+        embedding = esm_embedding_cached(sequence, feature_extractor)
         X = np.concatenate([descriptor_vec, embedding.reshape(1, -1)], axis=1)
 
         svm_proba = float(self.svm_model.predict_proba(X)[0, 1])
-        rf_proba = float(self.rf_model.predict_proba(X)[0, 1])
         mlp_proba = float(self.mlp_model.predict_proba(X)[0, 1])
-        mean_proba = (svm_proba + rf_proba + mlp_proba) / 3.0
+        mean_proba = (svm_proba + mlp_proba) / 2.0
 
         return {
             "angiogenic": mean_proba,
             "svm": svm_proba,
-            "rf": rf_proba,
             "mlp": mlp_proba,
         }

@@ -1,10 +1,10 @@
 {
   "task": "binary classification: synthesis feasible (label=1) vs not (label=0)",
-  "esm_model_name": "facebook/esm2_t33_650M_UR50D",
+  "esm_model_name": "facebook/esm2_t30_150M_UR50D",
   "esm_pooling": "mean-pooled last_hidden_state, CLS/EOS special tokens masked out before pooling, no L2 normalization",
-  "n_esm2_features": 1280,
+  "n_esm2_features": 640,
   "ensemble_method": "unweighted mean of predict_proba positive-class probability across the 3 models (soft voting); notebook itself does not define a cross-model ensembling scheme, this is a downstream choice",
-  "data_variant": "base (pipeline.ipynb, PepSySco.csv, 1771 peptides after de-duplication) — not the combined/3560-peptide variant",
+  "data_variant": "combined (pipeline_combined_35M_embedding.ipynb, PepSySco.csv + MS2-labeled peptides merged, 3560 peptides)",
   "models": {
     "logistic_regression": {
       "sklearn_class": "sklearn.pipeline.Pipeline",
@@ -36,17 +36,10 @@
     }
   },
   "train_val_split": "5-fold StratifiedKFold, shuffle=True, random_state=42, refit on full dataset for the cached artifacts",
-  "cv_metrics_roc_auc": {
-    "logistic_regression": 0.7272,
-    "svm": 0.7374,
-    "random_forest": 0.7366
+  "cv_metrics": {
+    "logistic_regression": {"roc_auc": 0.7761, "f1": 0.7340, "accuracy": 0.7107, "mcc": 0.4171},
+    "svm": {"roc_auc": 0.7597, "f1": 0.7273, "accuracy": 0.6927, "mcc": 0.3788},
+    "random_forest": {"roc_auc": 0.7351, "f1": 0.7079, "accuracy": 0.6652, "mcc": 0.3221}
   },
-  "independent_validation_roc_auc": {
-    "logistic_regression": 0.5923,
-    "svm": 0.5715,
-    "random_forest": 0.5620,
-    "validation_set_source": "MS2-PSM-derived peptide-synthesis-error dataset (SPL*_DB_search files), labeled by spectral-count success ratio R_p > 0.5"
-  },
-  "generalization_warning": "independent-validation ROC-AUC dropped roughly to chance level relative to CV; treat this ensemble's real-world discrimination as weak and unverified beyond this one out-of-distribution check",
-  "source_notebook": "pipeline.ipynb"
+  "source_notebook": "pipeline_combined_35M_embedding.ipynb"
 }

@@ -697,9 +697,8 @@ class ReplicatedHemoPI2Predictor:
     trained offline from HemoPI2's own published cross-validation/test
     splits. Returns pHC50 in this codebase's convention (see _y_to_phc50)."""
 
-    def __init__(self, model_path: Path = MODEL_PATH, use_feature_cache: bool = False):
+    def __init__(self, model_path: Path = MODEL_PATH):
         self.model_path = Path(model_path)
-        self.use_feature_cache = use_feature_cache
         self.loaded = False
 
     def _load(self) -> None:
@@ -709,36 +708,24 @@ class ReplicatedHemoPI2Predictor:
         if not self.model_path.exists():
             raise FileNotFoundError(f"Trained model not found: {self.model_path}")
         self.model = joblib.load(self.model_path)
-        if not self.use_feature_cache:
-            self.extractor = Extractor(PROPERTY_TABLES)
         self.loaded = True
-
-    def _extract(self, sequences: list[str]) -> pd.DataFrame:
-        normalized = normalize_sequences(sequences)
-        return self.extractor.extract(list(normalized))
 
     def _extract_cached(self, sequences: list[str], feature_extractor) -> pd.DataFrame:
         normalized = list(normalize_sequences(sequences))
         rows = feature_extractor.get_hemolysis_v1_descriptors_batch(normalized)
         return pd.DataFrame(rows)
 
-    def predict_phc50(
-        self, sequence: str, feature_extractor: "FeatureExtractor | None" = None
-    ) -> float:
+    def predict_phc50(self, sequence: str, feature_extractor: "FeatureExtractor") -> float:
         _validate_sequence(sequence)
         self._load()
-        X = (
-            self._extract_cached([sequence], feature_extractor)
-            if self.use_feature_cache
-            else self._extract([sequence])
-        )
+        X = self._extract_cached([sequence], feature_extractor)
         y_pred = self.model.predict(X)
         return float(_y_to_phc50(y_pred)[0])
 
     def predict_phc50_batch(
         self,
         sequences: list[str],
-        feature_extractor: "FeatureExtractor | None" = None,
+        feature_extractor: "FeatureExtractor",
     ) -> list[float]:
         """Batched predict_phc50: one descriptor-extraction pass and one
         model.predict() call for every sequence, instead of one call per
@@ -752,10 +739,6 @@ class ReplicatedHemoPI2Predictor:
         if not sequences:
             return []
         self._load()
-        X = (
-            self._extract_cached(sequences, feature_extractor)
-            if self.use_feature_cache
-            else self._extract(sequences)
-        )
+        X = self._extract_cached(sequences, feature_extractor)
         y_pred = self.model.predict(X)
         return [float(v) for v in _y_to_phc50(y_pred)]

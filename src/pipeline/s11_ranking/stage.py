@@ -20,8 +20,6 @@ from schemas.run_config import StageConfig
 
 logger = get_logger(__name__)
 
-RANKING_VERSION = "3.0.0"
-
 Component = Literal[
     "wound_closure",
     "antimicrobial",
@@ -106,7 +104,6 @@ class RankingResult(StrictModel):
 
     candidate_id: str
     sequence: str
-    ranking_version: str
     stage1: ProductObjective
     status: Literal["ranked", "insufficient_evidence"]
     final_score: Unit | None
@@ -123,7 +120,6 @@ class RankingResult(StrictModel):
 
 
 class BatchResult(StrictModel):
-    ranking_version: str
     configuration: dict[str, Any]
     total_candidates: int
     insufficient_evidence: int
@@ -363,7 +359,6 @@ class RankingConfig(StrictModel):
         return self
 
 
-
 # ----------------------------------------------------------------------
 # ScoreNormalizer: converts a raw value into a [0,1] score, higher = better.
 # Missing values pass through untouched.
@@ -382,14 +377,9 @@ BUILTIN_RANKING_POLICY = RankingConfig.model_validate(
             "safety": 0.12,
             "stability": 0.08,
             "synthesis_feasibility": 0.03,
-            "mechanistic_confidence": 0.02
+            "mechanistic_confidence": 0.02,
         },
-        "normalizers": {
-            "safety": {
-                "kind": "probability",
-                "higher_is_better": False
-            }
-        },
+        "normalizers": {"safety": {"kind": "probability", "higher_is_better": False}},
         "input_sources": {
             "scores": {
                 "antimicrobial": "amp_probability",
@@ -399,9 +389,9 @@ BUILTIN_RANKING_POLICY = RankingConfig.model_validate(
                 "safety": "cytotoxicity.score",
                 "stability": "cleavage_stability.score",
                 "synthesis_feasibility": "synthesis_feasibility.ml_feasibility_prior.score",
-                "mechanistic_confidence": "mechanism.structural_confidence"
+                "mechanistic_confidence": "mechanism.structural_confidence",
             }
-        }
+        },
     }
 )
 
@@ -546,7 +536,6 @@ class CandidateScorer:
         return RankingResult(
             candidate_id=candidate.candidate_id,
             sequence=candidate.sequence,
-            ranking_version=RANKING_VERSION,
             stage1=candidate.stage1.model_copy(deep=True),
             status=status,
             final_score=final_score,
@@ -615,7 +604,6 @@ class Stage11Service:
         insufficient = [r for r in scored if r.status == "insufficient_evidence"]
 
         return BatchResult(
-            ranking_version=RANKING_VERSION,
             configuration=self.config.model_dump(mode="json"),
             total_candidates=len(scored),
             insufficient_evidence=len(insufficient),
@@ -645,17 +633,13 @@ class Stage11(CandidateStage):
     requires = {"sequence"}
     produces = {"ranking"}
 
-    #: Set on every run() call; the last batch's full BatchResult, for
-    #: callers (e.g. reports) that want batch-level totals beyond what
-    #: CandidateStageResult carries.
-    last_batch_result: BatchResult | None = None
-
     def run(
         self, candidates: list[Candidate], config: StageConfig, ctx: RunContext
     ) -> list[Candidate]:
-        self.last_batch_result = None
         if config.params:
-            raise ValueError("Stage 11 ranking policy is built into the code; parameters are not accepted")
+            raise ValueError(
+                "Stage 11 ranking policy is built into the code; parameters are not accepted"
+            )
         policy = BUILTIN_RANKING_POLICY.model_copy(deep=True)
         stage1 = ProductObjective(
             wound_context=ctx.brief.wound_context if ctx.brief else [],
@@ -681,11 +665,13 @@ class Stage11(CandidateStage):
             )
 
         batch = Stage11Service(policy).rank_batch(inputs)
-        self.last_batch_result = batch
 
         by_id = {candidate.id: candidate for candidate in candidates}
         ordered = batch.ranked_candidates + batch.insufficient_evidence_candidates
         for result in ordered:
+            result_dict = result.model_dump(mode="json")
+            result_dict.pop("candidate_id", None)
+            result_dict.pop("sequence", None)
             by_id[result.candidate_id].predictions["ranking"] = {
                 **result.model_dump(mode="json"),
                 "configuration": batch.configuration,

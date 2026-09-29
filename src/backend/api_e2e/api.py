@@ -1,13 +1,15 @@
 """Start and inspect complete-pipeline Vertex AI Custom Jobs."""
 
+import json
 import os
 import re
+import statistics
 import logging
 from functools import lru_cache
 from fastapi import FastAPI, HTTPException
 from google.api_core.exceptions import GoogleAPICallError, NotFound
 from google.auth.exceptions import GoogleAuthError
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, config
 from common import env, storage
 from schemas.brief import Brief
 from schemas.e2e_config import validate_job_config
@@ -38,7 +40,6 @@ class CreateJobRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     request_id: str = Field(min_length=1)
     stages: E2ERequest
-    use_feature_cache: bool = True
 
 
 class CreateJobResponse(BaseModel):
@@ -51,27 +52,22 @@ class CreateJobResponse(BaseModel):
 class JobStatusResponse(BaseModel):
     job_id: str
     status: str
+    stage: str = "pending"
     vertex_state: str
     error: str | None = None
-
-
-KNOWN_STAGES = {
-    "s01_therapeutic_product_brief",
-    "s02_wound_biology_and_targets",
-    "s03_data_integration",
-    "s04_candidate_generation",
-    "s05_physchem_screening",
-    "s06_functional_models",
-    "s07_structure_mechanism",
-    "s08_safety_developability",
-    "s09_synthesis_cmc",
-    "s11_ranking",
-}
 
 
 def _label_value(value: str) -> str:
     label = re.sub(r"[^a-z0-9_-]+", "-", str(value).lower()).strip("-_")
     return (label or "request")[:63]
+
+
+def job_name(job_id):
+    # if not re.fullmatch(r"projects/[^/]+/locations/[^/]+/customJobs/[0-9]+", job_id):
+    #     raise HTTPException(
+    #         422, "job_id must be the full Vertex Custom Job resource name"
+    #     )
+    return job_id
 
 
 @app.post("/api/v1/jobs/create", response_model=CreateJobResponse, status_code=202)
@@ -82,6 +78,9 @@ def create_job(request: CreateJobRequest):
     seeds = required("SEED_CANDIDATES_FILE")
     image = required("WORKER_IMAGE_URI")
     service_account = required("WORKER_SERVICE_ACCOUNT")
+    machine_type = required("MACHINE_TYPE")
+    accelerator_type = required("ACCELERATOR_TYPE")
+    accelerator_count = int(required("ACCELERATOR_COUNT"))
     if not all(storage.is_gcs_path(p) for p in (artifacts, models, seeds)):
         raise HTTPException(
             503, "Artifacts, model store, and seed FASTA must use gs:// paths"
@@ -90,17 +89,12 @@ def create_job(request: CreateJobRequest):
     staging_dir = storage.join(artifacts, "requests", request.request_id)
     staging_config_path = storage.join(staging_dir, "config.json")
     try:
-        unknown = set(request.stages) - KNOWN_STAGES
-        if unknown:
-            raise ValueError(f"Unknown stages: {sorted(unknown)}")
         config = validate_job_config(
             {
-                "run_id": "pending",
                 "artifacts_dir": artifacts,
                 "model_store": models,
                 "seed_candidates_path": seeds,
-                "use_feature_cache": request.use_feature_cache,
-                "stages": request.stages,
+                "stages": request.stages.model_dump(),
             }
         )
         Brief.model_validate(
@@ -120,11 +114,9 @@ def create_job(request: CreateJobRequest):
                 {
                     "replica_count": 1,
                     "machine_spec": {
-                        "machine_type": os.environ.get(
-                            "MACHINE_TYPE", "n1-standard-4"
-                        ).strip(),
-                        "accelerator_type": "NVIDIA_TESLA_T4",
-                        "accelerator_count": 1,
+                        "machine_type": machine_type,
+                        "accelerator_type": accelerator_type,
+                        "accelerator_count": accelerator_count,
                     },
                     "disk_spec": {"boot_disk_type": "pd-ssd", "boot_disk_size_gb": 200},
                     "container_spec": {
@@ -181,14 +173,6 @@ def create_job(request: CreateJobRequest):
     )
 
 
-def job_name(job_id):
-    if not re.fullmatch(r"projects/[^/]+/locations/[^/]+/customJobs/[0-9]+", job_id):
-        raise HTTPException(
-            422, "job_id must be the full Vertex Custom Job resource name"
-        )
-    return job_id
-
-
 @app.get("/api/v1/jobs/{job_id:path}/status", response_model=JobStatusResponse)
 def get_job_status(job_id: str):
     name = job_name(job_id)
@@ -200,30 +184,166 @@ def get_job_status(job_id: str):
         raise HTTPException(503, "Google credentials are unavailable") from exc
     except GoogleAPICallError as exc:
         raise HTTPException(502, str(exc)) from exc
-    state = job.state.name
-    status = {
-        "JOB_STATE_RUNNING": "running",
-        "JOB_STATE_SUCCEEDED": "success",
-        "JOB_STATE_FAILED": "fail",
-        "JOB_STATE_EXPIRED": "fail",
-        "JOB_STATE_PARTIALLY_SUCCEEDED": "fail",
-        "JOB_STATE_CANCELLING": "stopped",
-        "JOB_STATE_CANCELLED": "stopped",
-        "JOB_STATE_PAUSED": "stopped",
-    }.get(state, "pending")
+    vertex_state = job.state.name
+
+    artifacts = required("VERTEX_ARTIFACTS_DIR")
+    run_id = _run_id_from_job_id(job_id)
+    run_dir = storage.join(artifacts, "runs", run_id)
+    status_path = storage.join(run_dir, "results.json")
+
+    results = (
+        json.loads(storage.read_text(status_path))
+        if storage.exists(status_path)
+        else None
+    )
+
     return JobStatusResponse(
         job_id=job.name,
-        status=status,
-        vertex_state=state,
+        status=results.get("status", "pending") if results else "pending",
+        stage=results.get("stage", "pending") if results else "pending",
+        vertex_state=vertex_state,
         error=job.error.message or None,
     )
+
+
+RANKING_COMPONENTS = (
+    "wound_closure",
+    "antimicrobial",
+    "immunomodulation",
+    "angiogenesis",
+    "collagen_ecm",
+    "safety",
+    "stability",
+    "synthesis_feasibility",
+    "mechanistic_confidence",
+)
+
+
+class ComponentStats(BaseModel):
+    count: int
+    mean: float
+    median: float
+    min: float
+    max: float
+
+
+class JobResultsResponse(BaseModel):
+    job_id: str
+    run_id: str
+    status: str
+    n_final: int | None = None
+    total_candidates: int | None = None
+    ranked_candidates: int | None = None
+    insufficient_evidence_candidates: int | None = None
+    component_stats: dict[str, ComponentStats] = Field(default_factory=dict)
+    candidates: list[dict]
+
+
+def _run_id_from_job_id(job_id: str) -> str:
+    return job_id.rsplit("/", 1)[-1]
+
+
+def _component_stats(candidates: list[dict]) -> dict[str, ComponentStats]:
+    """Mean/median/min/max per ranking component, over ranked candidates'
+    normalized_scores only -- missing/insufficient_evidence candidates carry
+    no normalized_scores and are excluded rather than treated as zero."""
+    values_by_component: dict[str, list[float]] = {c: [] for c in RANKING_COMPONENTS}
+    for candidate in candidates:
+        ranking = candidate.get("predictions", {}).get("ranking")
+        if not ranking or ranking.get("status") != "ranked":
+            continue
+        normalized = ranking.get("normalized_scores", {})
+        for component in RANKING_COMPONENTS:
+            value = normalized.get(component)
+            if value is not None:
+                values_by_component[component].append(value)
+
+    return {
+        component: ComponentStats(
+            count=len(values),
+            mean=statistics.fmean(values),
+            median=statistics.median(values),
+            min=min(values),
+            max=max(values),
+        )
+        for component, values in values_by_component.items()
+        if values
+    }
+
+
+@app.get("/api/v1/jobs/{job_id:path}/results", response_model=JobResultsResponse)
+def get_job_results(job_id: str):
+    name = job_name(job_id)
+    run_id = _run_id_from_job_id(name)
+    artifacts = required("VERTEX_ARTIFACTS_DIR")
+    run_dir = storage.join(artifacts, "runs", run_id)
+    print("Fetching results for job %s in %s", name, run_dir)
+    status_path = storage.join(run_dir, "results.json")
+    if not storage.exists(status_path):
+        raise HTTPException(404, "Job results not found")
+    status_payload = json.loads(storage.read_text(status_path))
+    status = status_payload.get("status", "unknown")
+
+    if status != "success":
+        return JobResultsResponse(
+            job_id=name,
+            run_id=run_id,
+            status=status,
+            n_final=status_payload.get("n_final"),
+            candidates=[],
+        )
+
+    candidates_path = storage.join(run_dir, "candidates_final.json")
+    if not storage.exists(candidates_path):
+        raise HTTPException(
+            404, "Job reported success but candidates_final.json is missing"
+        )
+    candidates = json.loads(storage.read_text(candidates_path))
+
+    ranked = sum(
+        1
+        for c in candidates
+        if c.get("predictions", {}).get("ranking", {}).get("status") == "ranked"
+    )
+
+    return JobResultsResponse(
+        job_id=name,
+        run_id=run_id,
+        status=status,
+        n_final=status_payload.get("n_final"),
+        total_candidates=len(candidates),
+        ranked_candidates=ranked,
+        insufficient_evidence_candidates=len(candidates) - ranked,
+        component_stats=_component_stats(candidates),
+        candidates=candidates,
+    )
+
+
+_ALREADY_CANCELLED_STATES = {"JOB_STATE_CANCELLING", "JOB_STATE_CANCELLED"}
+_TERMINAL_FAILED_STATES = {"JOB_STATE_FAILED", "JOB_STATE_EXPIRED"}
 
 
 @app.post("/api/v1/jobs/{job_id:path}/cancel")
 def cancel_job(job_id: str):
     name = job_name(job_id)
+    client = job_client()
     try:
-        job_client().cancel_custom_job(name=name, timeout=30)
+        job = client.get_custom_job(name=name, timeout=30)
+    except NotFound as exc:
+        raise HTTPException(404, "Job not found") from exc
+    except GoogleAuthError as exc:
+        raise HTTPException(503, "Google credentials are unavailable") from exc
+    except GoogleAPICallError as exc:
+        raise HTTPException(502, str(exc)) from exc
+
+    state = job.state.name
+    if state in _ALREADY_CANCELLED_STATES:
+        return {"job_id": name, "status": "cancelled"}
+    if state in _TERMINAL_FAILED_STATES:
+        return {"job_id": name, "status": "failed"}
+
+    try:
+        client.cancel_custom_job(name=name, timeout=30)
     except NotFound as exc:
         raise HTTPException(404, "Job not found") from exc
     except GoogleAuthError as exc:
@@ -231,3 +351,11 @@ def cancel_job(job_id: str):
     except GoogleAPICallError as exc:
         raise HTTPException(502, str(exc)) from exc
     return {"job_id": name, "status": "cancelling"}
+
+
+if __name__ == "__main__":
+    import uvicorn
+
+    uvicorn.run(
+        app, host="127.0.0.1", port=int(os.environ.get("PORT", 8080)), log_level="info"
+    )

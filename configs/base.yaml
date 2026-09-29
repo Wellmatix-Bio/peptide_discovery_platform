@@ -1,12 +1,7 @@
 ﻿
-run_id: dfu_2026_08
-schema_version: 1
+run_id: dfu_2026_08               # DEV_MODE only; ignored otherwise
 seed: 42
 
 artifacts_dir: ./artifacts
 model_store: ./model_store
 knowledge_base_path: null
-
-
-entry_stage: s01_brief
-input: null                       # path to .jsonl when entering mid-pipeline

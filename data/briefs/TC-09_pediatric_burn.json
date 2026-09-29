@@ -1,6 +1,5 @@
 {
     "case_id": "TC-09_pediatric_burn",
-    "indication": "pediatric_partial_thickness_burn",
     "wound_context": [
         "acute",
         "inflamed",
@@ -15,16 +14,9 @@
         "Staphylococcus_aureus",
         "Pseudomonas_aeruginosa"
     ],
-    "delivery_system": "Hydrogel",
+    "min_length": 6,
     "max_length": 22,
     "dosing_interval_hours": 48,
-    "release_target_hours": 48,
-    "safety_constraints": {
-        "hemolysis": "low",
-        "human_cell_cytotoxicity": "low",
-        "immunogenicity": "low",
-        "systemic_absorption": "minimal"
-    },
     "manufacturing": {
         "method": "solid_phase_synthesis",
         "max_cost_per_gram_usd": 600

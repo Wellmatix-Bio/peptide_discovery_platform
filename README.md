@@ -73,10 +73,13 @@ directly.
     read/write the GCS paths above
 - **GPU**: the worker loads several PyTorch models (ESMFold, ProtGPT2+LoRA,
   ESM2, XGBoost/sklearn ensembles) and is CUDA-accelerated. CPU-only execution
-  works but is significantly slower. The default Vertex accelerator is an
-  NVIDIA T4 (Turing) — model code must avoid `bfloat16` (Ampere+ only) and use
-  `float16` instead; see `model_store/routeb_protgpt2_lora_v1/predictor.py` for
-  the reference pattern.
+  works but is significantly slower. `routeb_protgpt2_lora_v1` loads its base
+  model via `bitsandbytes` 4-bit (NF4) quantization, which requires an Ampere+
+  GPU (compute capability ≥ 8.0) for reliable GPU dispatch — on a T4 (Turing,
+  7.5) it can silently fall back to CPU rather than raise an error. This
+  deployment's `.env` configures `NVIDIA_L4`/`g2-standard-4` for exactly this
+  reason; `api.py`'s own code fallback (used only if `ACCELERATOR_TYPE`/
+  `MACHINE_TYPE` are unset) still defaults to T4 and should not be relied on.
 
 ---
 
@@ -112,8 +115,8 @@ VERTEX_MODEL_STORE=gs://<your-bucket>/model_weights
 SEED_CANDIDATES_FILE=gs://<your-bucket>/curated_peptides.fasta
 WORKER_IMAGE_URI=<region>-docker.pkg.dev/<project>/<repository>/worker-e2e:<tag>
 WORKER_SERVICE_ACCOUNT=<worker-runtime>@<project>.iam.gserviceaccount.com
-MACHINE_TYPE=n1-standard-4
-ACCELERATOR_TYPE=NVIDIA_TESLA_T4
+MACHINE_TYPE=g2-standard-4
+ACCELERATOR_TYPE=NVIDIA_L4
 ACCELERATOR_COUNT=1
 ```
 
@@ -126,7 +129,7 @@ ACCELERATOR_COUNT=1
 | `SEED_CANDIDATES_FILE` | GCS path to the seed peptide FASTA used when a run doesn't start from de novo generation alone. |
 | `WORKER_IMAGE_URI` | The worker image the job API tells Vertex to run. |
 | `WORKER_SERVICE_ACCOUNT` | Service account the Custom Job runs as. |
-| `MACHINE_TYPE` / `ACCELERATOR_TYPE` / `ACCELERATOR_COUNT` | Vertex Custom Job machine spec; default to `n1-standard-4` / `NVIDIA_TESLA_T4` / `1` if unset. |
+| `MACHINE_TYPE` / `ACCELERATOR_TYPE` / `ACCELERATOR_COUNT` | Vertex Custom Job machine spec. This deployment sets `g2-standard-4` / `NVIDIA_L4` / `1` explicitly (required pairing — L4 only attaches to `g2-standard-*`); if unset, `api.py` itself falls back to `n1-standard-4` / `NVIDIA_TESLA_T4` / `1`, which is **not** recommended (see the GPU note above). |
 
 Authentication uses Google Application Default Credentials
 (`gcloud auth application-default login` locally; the service account
@@ -344,11 +347,18 @@ The identity running `gcloud builds submit`/`docker push` needs
 `roles/artifactregistry.writer` on the target repository.
 
 **GPU/CUDA issues on Vertex**
-The default accelerator is `NVIDIA_TESLA_T4` (Turing, compute capability 7.5)
-— it does not support `bfloat16` natively. Any model code using
-`torch.bfloat16` (directly, or via `bnb_4bit_compute_dtype`) will fail or run
-severely degraded; use `torch.float16` instead. `esmfold_v1`'s existing
-`.half()` usage is the T4-safe reference pattern.
+This deployment runs on `NVIDIA_L4` (Ada Lovelace, compute capability 8.9),
+configured explicitly via `.env` rather than relying on `api.py`'s own T4
+fallback default. Do not switch back to a T4 or other pre-Ampere accelerator
+without re-verifying `routeb_protgpt2_lora_v1`: its `bitsandbytes` 4-bit
+(NF4) quantized load was observed to silently fall back to CPU on a real T4
+job (0% GPU utilization, no error raised) despite loading correctly on
+Ampere+/Ada hardware — `bfloat16` vs `float16` alone (see
+`bnb_4bit_compute_dtype`) does not fix this; the quantization kernels
+themselves need Ampere+. If you must run on T4, drop `bitsandbytes`
+quantization for that model and load the base model directly in
+`torch.float16` instead (more VRAM, no quantization-kernel dependency).
+`esmfold_v1`'s existing `.half()` usage remains T4-safe either way.
 
 **Model-weight download/cache issues**
 Weights sync from `VERTEX_MODEL_STORE` on first use per process

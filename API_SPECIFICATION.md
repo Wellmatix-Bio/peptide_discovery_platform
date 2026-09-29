@@ -202,11 +202,18 @@ Required: `VERTEX_CLOUD_PROJECT`, `VERTEX_LOCATION`, `VERTEX_ARTIFACTS_DIR`, `VE
 Use the project ID or number, not the display name. Artifact/model/seed paths
 must be GCS URIs. The service-account setting is an email, not a key file.
 
-`MACHINE_TYPE` defaults to `n1-standard-4`; `ACCELERATOR_TYPE` and
-`ACCELERATOR_COUNT` default to `NVIDIA_TESLA_T4` and `1`. The current API
-specifies one replica and a 200 GB SSD boot disk. T4 is Turing architecture
-and does not support `bfloat16` natively — worker/model code must use
-`torch.float16` for any explicit compute dtype instead. The worker receives
+`MACHINE_TYPE`/`ACCELERATOR_TYPE`/`ACCELERATOR_COUNT` are set explicitly in
+`.env` to `g2-standard-4`/`NVIDIA_L4`/`1` (L4 only attaches to `g2-standard-*`
+machine types — this pairing is required, not arbitrary). If left unset,
+`api.py` itself falls back to `n1-standard-4`/`NVIDIA_TESLA_T4`/`1`; avoid
+relying on that fallback. `routeb_protgpt2_lora_v1` loads its base model via
+`bitsandbytes` 4-bit (NF4) quantization, which needs an Ampere+ GPU (compute
+capability ≥ 8.0) for reliable GPU dispatch — on a real T4 (Turing, 7.5) job
+it was observed loading successfully but then generating on CPU with 0% GPU
+utilization and no error, not just failing on `bfloat16` (which is a separate,
+already-fixed issue: `bnb_4bit_compute_dtype` must be `torch.float16`, not
+`torch.bfloat16`, since Turing lacks native bf16 support). The current API
+specifies one replica and a 200 GB SSD boot disk. The worker receives
 `DEV_MODE=false` and every `.env` key present at API-server startup (see
 `common.env.DOTENV_KEYS`) as container environment variables. All containers
 install the root [`requirements.txt`](requirements.txt).

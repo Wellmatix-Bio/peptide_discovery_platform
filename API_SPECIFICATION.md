@@ -22,7 +22,6 @@ not resume a previous run or submit separate stage groups.
 | Field | Type | Required | Meaning |
 |---|---|---|---|
 | `request_id` | string | Yes | Nonempty identifier for this submission |
-| `use_feature_cache` | boolean | No | Defaults to `true` |
 | `stages` | object | Yes | Stage name mapped to its parameters |
 
 Unknown top-level fields and unknown stage names are rejected. There is no
@@ -32,7 +31,6 @@ top-level `seed`, `run_id`, or `job_id` input. The pipeline seed comes from
 ```json
 {
   "request_id": "request-001",
-  "use_feature_cache": true,
   "stages": {
     "s01_therapeutic_product_brief": {
       "seed": 42,
@@ -143,6 +141,7 @@ slash-separated resource path; some generated clients require custom path handli
 {
   "job_id": "projects/123/locations/us-central1/customJobs/456",
   "status": "running",
+  "stage": "s06_functional_models",
   "vertex_state": "JOB_STATE_RUNNING",
   "error": null
 }
@@ -151,20 +150,19 @@ slash-separated resource path; some generated clients require custom path handli
 | Field | Meaning |
 |---|---|
 | `job_id` | Full Vertex job resource name |
-| `status` | `pending`, `running`, `success`, `fail`, or `stopped` |
-| `vertex_state` | Original Vertex state name |
+| `status` | From the worker's `results.json` (`"pending"` if not yet written): `running`, `success`, or `failed` |
+| `stage` | From `results.json`: the stage the worker was on at its last progress write, or `"pending"` if not yet written |
+| `vertex_state` | Real Vertex `CustomJob.state` enum name, queried live (e.g. `JOB_STATE_RUNNING`, `JOB_STATE_SUCCEEDED`, `JOB_STATE_FAILED`) |
 | `error` | Vertex error message, or null |
 
-| Vertex state | API status |
-|---|---|
-| `JOB_STATE_RUNNING` | `running` |
-| `JOB_STATE_SUCCEEDED` | `success` |
-| `JOB_STATE_FAILED`, `JOB_STATE_EXPIRED`, `JOB_STATE_PARTIALLY_SUCCEEDED` | `fail` |
-| `JOB_STATE_CANCELLING`, `JOB_STATE_CANCELLED`, `JOB_STATE_PAUSED` | `stopped` |
-| All other states, including queued/pending/updating | `pending` |
-
-A `stopped` response can still mean stopping is in progress; inspect `vertex_state`.
-The endpoint queries Vertex directly, not the worker's `results.json`.
+`vertex_state` is the ground truth for whether the underlying Custom Job is
+still running, succeeded, or failed at the infrastructure level. `status`/
+`stage` reflect the worker's own last self-reported progress and can lag
+behind `vertex_state` — in particular, a job that failed hard (crashed,
+OOM-killed, cancelled) before writing a final `results.json` can leave
+`status` stuck at `"running"` and `stage` at an earlier value even though
+`vertex_state` already shows a terminal state. Treat `vertex_state` as
+authoritative for whether the job is still executing.
 
 ## Error responses
 
@@ -199,15 +197,19 @@ forced termination; Vertex is authoritative.
 
 ## Server settings
 
-Required: `VERTEX_CLOUD_PROJECT`, `VERTEX_LOCATION`, `WMX_ARTIFACTS_DIR`, `VERTEX_MODEL_STORE`,
+Required: `VERTEX_CLOUD_PROJECT`, `VERTEX_LOCATION`, `VERTEX_ARTIFACTS_DIR`, `VERTEX_MODEL_STORE`,
 `SEED_CANDIDATES_FILE`, `WORKER_IMAGE_URI`, `WORKER_SERVICE_ACCOUNT`.
 Use the project ID or number, not the display name. Artifact/model/seed paths
 must be GCS URIs. The service-account setting is an email, not a key file.
 
-`MACHINE_TYPE` defaults to `n1-standard-4`. The current API specifies one
-replica, a 200 GB SSD boot disk, and no GPU accelerator. The worker receives
-`DEV_MODE=false` and `VERTEX_MODEL_STORE` from the API. All containers install the
-root [`requirements.txt`](requirements.txt).
+`MACHINE_TYPE` defaults to `n1-standard-4`; `ACCELERATOR_TYPE` and
+`ACCELERATOR_COUNT` default to `NVIDIA_TESLA_T4` and `1`. The current API
+specifies one replica and a 200 GB SSD boot disk. T4 is Turing architecture
+and does not support `bfloat16` natively — worker/model code must use
+`torch.float16` for any explicit compute dtype instead. The worker receives
+`DEV_MODE=false` and every `.env` key present at API-server startup (see
+`common.env.DOTENV_KEYS`) as container environment variables. All containers
+install the root [`requirements.txt`](requirements.txt).
 
 The OpenAPI file is a standalone contract for these two operations. It does not
 change the service's routes or its automatically generated `/openapi.json`.

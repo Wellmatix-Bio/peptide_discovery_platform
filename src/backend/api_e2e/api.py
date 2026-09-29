@@ -199,8 +199,8 @@ def get_job_status(job_id: str):
 
     return JobStatusResponse(
         job_id=job.name,
-        status=results.get("status", "pending") if results else "pending",
-        stage=results.get("stage", "pending") if results else "pending",
+        status=(results.get("status") if results else None) or "pending",
+        stage=(results.get("stage") if results else None) or "pending",
         vertex_state=vertex_state,
         error=job.error.message or None,
     )

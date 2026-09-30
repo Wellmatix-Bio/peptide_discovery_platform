@@ -99,3 +99,69 @@ With 47 tests uncollectable and 7 failing for reasons unrelated to this work, th
 **this exact result — 26 passed / 7 failed / 2 collection errors under the
 baseline command above — is the reference.** Any deviation after a phase means
 something was touched. Re-recorded at the end of every phase.
+
+---
+
+# Update: after the stale-fixture fixes
+
+Baseline is now **28 passed / 5 failed / 2 collection errors** under
+`DEV_MODE=true .venv/bin/python -m pytest -q --continue-on-collection-errors`.
+The three machine env vars no longer need to be supplied externally — the fixture
+sets them, as it always should have.
+
+Fixed, test-side only (no `api.py` change): the fixture now sets
+`MACHINE_TYPE`/`ACCELERATOR_TYPE`/`ACCELERATOR_COUNT`, mocks `storage.exists`, and
+derives the config path from `result_path` instead of reading a `config_path`
+field that `CreateJobResponse` does not have.
+
+## Open questions for the backend owner
+
+The 5 remaining failures are **not** stale tests. Each is a place where
+`api.py`'s behaviour and the test's expectation genuinely disagree, and the
+disagreement matters to the frontend. They are left failing rather than adjusted,
+because making them green would mean choosing which side is right.
+
+### 1. `status` never reflects the Vertex job state (4 failures)
+
+`test_status_queries_vertex` expects `status` to be mapped from the Vertex state:
+`JOB_STATE_RUNNING`→`running`, `SUCCEEDED`→`success`, `FAILED`→`fail`,
+`CANCELLED`→`stopped`. `api.py:196-201` instead reads `status` **only** from the
+worker's `results.json` in GCS, defaulting to `"pending"`. `API_SPECIFICATION.md:142`
+documents the current behaviour, so the docs and the code agree and the test
+encodes an earlier design.
+
+**Why it matters:** a worker that dies without writing `results.json` — OOM, a
+CUDA failure, container crash, Vertex preemption — leaves `status` at `"pending"`
+**forever**. The only truthful signal is `vertex_state`.
+
+Consequence for the UI, regardless of which way this is resolved: the run view
+must surface `vertex_state` and must treat `status: "pending"` together with a
+terminal `vertex_state` as a failed run. Rendering `"pending"` for a job Vertex
+has already failed would be exactly the kind of overstatement §7 exists to stop.
+
+### 2. The worker's container environment is whatever `.env` happened to contain (1 failure)
+
+`test_create_submits_worker_readable_json` expects the worker container to receive
+exactly `DEV_MODE=false` and `VERTEX_MODEL_STORE`. `api.py:131-137` instead
+forwards `DEV_MODE` plus **every key `common/env.py` parsed out of the `.env`
+file** — in this deployment all 10, including `WORKER_SERVICE_ACCOUNT` and the
+machine spec, none of which the worker uses.
+
+Two distinct problems:
+
+- **It forwards too much.** Deployment settings the worker has no use for end up
+  in the job's container spec, which is visible in the Vertex console.
+- **It forwards nothing at all unless a `.env` file exists.** `DOTENV_KEYS` is
+  populated only by parsing that file. An API process configured the way
+  containers normally are — docker compose `environment:`, Kubernetes env,
+  Cloud Run variables — has an empty `DOTENV_KEYS`, so the worker never receives
+  `VERTEX_MODEL_STORE` and `common/model_sync.py` silently falls back to its
+  placeholder default **`gs://TODO-bucket/model_store`**, which does not exist.
+  Weight sync then fails at run time, not at submit time.
+
+**This blocks phase 4.** The spec's `compose.yaml` supplies configuration through
+`environment:`, which is precisely the case that forwards nothing. Either the API
+container must get a real bind-mounted `.env`, or `api.py` should forward an
+explicit list read from the process environment. The second is the better fix and
+would make the test pass as written; it is a backend change, so it is not made
+here.

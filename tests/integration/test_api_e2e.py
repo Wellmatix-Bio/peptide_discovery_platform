@@ -22,9 +22,19 @@ def service(monkeypatch):
         "SEED_CANDIDATES_FILE": "gs://test/seeds.fasta",
         "WORKER_IMAGE_URI": "us-central1-docker.pkg.dev/test/images/worker:latest",
         "WORKER_SERVICE_ACCOUNT": "worker@test.iam.gserviceaccount.com",
+        # api.py reads all three through required(); there is no code fallback,
+        # so omitting them makes every create/status call a 503.
+        "MACHINE_TYPE": "g2-standard-4",
+        "ACCELERATOR_TYPE": "NVIDIA_L4",
+        "ACCELERATOR_COUNT": "1",
     }
     for key, value in settings.items():
         monkeypatch.setenv(key, value)
+    # NOTE: api.py forwards to the worker container only the keys common/env.py read
+    # from a .env FILE (env.DOTENV_KEYS), not the process environment. A test
+    # checkout has no .env, so only DEV_MODE is forwarded and the container_spec
+    # env assertion in test_create_submits_worker_readable_json fails. Left failing
+    # deliberately: see docs/BASELINE.md, "Open questions for the backend owner".
     objects, calls = {}, []
     job = SimpleNamespace(
         name=JOB,
@@ -52,6 +62,8 @@ def service(monkeypatch):
         api.storage, "write_text", lambda path, data: objects.__setitem__(path, data)
     )
     monkeypatch.setattr(api.storage, "read_text", lambda path: objects[path])
+    # get_job_status() calls exists() before read_text(); unmocked it reaches real GCS.
+    monkeypatch.setattr(api.storage, "exists", lambda path: path in objects)
     example = (
         Path(__file__).resolve().parents[2] / "src/backend/api_e2e/example_request.json"
     )
@@ -65,7 +77,10 @@ def test_create_submits_worker_readable_json(service):
     assert response.status_code == 202, response.text
     result = response.json()
     assert result["job_id"] == JOB
-    config = load_job_config(result["config_path"])
+    # CreateJobResponse carries result_path, not config_path; api.py writes the
+    # run config to <result_path>/config.json.
+    config_path = result["result_path"] + "/config.json"
+    config = load_job_config(config_path)
     assert config.run_id == "456"
     assert "run_id" not in result
     assert result["result_path"] == "gs://test/artifacts/runs/456"
@@ -78,7 +93,7 @@ def test_create_submits_worker_readable_json(service):
     assert args[0] == "--config"
     assert args[2:] == ["--wait-for-config", "120"]
     assert load_job_config(args[1]).run_id == "456"
-    assert objects[args[1]] == objects[result["config_path"]]
+    assert objects[args[1]] == objects[config_path]
     assert {e["name"]: e["value"] for e in pool["container_spec"]["env"]} == {
         "DEV_MODE": "false",
         "VERTEX_MODEL_STORE": config.model_store,
@@ -116,7 +131,7 @@ def test_flat_stage_can_be_disabled(service):
     payload["stages"]["s07_structure_mechanism"]["enabled"] = False
     response = client.post("/api/v1/jobs/create", json=payload)
     assert response.status_code == 202, response.text
-    config = load_job_config(response.json()["config_path"])
+    config = load_job_config(response.json()["result_path"] + "/config.json")
     stage = config.for_stage("s07_structure_mechanism")
     assert stage.enabled is False
     assert "enabled" not in stage.params

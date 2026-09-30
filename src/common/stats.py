@@ -4,6 +4,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING
+from common import storage
 
 if TYPE_CHECKING:
     from pipeline.base import CandidateStageResult
@@ -61,11 +62,9 @@ def write_run_stats(
     n_final: int,
     duration_s: float,
     stage_results: list["CandidateStageResult"],
-) -> Path:
+) -> str | Path:
     """Write a plain-text funnel summary to `run_dir/stats_{run_id}.txt`."""
-    run_dir = Path(run_dir)
-    run_dir.mkdir(parents=True, exist_ok=True)
-    path = run_dir / f"stats_{run_id}.txt"
+    path = storage.join(run_dir, f"stats_{run_id}.txt")
 
     content = _format_stats(
         run_id=run_id,
@@ -74,5 +73,5 @@ def write_run_stats(
         duration_s=duration_s,
         stage_results=stage_results,
     )
-    path.write_text(content, encoding="utf-8")
-    return path
+    storage.write_text(path, content)
+    return path if storage.is_gcs_path(path) else Path(path)

@@ -1,0 +1,1150 @@
+openapi: 3.1.0
+info:
+  title: End-to-end Pipeline Jobs API
+  version: 1.0.0
+  description: Job creation and status checks only. Stage parameters are validated
+    by stage name. No application-level authentication is defined.
+paths:
+  /api/v1/jobs/create:
+    post:
+      summary: Submit a full pipeline job
+      operationId: createJob
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateJobRequest'
+            example:
+              request_id: request-001
+              stages:
+                s01_therapeutic_product_brief:
+                  brief:
+                    wound_context:
+                    - chronic
+                    - infected
+                    - high_glucose
+                    - ischemic
+                    desired_functions:
+                    - antimicrobial
+                    - keratinocyte_migration
+                    - angiogenesis
+                    - anti_inflammatory
+                    pathogens:
+                    - Staphylococcus_aureus
+                    - Pseudomonas_aeruginosa
+                    min_length: 6
+                    max_length: 30
+                    dosing_interval_hours: 48
+                  seed: 42
+                s04_candidate_generation:
+                  tags:
+                  - <AMP>
+                  n_peptides: 100
+                  max_new_tokens: 120
+                  batch_size: 16
+                  max_attempts: 20
+                  generator: null
+                  route_a_ga_params:
+                    pop_size: 3
+                    n_generations: 5
+                    mutation_rate: 0.1
+                    random_seed: 42
+                  route_a_constraint_config:
+                    charge_min: -3
+                    charge_max: 8
+                    hydro_min: -1
+                    hydro_max: 1
+                    aggregation_threshold: 3
+                    ph: 7.4
+                s05_physchem_screening:
+                  ph: 7.4
+                  solubility_solvent: Ultrapure water
+                  aggregation_tendency_flag_max: 0.75
+                  solubility_flag_min: 0.3
+                  amphipathicity_flag_max: 0.8
+                  isoelectric_point_flag_ph_window: 0.5
+                  ss_confidence_unstable_max: 0.5
+                  ss_confidence_ambiguous_max: 0.7
+                  risk_category_low_max: 0
+                  risk_category_medium_max: 2
+                s06_functional_models:
+                  stage6_thresholds:
+                    min_amp_probability: 0.7
+                    min_proliferation_migration: 0.5
+                    min_angiogenic_activity: 0.1
+                    min_anti_inflammatory_probability: 0.5
+                    max_mic:
+                      Escherichia_coli: 32.0
+                      Staphylococcus_aureus: 32.0
+                      Pseudomonas_aeruginosa: 32.0
+                    max_mbic:
+                      Pseudomonas_aeruginosa: 32.0
+                      Staphylococcus_aureus: 32.0
+                      Candida_albicans: 32.0
+                s07_structure_mechanism:
+                  plddt_low_confidence_max: 0.5
+                  pathway_engagement_min_probability: 0.5
+                  helix_phi_min: -100
+                  helix_phi_max: -30
+                  helix_psi_min: -77
+                  helix_psi_max: -5
+                  sheet_phi_min: -180
+                  sheet_phi_max: -45
+                  sheet_psi_min: 90
+                  sheet_psi_max: 180
+                s08_safety_developability:
+                  hemolysis_phc50_reject_max: 4
+                  solubility_solvent: Ultrapure water
+                  cytotoxicity_cell_type: DRAMP_aggregate
+                  cytotoxicity_reject_max: 0.5
+                  aggregation_reject_max: 0.7
+                  solubility_flag_min: 0.3
+                  cleavage_stability_reject_min: 0.3
+                  cleavage_decay_rate: 0.5
+                s09_synthesis_cmc:
+                  rejected_difficulty_classes:
+                  - high
+        required: true
+      responses:
+        '202':
+          description: Job submitted and configuration published; pipeline execution
+            is not yet complete.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreateJobResponse'
+              example:
+                request_id: request-001
+                job_id: projects/123/locations/us-central1/customJobs/456
+                result_path: gs://bucket/artifacts/runs/456
+        '422':
+          description: Malformed request body (schema-level validation, caught before
+            create_job runs) or a semantically invalid job config (e.g. min_length
+            > max_length, caught inside create_job). The former returns HTTPValidationError,
+            the latter ErrorResponse.
+          content:
+            application/json:
+              schema:
+                oneOf:
+                - $ref: '#/components/schemas/HTTPValidationError'
+                - $ref: '#/components/schemas/ErrorResponse'
+        '502':
+          description: Google API or config publication failed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '503':
+          description: Missing server configuration or credentials, or invalid storage
+            settings.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+      description: Returns after job submission and publication of config.json. The
+        numeric Vertex job ID becomes the internal run ID. Request IDs are not deduplicated;
+        use a unique request ID per submission to avoid sharing the request-path config.
+  /api/v1/jobs/{job_id}/status:
+    get:
+      summary: Read the current Vertex job state
+      operationId: getJobStatus
+      parameters:
+      - name: job_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Job Id
+          pattern: ^projects/[^/]+/locations/[^/]+/customJobs/[0-9]+$
+          examples:
+          - projects/123/locations/us-central1/customJobs/456
+        description: Full resource name, e.g. projects/123/locations/us-central1/customJobs/456.
+          Contains slash-separated path segments.
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JobStatusResponse'
+              example:
+                job_id: projects/123/locations/us-central1/customJobs/456
+                status: running
+                stage: s06_functional_models
+                vertex_state: JOB_STATE_RUNNING
+                error: null
+        '422':
+          description: Malformed job resource name.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Job not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '502':
+          description: Google API call failed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '503':
+          description: Missing server configuration or credentials.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+      description: job_id is the complete Vertex resource name containing slashes.
+        The server uses a catch-all path parameter; clients must preserve the resource
+        path. `stage` is the stage recorded in this run's results.json
+        (`"pending"` if the run hasn't written one yet) -- a worker-progress signal
+        independent of `status`, which reflects the Vertex job's own lifecycle
+        state only.
+  /api/v1/jobs/{job_id}/results:
+    get:
+      summary: Read a finished job's ranked candidates and score statistics
+      operationId: getJobResults
+      parameters:
+      - name: job_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Job Id
+          pattern: ^projects/[^/]+/locations/[^/]+/customJobs/[0-9]+$
+          examples:
+          - projects/123/locations/us-central1/customJobs/456
+        description: Full resource name, e.g. projects/123/locations/us-central1/customJobs/456.
+          Contains slash-separated path segments.
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JobResultsResponse'
+              example:
+                job_id: projects/123/locations/us-central1/customJobs/456
+                run_id: '456'
+                status: success
+                n_final: 12
+                ranked_candidates: 10
+                insufficient_evidence_candidates: 2
+                component_stats:
+                  wound_closure:
+                    count: 10
+                    mean: 0.62
+                    median: 0.60
+                    min: 0.31
+                    max: 0.94
+                candidates:
+                - id: cand-001
+                  amp_probability: 0.91
+                  hemolytic_activity_phc50: 5.2
+                  molecular_weight: 2140.6
+                  net_charge: 4.0
+                  instability_index: 28.4
+                  deamidation_risk: low
+                  oxidation_risk: medium
+                  solubility: 0.72
+                  aggregation_tendency: 0.21
+                  anti_inflammatory_probability: 0.64
+                  angiogenic_activity: 0.33
+                  proliferation_probability: 0.58
+                  migration_probability: 0.61
+                  cytotoxicity_probability: 0.12
+                  cleavage_stability: 0.77
+                  log_mic_um:
+                    Escherichia coli: 0.9
+                    Staphylococcus aureus: 1.1
+                  pmbic:
+                    Staphylococcus aureus: 4.3
+                  engaged_pathways:
+                  - PI3K-Akt
+        '404':
+          description: Job results not found, or the job succeeded but candidates_final.json
+            is missing.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Malformed job resource name.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '503':
+          description: Missing server configuration or credentials.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+      description: Reads run_dir/results.json for job status; if the job succeeded,
+        also reads candidates_final.json and computes per-component mean/median/min/max
+        over normalized_scores of candidates with ranking status "ranked". Jobs
+        that are still running or failed return status only, with an empty candidates
+        list. Worker output files, not the live Vertex job state, are the source
+        of truth here.
+  /api/v1/jobs/{job_id}/cancel:
+    post:
+      summary: Request cancellation of a running Vertex job
+      operationId: cancelJob
+      parameters:
+      - name: job_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Job Id
+          pattern: ^projects/[^/]+/locations/[^/]+/customJobs/[0-9]+$
+          examples:
+          - projects/123/locations/us-central1/customJobs/456
+        description: Full resource name, e.g. projects/123/locations/us-central1/customJobs/456.
+          Contains slash-separated path segments.
+      responses:
+        '200':
+          description: Cancellation requested; the job may still take time to
+            actually stop.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  job_id:
+                    type: string
+                  status:
+                    type: string
+                    enum:
+                    - cancelling
+                example:
+                  job_id: projects/123/locations/us-central1/customJobs/456
+                  status: cancelling
+        '404':
+          description: Job not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Malformed job resource name.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '502':
+          description: Google API call failed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '503':
+          description: Missing server configuration or credentials.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+      description: Does not wait for the job to actually stop; poll status
+        separately to confirm.
+components:
+  schemas:
+    CreateJobRequest:
+      properties:
+        request_id:
+          type: string
+          minLength: 1
+          title: Request Id
+        stages:
+          $ref: '#/components/schemas/E2ERequest'
+      additionalProperties: false
+      type: object
+      required:
+      - request_id
+      - stages
+      title: CreateJobRequest
+    CreateJobResponse:
+      properties:
+        request_id:
+          type: string
+          title: Request Id
+        job_id:
+          type: string
+          title: Job Id
+        result_path:
+          type: string
+          title: Result Path
+      type: object
+      required:
+      - request_id
+      - job_id
+      - result_path
+      title: CreateJobResponse
+    JobStatusResponse:
+      properties:
+        job_id:
+          type: string
+          title: Job Id
+        status:
+          type: string
+          title: Status
+          enum:
+          - pending
+          - running
+          - success
+          - fail
+          - stopped
+        stage:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Stage
+          default: pending
+          description: Stage the worker was on at its last progress write in
+            results.json, or "pending" if none has been written yet. The
+            handler substitutes "pending" for a missing value, so clients
+            should not normally see null.
+        vertex_state:
+          type: string
+          title: Vertex State
+        error:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Error
+      type: object
+      required:
+      - job_id
+      - status
+      - vertex_state
+      title: JobStatusResponse
+    ComponentStats:
+      properties:
+        count:
+          type: integer
+          title: Count
+        mean:
+          type: number
+          title: Mean
+        median:
+          type: number
+          title: Median
+        min:
+          type: number
+          title: Min
+        max:
+          type: number
+          title: Max
+      type: object
+      required:
+      - count
+      - mean
+      - median
+      - min
+      - max
+      title: ComponentStats
+    JobResultsResponse:
+      properties:
+        job_id:
+          type: string
+          title: Job Id
+        run_id:
+          type: string
+          title: Run Id
+        status:
+          type: string
+          title: Status
+        n_final:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: N Final
+        ranked_candidates:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Ranked Candidates
+        insufficient_evidence_candidates:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Insufficient Evidence Candidates
+        component_stats:
+          type: object
+          additionalProperties:
+            $ref: '#/components/schemas/ComponentStats'
+          title: Component Stats
+        candidates:
+          type: array
+          items:
+            $ref: '#/components/schemas/CandidateResponse'
+          default: []
+          title: Candidates
+      type: object
+      required:
+      - job_id
+      - run_id
+      - status
+      title: JobResultsResponse
+    CandidateResponse:
+      description: Flattened per-candidate summary projected from the candidate's
+        predictions in candidates_final.json. Scalar fields are null when the
+        producing stage did not run or abstained; log_mic_um and pmbic are empty
+        objects in that case. Unlisted predictions are not returned.
+      properties:
+        id:
+          type: string
+          title: Id
+        amp_probability:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Amp Probability
+          description: predictions.amp_probability
+        hemolytic_activity_phc50:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Hemolytic Activity Phc50
+          description: predictions.hemolysis.phc50
+        molecular_weight:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Molecular Weight
+          description: predictions.molecular_weight, in Daltons
+        net_charge:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Net Charge
+          description: predictions.net_charge
+        instability_index:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Instability Index
+          description: predictions.instability_index
+        deamidation_risk:
+          anyOf:
+          - type: string
+            enum:
+            - low
+            - medium
+            - high
+          - type: 'null'
+          title: Deamidation Risk
+          description: predictions.deamidation_risk.risk_category
+        oxidation_risk:
+          anyOf:
+          - type: string
+            enum:
+            - low
+            - medium
+            - high
+          - type: 'null'
+          title: Oxidation Risk
+          description: predictions.oxidation_risk.risk_category
+        solubility:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Solubility
+          description: predictions.solubility.score
+        aggregation_tendency:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Aggregation Tendency
+          description: predictions.aggregation_tendency.score
+        anti_inflammatory_probability:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Anti Inflammatory Probability
+          description: predictions.anti_inflammatory_probability
+        angiogenic_activity:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Angiogenic Activity
+          description: predictions.angiogenic_activity.angiogenic
+        proliferation_probability:
+          anyOf:
+          - type: number
+          - type: 'null'
+          default: 0
+          title: Proliferation Probability
+          description: predictions.proliferation_migration.proliferation. Note the
+            default is 0, not null, when absent.
+        migration_probability:
+          anyOf:
+          - type: number
+          - type: 'null'
+          default: 0
+          title: Migration Probability
+          description: predictions.proliferation_migration.migration. Note the
+            default is 0, not null, when absent.
+        cytotoxicity_probability:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Cytotoxicity Probability
+          description: predictions.cytotoxicity.score
+        cleavage_stability:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Cleavage Stability
+          description: predictions.cleavage_stability.score
+        log_mic_um:
+          type: object
+          propertyNames:
+            enum:
+            - Escherichia coli
+            - Staphylococcus aureus
+            - Pseudomonas aeruginosa
+          additionalProperties:
+            type: number
+          title: Log Mic Um
+          description: predictions.mic.log_mic_um, keyed by pathogen name with a
+            space (not an underscore)
+        pmbic:
+          type: object
+          propertyNames:
+            enum:
+            - Acinetobacter baumannii
+            - Candida albicans
+            - Candida tropicalis
+            - Cutibacterium acnes
+            - Enterococcus faecium
+            - Escherichia coli
+            - Klebsiella pneumoniae
+            - Pseudomonas aeruginosa
+            - Salmonella enterica
+            - Staphylococcus aureus
+            - Staphylococcus epidermidis
+            - Streptococcus mutans
+            - Streptococcus sanguinis
+          additionalProperties:
+            type: number
+          title: Pmbic
+          description: predictions.mbic.pmbic, keyed by pathogen name with a space
+        engaged_pathways:
+          anyOf:
+          - type: array
+            items:
+              type: string
+          - type: 'null'
+          title: Engaged Pathways
+          description: predictions.mechanism.engaged_pathways
+      type: object
+      required:
+      - id
+      - log_mic_um
+      - pmbic
+      title: CandidateResponse
+    BriefFields:
+      properties:
+        wound_context:
+          description: Context of the wound
+          items:
+            enum:
+            - acute
+            - biofilm_positive
+            - burn
+            - chronic
+            - clean
+            - diabetic
+            - high_exudate
+            - high_glucose
+            - infected
+            - ischemic
+            - low_perfusion
+            - necrotic
+            - radiation_induced
+            - surgical
+            - traumatic
+            type: string
+          title: Wound Context
+          type: array
+        desired_functions:
+          description: Desired functions of the therapeutic product
+          items:
+            enum:
+            - angiogenesis
+            - anti_inflammatory
+            - antimicrobial
+            - cell_proliferation/migration
+            - collagen_remodeling
+            - collagen_synthesis
+            - fibroblast_migration
+            - immunomodulation
+            - keratinocyte_migration
+            type: string
+          title: Desired Functions
+          type: array
+        pathogens:
+          items:
+            enum:
+            - Escherichia_coli
+            - Staphylococcus_aureus
+            - Pseudomonas_aeruginosa
+            type: string
+          title: Pathogens
+          type: array
+        min_length:
+          maximum: 50
+          minimum: 6
+          title: Min Length
+          type: integer
+        max_length:
+          maximum: 50
+          minimum: 6
+          title: Max Length
+          type: integer
+        dosing_interval_hours:
+          maximum: 168
+          minimum: 1
+          title: Dosing Interval Hours
+          type: integer
+      required:
+      - wound_context
+      - desired_functions
+      - pathogens
+      - min_length
+      - max_length
+      - dosing_interval_hours
+      title: BriefFields
+      type: object
+    RouteAGAParams:
+      properties:
+        pop_size:
+          default: 3
+          title: Pop Size
+          type: integer
+        n_generations:
+          default: 5
+          title: N Generations
+          type: integer
+        mutation_rate:
+          default: 0.1
+          title: Mutation Rate
+          type: number
+        random_seed:
+          default: 42
+          title: Random Seed
+          type: integer
+      title: RouteAGAParams
+      type: object
+    RouteAConstraintConfig:
+      properties:
+        charge_min:
+          default: -3.0
+          title: Charge Min
+          type: number
+        charge_max:
+          default: 8.0
+          title: Charge Max
+          type: number
+        hydro_min:
+          default: -1.0
+          title: Hydro Min
+          type: number
+        hydro_max:
+          default: 1.0
+          title: Hydro Max
+          type: number
+        aggregation_threshold:
+          default: 3.0
+          title: Aggregation Threshold
+          type: number
+        ph:
+          default: 7.4
+          title: Ph
+          type: number
+      title: RouteAConstraintConfig
+      type: object
+    Stage6Thresholds:
+      properties:
+        min_amp_probability:
+          default: 0.7
+          title: Min Amp Probability
+          type: number
+        min_proliferation_migration:
+          default: 0.5
+          title: Min Proliferation Migration
+          type: number
+        min_angiogenic_activity:
+          default: 0.1
+          title: Min Angiogenic Activity
+          type: number
+        min_anti_inflammatory_probability:
+          default: 0.5
+          title: Min Anti Inflammatory Probability
+          type: number
+        max_mic:
+          additionalProperties:
+            type: number
+          default:
+            Escherichia_coli: 32.0
+            Staphylococcus_aureus: 32.0
+            Pseudomonas_aeruginosa: 32.0
+          title: Max Mic
+          type: object
+        max_mbic:
+          additionalProperties:
+            type: number
+          default:
+            Pseudomonas_aeruginosa: 32.0
+            Staphylococcus_aureus: 32.0
+            Candida_albicans: 32.0
+          title: Max Mbic
+          type: object
+      title: Stage6Thresholds
+      type: object
+    Stage1Request:
+      properties:
+        brief:
+          $ref: '#/components/schemas/BriefFields'
+        seed:
+          default: 42
+          description: Random seed for reproducibility
+          title: Seed
+          type: integer
+        enabled:
+          type: boolean
+          default: true
+          title: Enabled
+      additionalProperties: false
+      type: object
+      required:
+      - brief
+      title: Stage1Request
+    Stage4Request:
+      properties:
+        tags:
+          default:
+          - <AMP>
+          items:
+            enum:
+            - <AMP>
+            - <ANTIBIOFILM>
+            - <ANTIBACTERIAL>
+            type: string
+          title: Tags
+          type: array
+        n_peptides:
+          default: 100
+          title: N Peptides
+          type: integer
+        max_new_tokens:
+          default: 120
+          title: Max New Tokens
+          type: integer
+        batch_size:
+          default: 16
+          title: Batch Size
+          type: integer
+        max_attempts:
+          default: 20
+          title: Max Attempts
+          type: integer
+        generator:
+          anyOf:
+          - type: string
+          - type: 'null'
+          default: null
+          title: Generator
+        route_a_ga_params:
+          $ref: '#/components/schemas/RouteAGAParams'
+          default:
+            pop_size: 3
+            n_generations: 5
+            mutation_rate: 0.1
+            random_seed: 42
+        route_a_constraint_config:
+          $ref: '#/components/schemas/RouteAConstraintConfig'
+          default:
+            charge_min: -3.0
+            charge_max: 8.0
+            hydro_min: -1.0
+            hydro_max: 1.0
+            aggregation_threshold: 3.0
+            ph: 7.4
+        enabled:
+          type: boolean
+          default: true
+          title: Enabled
+      additionalProperties: false
+      type: object
+      title: Stage4Request
+    Stage5Request:
+      properties:
+        ph:
+          default: 7.4
+          title: Ph
+          type: number
+        solubility_solvent:
+          default: Ultrapure water
+          title: Solubility Solvent
+          type: string
+        aggregation_tendency_flag_max:
+          default: 0.6
+          title: Aggregation Tendency Flag Max
+          type: number
+        solubility_flag_min:
+          default: 0.4
+          title: Solubility Flag Min
+          type: number
+        amphipathicity_flag_max:
+          default: 0.8
+          title: Amphipathicity Flag Max
+          type: number
+        isoelectric_point_flag_ph_window:
+          default: 0.5
+          title: Isoelectric Point Flag Ph Window
+          type: number
+        ss_confidence_unstable_max:
+          default: 0.5
+          title: Ss Confidence Unstable Max
+          type: number
+        ss_confidence_ambiguous_max:
+          default: 0.7
+          title: Ss Confidence Ambiguous Max
+          type: number
+        risk_category_low_max:
+          default: 0
+          title: Risk Category Low Max
+          type: integer
+        risk_category_medium_max:
+          default: 2
+          title: Risk Category Medium Max
+          type: integer
+        enabled:
+          type: boolean
+          default: true
+          title: Enabled
+      additionalProperties: false
+      type: object
+      title: Stage5Request
+    Stage6Request:
+      properties:
+        stage6_thresholds:
+          $ref: '#/components/schemas/Stage6Thresholds'
+          default:
+            min_amp_probability: 0.7
+            min_proliferation_migration: 0.5
+            min_angiogenic_activity: 0.1
+            min_anti_inflammatory_probability: 0.5
+            max_mic:
+              Escherichia_coli: 32.0
+              Staphylococcus_aureus: 32.0
+              Pseudomonas_aeruginosa: 32.0
+            max_mbic:
+              Pseudomonas_aeruginosa: 32.0
+              Staphylococcus_aureus: 32.0
+              Candida_albicans: 32.0
+        enabled:
+          type: boolean
+          default: true
+          title: Enabled
+      additionalProperties: false
+      type: object
+      title: Stage6Request
+    Stage7Request:
+      properties:
+        plddt_low_confidence_max:
+          default: 0.5
+          title: Plddt Low Confidence Max
+          type: number
+        pathway_engagement_min_probability:
+          default: 0.5
+          title: Pathway Engagement Min Probability
+          type: number
+        helix_phi_min:
+          default: -100.0
+          title: Helix Phi Min
+          type: number
+        helix_phi_max:
+          default: -30.0
+          title: Helix Phi Max
+          type: number
+        helix_psi_min:
+          default: -77.0
+          title: Helix Psi Min
+          type: number
+        helix_psi_max:
+          default: -5.0
+          title: Helix Psi Max
+          type: number
+        sheet_phi_min:
+          default: -180.0
+          title: Sheet Phi Min
+          type: number
+        sheet_phi_max:
+          default: -45.0
+          title: Sheet Phi Max
+          type: number
+        sheet_psi_min:
+          default: 90.0
+          title: Sheet Psi Min
+          type: number
+        sheet_psi_max:
+          default: 180.0
+          title: Sheet Psi Max
+          type: number
+        enabled:
+          type: boolean
+          default: true
+          title: Enabled
+      additionalProperties: false
+      type: object
+      title: Stage7Request
+    Stage8Request:
+      properties:
+        hemolysis_phc50_reject_max:
+          default: 4.0
+          title: Hemolysis Phc50 Reject Max
+          type: number
+        solubility_solvent:
+          default: Ultrapure water
+          title: Solubility Solvent
+          type: string
+        cytotoxicity_cell_type:
+          default: DRAMP_aggregate
+          enum:
+          - DBAASP_no_cytotoxicity_hit
+          - DRAMP_aggregate
+          - Human PBMC
+          - Human Primary Epidermal Keratinocytes (HEK)
+          - Human keratinocytes HaCat
+          - Human microvascular endothelial cells HMEC-1
+          - Human skin fibroblasts
+          title: Cytotoxicity Cell Type
+          type: string
+        cytotoxicity_reject_max:
+          default: 0.5
+          title: Cytotoxicity Reject Max
+          type: number
+        aggregation_reject_max:
+          default: 0.7
+          title: Aggregation Reject Max
+          type: number
+        solubility_flag_min:
+          default: 0.3
+          title: Solubility Flag Min
+          type: number
+        cleavage_stability_reject_min:
+          default: 0.3
+          title: Cleavage Stability Reject Min
+          type: number
+        cleavage_decay_rate:
+          default: 0.5
+          title: Cleavage Decay Rate
+          type: number
+        enabled:
+          type: boolean
+          default: true
+          title: Enabled
+      additionalProperties: false
+      type: object
+      title: Stage8Request
+    Stage9Request:
+      properties:
+        rejected_difficulty_classes:
+          default:
+          - high
+          items:
+            type: string
+          title: Rejected Difficulty Classes
+          type: array
+        enabled:
+          type: boolean
+          default: true
+          title: Enabled
+      additionalProperties: false
+      type: object
+      title: Stage9Request
+    E2ERequest:
+      type: object
+      additionalProperties: false
+      required:
+      - s01_therapeutic_product_brief
+      - s04_candidate_generation
+      - s05_physchem_screening
+      - s06_functional_models
+      - s07_structure_mechanism
+      - s08_safety_developability
+      - s09_synthesis_cmc
+      properties:
+        s01_therapeutic_product_brief:
+          $ref: '#/components/schemas/Stage1Request'
+        s04_candidate_generation:
+          $ref: '#/components/schemas/Stage4Request'
+        s05_physchem_screening:
+          $ref: '#/components/schemas/Stage5Request'
+        s06_functional_models:
+          $ref: '#/components/schemas/Stage6Request'
+        s07_structure_mechanism:
+          $ref: '#/components/schemas/Stage7Request'
+        s08_safety_developability:
+          $ref: '#/components/schemas/Stage8Request'
+        s09_synthesis_cmc:
+          $ref: '#/components/schemas/Stage9Request'
+      description: >-
+        One field per client-configurable stage, each stage's own params
+        flattened together with its `enabled` flag (no a nested params wrapper).
+        Every field is required to be present -- a bare {} accepts that
+        stage's defaults, but omitting the key entirely is a 422. Extra keys
+        anywhere in the request, including unrecognized per-stage keys, are
+        also a 422. s02_wound_biology_and_targets, s03_data_integration, and
+        s11_ranking are deliberately absent -- the server always overrides
+        them itself (s02/s03 force-disabled, s11 always uses its built-in
+        ranking policy), so a client including any of them is rejected rather
+        than silently ignored.
+    ErrorResponse:
+      type: object
+      required:
+      - detail
+      properties:
+        detail:
+          type: string
+      description: Body shape for every manually-raised HTTPException in this
+        API (404/422/502/503 responses raised from inside a route handler).
+    ValidationError:
+      properties:
+        loc:
+          items:
+            anyOf:
+            - type: string
+            - type: integer
+          type: array
+          title: Location
+        msg:
+          type: string
+          title: Message
+        type:
+          type: string
+          title: Error Type
+      type: object
+      required:
+      - loc
+      - msg
+      - type
+      title: ValidationError
+    HTTPValidationError:
+      properties:
+        detail:
+          items:
+            $ref: '#/components/schemas/ValidationError'
+          type: array
+          title: Detail
+      type: object
+      title: HTTPValidationError
+      description: Body shape FastAPI returns automatically when the request
+        body fails schema validation (e.g. a missing required field, a wrong
+        type, or an extra key) before the route handler ever runs. Distinct
+        from ErrorResponse, which covers errors the handler raises itself.

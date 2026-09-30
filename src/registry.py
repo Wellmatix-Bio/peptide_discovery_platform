@@ -15,9 +15,15 @@ from pipeline.s11_ranking.stage import Stage11
 from schemas.run_config import RunConfig
 
 SETUP_STAGE_CLASSES = [Stage1, Stage2, Stage3]
-
-# s10, s12-s14 are not implemented yet.
-CANDIDATE_STAGE_CLASSES = [Stage4, Stage5, Stage6, Stage7, Stage8, Stage9, Stage11]
+CANDIDATE_STAGE_CLASSES: list[CandidateStage] = [
+    Stage4,
+    Stage5,
+    Stage6,
+    Stage7,
+    Stage8,
+    Stage9,
+    Stage11,
+]
 
 
 def build_stages(config: RunConfig) -> tuple[list[SetupStage], list[CandidateStage]]:

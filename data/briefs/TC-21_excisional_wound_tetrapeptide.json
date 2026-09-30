@@ -1,0 +1,29 @@
+{
+    "case_id": "TC-21_excisional_wound_tetrapeptide",
+    "wound_context": [
+        "acute",
+        "clean"
+    ],
+    "desired_functions": [
+        "fibroblast_migration",
+        "re_epithelialization",
+        "collagen_synthesis",
+        "scar_reduction"
+    ],
+    "pathogens": [],
+    "min_length": 4,
+    "max_length": 4,
+    "dosing_interval_hours": 24,
+    "duration_days": 18,
+    "manufacturing": {
+        "method": "solid_phase_synthesis"
+    },
+    "stage": "discovery",
+    "reference_peptide": {
+        "name": "Palmitoyl-GDPH",
+        "sequence": "Palmitoyl-GDPH",
+        "source_organism": "synthetic_fatty_acid_conjugated"
+    },
+    "literature_source": "Fadilah et al. 2020/2021 (refs 102,103)",
+    "notes": "4-residue lipidated peptide; 18-day rat topical treatment gave near-complete healing, increased re-epithelialization/collagen, diminished scarring, no organ toxicity."
+}

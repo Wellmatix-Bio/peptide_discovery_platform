@@ -1,6 +1,5 @@
 {
     "case_id": "TC-20_edge_case_invalid_inputs",
-    "indication": "",
     "wound_context": [
         "chronic",
         "chronic",
@@ -14,13 +13,9 @@
         "MRSA",
         "influenza_virus"
     ],
-    "delivery_system": "intravenous_infusion",
+    "min_length": 6,
     "max_length": -5,
     "dosing_interval_hours": 0,
-    "release_target_hours": 10000,
-    "safety_constraints": {
-        "hemolysis": "maximum"
-    },
     "manufacturing": {
         "method": "ribosomal_expression",
         "max_cost_per_gram_usd": 0

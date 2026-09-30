@@ -1,0 +1,28 @@
+{
+    "case_id": "TC-22_infected_wound_scorpion_peptide",
+    "wound_context": [
+        "acute",
+        "infected"
+    ],
+    "desired_functions": [
+        "antimicrobial",
+        "re_epithelialization"
+    ],
+    "pathogens": [
+        "Staphylococcus_aureus"
+    ],
+    "min_length": 6,
+    "max_length": 17,
+    "dosing_interval_hours": 24,
+    "manufacturing": {
+        "method": "solid_phase_synthesis"
+    },
+    "stage": "discovery",
+    "reference_peptide": {
+        "name": "Stigmurin",
+        "sequence": "linear_17aa",
+        "source_organism": "Tityus_stigmurus_scorpion_venom"
+    },
+    "literature_source": "Daniele-Silva et al. 2021 (ref 161)",
+    "notes": "In vivo S. aureus wound infection model; significant antibacterial effect plus accelerated healing."
+}

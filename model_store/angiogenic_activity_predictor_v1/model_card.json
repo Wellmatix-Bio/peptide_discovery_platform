@@ -1,0 +1,82 @@
+{
+  "model_name": "angiogenic_activity_predictor_v1",
+  "target": "angiogenic_dominant",
+  "feature_cols": [
+    "length",
+    "net_charge",
+    "hydrophobicity_mean",
+    "hydrophobic_moment",
+    "boman_index",
+    "aromatic_fraction",
+    "cationic_fraction",
+    "anionic_fraction",
+    "polar_fraction",
+    "aliphatic_fraction",
+    "proline_fraction",
+    "glycine_fraction",
+    "cysteine_fraction",
+    "charge_density",
+    "isoelectric_proxy",
+    "hydrophobic_fraction"
+  ],
+  "feature_computation": {
+    "length": "len(sequence)",
+    "net_charge": "Henderson-Hasselbalch net charge at pH 7.0 using side-chain pKa (K 10.5, R 12.5, H 6.0, D 3.9, E 4.1, C 8.3, Y 10.1) plus N-term pKa 9.0 and C-term pKa 2.0",
+    "hydrophobicity_mean": "mean Kyte-Doolittle hydrophobicity over residues",
+    "hydrophobic_moment": "Eisenberg hydrophobic moment assuming alpha-helix, 100 deg/residue, normalized by sequence length",
+    "boman_index": "negated mean Boman (1995) side-chain transfer free energy; higher = more protein-binding potential",
+    "aromatic_fraction": "fraction of residues in {F,W,Y}",
+    "cationic_fraction": "fraction of residues in {K,R,H}",
+    "anionic_fraction": "fraction of residues in {D,E}",
+    "polar_fraction": "fraction of residues in {S,T,N,Q,C,Y}",
+    "aliphatic_fraction": "fraction of residues in {A,V,L,I,M,G}",
+    "proline_fraction": "fraction of residues equal to P",
+    "glycine_fraction": "fraction of residues equal to G",
+    "cysteine_fraction": "fraction of residues equal to C",
+    "charge_density": "net_charge / length",
+    "isoelectric_proxy": "cationic_fraction - anionic_fraction",
+    "hydrophobic_fraction": "fraction of residues with positive Kyte-Doolittle value"
+  },
+  "n_physchem_features": 16,
+  "esm_model_name": "facebook/esm2_t30_150M_UR50D",
+  "esm_embed_dim": 640,
+  "esm_pooling": "mean-pool per-residue hidden states, excluding BOS/EOS",
+  "n_total_features_before_pca": 656,
+  "ensemble_architecture": "2 independently trained models (a 3rd, RandomForestClassifier, was trained in the source notebook but excluded from the deployed ensemble), each a Pipeline wrapping a ColumnTransformer([passthrough 16 physchem descriptors, StandardScaler->PCA(0.95 variance) over 640-dim ESM2 block]): SVC(probability=True) and a custom TorchMLPClassifier (3-layer MLP). Deployed prediction is the unweighted mean of the two models' P(angiogenic_dominant).",
+  "hyperparameters": {
+    "svm": {
+      "C": 1.0,
+      "kernel": "rbf",
+      "gamma": "scale",
+      "class_weight": {"0": 1, "1": 5},
+      "random_state": 0
+    },
+    "mlp": {
+      "hidden1": 32,
+      "hidden2": 16,
+      "lr": 0.001,
+      "weight_decay": 0.001,
+      "epochs": 300,
+      "pos_class_weight": 5,
+      "loss": "NLLLoss over log(softmax) output, class weights [1, 5]",
+      "seed": 0
+    },
+    "pca_variance_target": 0.95,
+    "note": "class_weight/pos_class_weight of 5 reflects heavy class imbalance (23 positive / 183 negative in training data)"
+  },
+  "training_data": {
+    "source_file": "datasets/ijms-2544295-supplementary.xlsx (Sheet1, header row 1)",
+    "n_rows_after_cleaning": 206,
+    "n_positive": 23,
+    "n_negative": 183,
+    "cleaning_filter": "Sequences non-null, fullmatch [ACDEFGHIKLMNPQRSTVWY]+, deduplicated by sequence; label = 'Angiogenesis ' column cast to int"
+  },
+  "deployment_object_provenance": "Each of the 2 deployed models (SVM, MLP) was fit ONCE on the FULL 206-row dataset (fit_production_model in pipeline_35M_embedder.ipynb, no held-out fold) -- the notebook's own designated deployable object, distinct from the per-fold models fit during LOOCV which exist only to produce honest out-of-sample metrics. A RandomForestClassifier was also fit but is not part of the deployed ensemble. Exported from 'Models/Angiogenic activity prediction/pipeline_35M_embedder.ipynb' (despite the filename, this run embeds with facebook/esm2_t30_150M_UR50D).",
+  "evaluation_metrics_source": "notebook's own per-fold Leave-One-Out CV (206 folds), NOT a direct evaluation of the deployed full-data-refit objects -- reported as the best available generalization estimate since the deployed objects have no held-out evaluation of their own",
+  "loo_cv_metrics": {
+    "svm": {"AUC": 0.732953, "ACC": 0.893204, "MCC": 0.273809, "F1": 0.266667, "Precision": 0.571429, "Recall": 0.173913, "n_folds": 206},
+    "mlp": {"AUC": 0.588976, "ACC": 0.859223, "MCC": 0.185068, "F1": 0.256410, "Precision": 0.312500, "Recall": 0.217391, "n_folds": 206},
+    "rf_not_deployed": {"AUC": 0.717273, "ACC": 0.888350, "MCC": 0.0, "F1": 0.0, "Precision": 0.0, "Recall": 0.0, "n_folds": 206}
+  },
+  "caveat": "Severe class imbalance (23/206 positive) and small n drive low MCC/Recall for both deployed models despite class-weighting. Treat angiogenic_dominant as a soft screening signal, not a high-confidence classifier."
+}

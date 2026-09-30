@@ -7,7 +7,6 @@ from types import SimpleNamespace
 import pytest
 from pydantic import ValidationError
 
-from pipeline.base import StageError
 from pipeline.s11_ranking.stage import (
     COMPONENTS,
     CandidateRanker,
@@ -412,27 +411,16 @@ def _config_dict() -> dict:
     }
 
 
-def test_run_requires_ranking_config_param():
-    stage = Stage11()
-    candidate = Candidate(id="c1", sequence="KLLK", predictions={})
-    with pytest.raises(StageError, match="ranking_config"):
-        stage.run([candidate], StageConfig(params={}), _make_ctx())
+def test_run_uses_builtin_policy_without_params():
+    candidate = Candidate(id="c1", sequence="KLLK", predictions={"amp_probability": 0.8})
+    result = Stage11().run([candidate], StageConfig(params={}), _make_ctx())
+    assert result[0].predictions["ranking"]["original_component_scores"]["antimicrobial"] == 0.8
 
 
-def test_run_rejects_both_config_params_at_once():
-    stage = Stage11()
-    candidate = Candidate(id="c1", sequence="KLLK", predictions={})
-    params = {"ranking_config": _config_dict(), "ranking_config_path": "configs/ranking.config.yaml"}
-    with pytest.raises(ValueError, match="not both"):
-        stage.run([candidate], StageConfig(params=params), _make_ctx())
-
-
-def test_run_rejects_unknown_param():
-    stage = Stage11()
-    candidate = Candidate(id="c1", sequence="KLLK", predictions={})
-    params = {"ranking_config": _config_dict(), "bogus_param": True}
-    with pytest.raises(ValueError, match="unknown Stage 11 parameters"):
-        stage.run([candidate], StageConfig(params=params), _make_ctx())
+@pytest.mark.parametrize("params", [{"ranking_config": {}}, {"ranking_config_path": "unused.yaml"}, {"bogus": True}])
+def test_run_rejects_policy_overrides(params):
+    with pytest.raises(ValueError, match="built into the code"):
+        Stage11().run([], StageConfig(params=params), _make_ctx())
 
 
 def test_run_maps_predictions_via_input_sources_and_uses_brief():
@@ -442,7 +430,7 @@ def test_run_maps_predictions_via_input_sources_and_uses_brief():
         predictions={"amp_probability": 0.9},
     )
     ctx = _make_ctx(brief=SimpleNamespace(wound_context=["infected"], desired_functions=[]))
-    survivors = stage.run([candidate], StageConfig(params={"ranking_config": _config_dict()}), ctx)
+    survivors = stage.run([candidate], StageConfig(params={}), ctx)
 
     assert len(survivors) == 1
     ranking = survivors[0].predictions["ranking"]
@@ -457,7 +445,7 @@ def test_run_with_no_brief_uses_empty_stage1():
     stage = Stage11()
     candidate = Candidate(id="c1", sequence="KLLK", predictions={"amp_probability": 0.5})
     ctx = _make_ctx(brief=None)
-    survivors = stage.run([candidate], StageConfig(params={"ranking_config": _config_dict()}), ctx)
+    survivors = stage.run([candidate], StageConfig(params={}), ctx)
     ranking = survivors[0].predictions["ranking"]
     assert ranking["stage1"]["wound_context"] == []
     assert ranking["stage1"]["desired_functions"] == []
@@ -467,7 +455,7 @@ def test_run_candidate_without_sequence_raises():
     stage = Stage11()
     candidate = Candidate(id="c1", sequence=None, predictions={})
     with pytest.raises(ValueError, match="no sequence"):
-        stage.run([candidate], StageConfig(params={"ranking_config": _config_dict()}), _make_ctx())
+        stage.run([candidate], StageConfig(params={}), _make_ctx())
 
 
 def test_run_orders_candidates_ranked_then_insufficient():
@@ -479,18 +467,9 @@ def test_run_orders_candidates_ranked_then_insufficient():
     ctx = _make_ctx()
     survivors = stage.run(
         [insufficient_candidate, ranked_candidate],
-        StageConfig(params={"ranking_config": _config_dict()}),
+        StageConfig(params={}),
         ctx,
     )
     assert [c.id for c in survivors] == ["ranked1", "insufficient1"]
-    assert stage.last_batch_result.total_candidates == 2
 
 
-def test_ranking_config_load_requires_path():
-    with pytest.raises(TypeError):
-        RankingConfig.load()  # type: ignore[call-arg]
-
-
-def test_ranking_config_load_missing_file_raises():
-    with pytest.raises(FileNotFoundError):
-        RankingConfig.load("this/path/does/not/exist.yaml")

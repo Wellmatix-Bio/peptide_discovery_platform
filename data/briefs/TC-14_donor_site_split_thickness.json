@@ -1,6 +1,5 @@
 {
     "case_id": "TC-14_donor_site_split_thickness",
-    "indication": "skin_graft_donor_site",
     "wound_context": [
         "acute",
         "uniform_depth",
@@ -13,14 +12,9 @@
         "anti_inflammatory"
     ],
     "pathogens": [],
-    "delivery_system": "nanofiber_dressing",
+    "min_length": 6,
     "max_length": 18,
     "dosing_interval_hours": 120,
-    "release_target_hours": 120,
-    "safety_constraints": {
-        "hemolysis": "low",
-        "human_cell_cytotoxicity": "low"
-    },
     "manufacturing": {
         "method": "solid_phase_synthesis",
         "electrospinning_compatible": true

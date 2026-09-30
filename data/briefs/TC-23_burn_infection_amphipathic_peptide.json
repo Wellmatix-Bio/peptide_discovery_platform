@@ -1,0 +1,28 @@
+{
+    "case_id": "TC-23_burn_infection_amphipathic_peptide",
+    "wound_context": [
+        "acute",
+        "infected",
+        "high_exudate"
+    ],
+    "desired_functions": [
+        "antimicrobial"
+    ],
+    "pathogens": [
+        "MRSA"
+    ],
+    "min_length": 6,
+    "max_length": 30,
+    "dosing_interval_hours": 24,
+    "manufacturing": {
+        "method": "solid_phase_synthesis"
+    },
+    "stage": "discovery",
+    "reference_peptide": {
+        "name": "WRL3",
+        "sequence": "engineered_amphipathic",
+        "source_organism": "synthetic"
+    },
+    "literature_source": "Ma et al. 2017, ACS Infect Dis (ref 157)",
+    "notes": "Destroys bacterial cytoplasmic membrane; validated in MRSA burn-wound infection model."
+}

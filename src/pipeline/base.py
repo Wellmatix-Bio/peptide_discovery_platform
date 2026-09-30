@@ -78,12 +78,10 @@ class RunContext:
     """
 
     run_id: str
-    schema_version: int
     audit: AuditWriter
     boundary: BoundaryWriter
     models: ModelRegistry
     feature_extractor: FeatureExtractor
-    use_feature_cache: bool = False
     seed: int = 42
 
     # populated by setup stages / loaded at startup
@@ -113,7 +111,7 @@ class CandidateStageResult:
     n_out: int
     n_removed: int
     duration_s: float
-    models_used: list[ModelRef] = field(default_factory=list)
+    # models_used: list[ModelRef] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
 
 
@@ -216,14 +214,6 @@ class CandidateStage(Stage):
         """
         return []
 
-    def release_models(self) -> None:
-        """Free this stage's cached GPU models. No-op by default.
-
-        Override in stages that lazy-cache models in module-level globals
-        (see common.gpu.release_stage_models) — a no-op outside DEV_MODE.
-        """
-        return None
-
     def execute(
         self,
         candidates: list[Candidate],
@@ -254,13 +244,13 @@ class CandidateStage(Stage):
             n_out=len(survivors),
             n_removed=n_in - len(survivors),
             duration_s=duration,
-            models_used=self.models_used(),
+            # models_used=self.models_used(),
             warnings=warnings,
         )
 
         ctx.audit.record_stage(result, run_id=ctx.run_id)
         ctx.boundary.write(self.name, survivors, run_id=ctx.run_id)
-        self.release_models()
+        # self.release_models()
 
         logger.info(
             "stage.done",

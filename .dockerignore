@@ -1,0 +1,28 @@
+.git
+.gitignore
+.venv
+venv
+__pycache__
+*.pyc
+.pytest_cache
+.vscode
+.claude
+
+# Model weights are synced from GCS at runtime, never baked into an image.
+model_store/model_weights/
+model_store/hemolysis_predictor_v2/*
+!model_store/hemolysis_predictor_v2/__init__.py
+!model_store/hemolysis_predictor_v2/predictor.py
+
+# Local run artifacts, not part of either image.
+artifacts/
+data/raw/
+configs/runs/
+configs/test_cases/
+configs/base.yaml
+configs/test_run.yaml
+
+.env
+.env.example
+README.md
+docs/

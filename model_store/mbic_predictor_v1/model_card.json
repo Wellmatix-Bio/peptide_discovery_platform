@@ -1,0 +1,62 @@
+{
+  "target": "pMBIC = 6 - log10(activity_uM); activity_uM = 10 ** (6 - pMBIC)",
+  "model_type": "ensemble: SVR (kernel=rbf, C=10.0, epsilon=0.1, gamma=scale) + RandomForestRegressor (n_estimators=300, max_depth=None, min_samples_leaf=2, random_state=42), unweighted mean of the two predictions",
+  "feature_order": ["species_onehot (13)", "physchem_scaled (14)", "esm2_pca (27)"],
+  "n_features_total": 54,
+  "physchem_cols": [
+    "charge", "charge_density", "gravy", "hydrophobic_moment", "amphipathicity",
+    "helical_propensity", "aliphatic_index", "aromaticity", "boman_index",
+    "instability_index", "isoelectric_point", "hydrophobic_ratio", "length",
+    "d_residue_fraction"
+  ],
+  "physchem_notes": {
+    "charge_ph": 7.4,
+    "charge_pka_set": "Bjellqvist (modlAMP default)",
+    "hydrophobic_moment": "Eisenberg scale, calculate_moment(window=18, angle=100, modality=max)",
+    "amphipathicity": "custom, not native modlAMP: hydrophobic_moment / mean(abs(eisenberg per-residue H))",
+    "helical_propensity": "levitt_alpha scale, calculate_global(modality=mean)",
+    "d_residue_fraction": "fraction of lowercase residues in raw sequence (D-amino acid marker), sequences folded to uppercase for all other descriptors"
+  },
+  "esm_model_name": "facebook/esm2_t30_150M_UR50D",
+  "esm_embedding": "mean-pooled last_hidden_state, excludes BOS token and final valid (EOS) token, sequence uppercased before tokenization",
+  "esm2_pca_n_components": 27,
+  "esm2_pca_explained_variance_target": 0.95,
+  "esm2_pca_explained_variance_actual": 0.9511,
+  "species_vocabulary": [
+    "Acinetobacter baumannii", "Candida albicans", "Candida tropicalis",
+    "Cutibacterium acnes", "Enterococcus faecium", "Escherichia coli",
+    "Klebsiella pneumoniae", "Pseudomonas aeruginosa", "Salmonella enterica",
+    "Staphylococcus aureus", "Staphylococcus epidermidis", "Streptococcus mutans",
+    "Streptococcus sanguinis"
+  ],
+  "species_ohe_handle_unknown": "ignore (out-of-vocabulary species map to an all-zero one-hot vector, not an error)",
+  "preprocessing_order": [
+    "1. compute 14 modlAMP physchem descriptors on the raw sequence",
+    "2. physchem_scaler.transform (StandardScaler fit on training rows)",
+    "3. compute ESM2-150M mean-pooled embedding (640-dim) on the uppercased sequence",
+    "4. esm2_scaler.transform (StandardScaler fit on training rows)",
+    "5. esm2_pca.transform (PCA fit on scaled training embeddings, n_components=0.95 -> 27 PCs)",
+    "6. species_ohe.transform on target_species",
+    "7. concatenate [species_onehot, physchem_scaled, esm2_pcs] -> 54-dim vector -> SVR.predict and RandomForestRegressor.predict, averaged"
+  ],
+  "training_rows": 147,
+  "train_test_split_for_cv_reference": "115 train / 32 test, stratified by species with a floor of 1 per split (final models are refit on all 147 rows)",
+  "cv_protocol": "10-fold KFold(shuffle=True, random_state=42) over the full 147-row dataset; species_ohe, both StandardScalers, and PCA refit inside each fold on that fold's training rows only",
+  "cv_metrics_svr": {
+    "rmse": "0.525 +/- 0.112",
+    "mae": "0.382 +/- 0.078",
+    "r2": "0.418 +/- 0.257",
+    "spearman": "0.646 +/- 0.157",
+    "pearson": "0.677 +/- 0.194"
+  },
+  "cv_metrics_random_forest": {
+    "rmse": "0.525 +/- 0.125",
+    "mae": "0.385 +/- 0.078",
+    "r2": "0.415 +/- 0.288",
+    "spearman": "0.653 +/- 0.175",
+    "pearson": "0.671 +/- 0.194"
+  },
+  "model_selection_note": "RF and SVR are statistically indistinguishable under 10-fold CV. Both are deployed as an unweighted-mean ensemble to combine their independent error profiles, rather than picking one.",
+  "final_fit": "both physchem/esm2 preprocessing, the SVR, and the RandomForestRegressor are refit on all 147 rows (not just the 115-row train split) before saving",
+  "data_sources": ["BAAMP (Formation 3-24h, method_activity > 90%)", "DBAASP (antibiofilm_activities, Activity Measure == MBIC)"]
+}

@@ -1,0 +1,28 @@
+{
+    "case_id": "TC-32_diabetic_aged_wound_thymosin_fragment",
+    "wound_context": [
+        "chronic",
+        "high_glucose",
+        "aged_skin"
+    ],
+    "desired_functions": [
+        "keratinocyte_migration",
+        "wound_contraction",
+        "collagen_synthesis"
+    ],
+    "pathogens": [],
+    "min_length": 6,
+    "max_length": 7,
+    "dosing_interval_hours": 24,
+    "manufacturing": {
+        "method": "solid_phase_synthesis"
+    },
+    "stage": "discovery",
+    "reference_peptide": {
+        "name": "Thymosin Beta4 actin-binding fragment",
+        "sequence": "LKKTETQ",
+        "source_organism": "synthetic_derived_from_human_TB4"
+    },
+    "literature_source": "Philp et al. 2003 (ref 95)",
+    "notes": "Promoted dermal/corneal repair in normal rats; active in full-thickness dermal wounds of diabetic and aged mice."
+}

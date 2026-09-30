@@ -1,34 +1,23 @@
 ﻿# Stage 1 product brief / Target Product Profile.
 from __future__ import annotations
 import json
-from enum import Enum
 from pathlib import Path
-from typing import List, Optional
-from pydantic import BaseModel, Field
-
-
-class Level(str, Enum):
-    low = "low"
-    moderate = "moderate"
-    high = "high"
-
-
-class SafetyConstraints(BaseModel):
-    hemolysis: Level
-    human_cell_cytotoxicity: Level
+from typing import List
+from pydantic import BaseModel, Field, model_validator
 
 
 class Brief(BaseModel):
-    indication: str
     wound_context: List[str] = Field(default_factory=list)
     desired_functions: List[str] = Field(default_factory=list)
     pathogens: List[str] = Field(default_factory=list)
-    delivery_system: str
+    min_length: int = Field(gt=0, le=100)
     max_length: int = Field(gt=0, le=100)
-    release_target_hours: float = Field(gt=0)
-    safety_constraints: SafetyConstraints
-    target_population: List[str] = Field(default_factory=list)
-    production_constraints: Optional[List[str]] = Field(default=None, description="Constraints related to manufacturing, scalability, and cost.")
+
+    @model_validator(mode="after")
+    def _check_length_bounds(self) -> "Brief":
+        if self.min_length > self.max_length:
+            raise ValueError("min_length must be <= max_length")
+        return self
 
     @classmethod
     def load(cls, path: str | Path) -> "Brief":

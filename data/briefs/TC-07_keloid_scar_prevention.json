@@ -1,6 +1,5 @@
 {
     "case_id": "TC-07_keloid_scar_prevention",
-    "indication": "hypertrophic_scar_prevention",
     "wound_context": [
         "acute",
         "clean",
@@ -12,15 +11,9 @@
         "scar_reduction"
     ],
     "pathogens": [],
-    "delivery_system": "silicone_film",
+    "min_length": 6,
     "max_length": 15,
     "dosing_interval_hours": 24,
-    "release_target_hours": 24,
-    "safety_constraints": {
-        "hemolysis": "low",
-        "human_cell_cytotoxicity": "low",
-        "fibrosis_risk": "low"
-    },
     "manufacturing": {
         "method": "solid_phase_synthesis",
         "max_cost_per_gram_usd": 250

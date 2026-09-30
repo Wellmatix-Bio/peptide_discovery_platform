@@ -20,7 +20,6 @@ MODEL_STORE_DIR = Path(__file__).resolve().parents[3] / "model_store"
 if str(MODEL_STORE_DIR) not in sys.path:
     sys.path.insert(0, str(MODEL_STORE_DIR))
 
-from model_store.hemolysis_predictor_v2 import HemoPI2PHC50Predictor  # noqa: E402
 from model_store.hemolysis_predictor_v1 import ReplicatedHemoPI2Predictor  # noqa: E402
 from model_store.cytotoxicity_predictor_v1 import CytotoxicityClassifier  # noqa: E402
 from model_store.solubility_predictor_v1 import SolubilityPredictor  # noqa: E402
@@ -42,20 +41,7 @@ SOLUBILITY_FLAG_MIN = 0.3  # P(soluble) below this is flagged, not rejected
 # Cleavage-stability score (see compute_cleavage_stability) below this rejects.
 CLEAVAGE_STABILITY_REJECT_MIN = 0.3
 
-# Wound-relevant protease selection (step 4): a hand-reviewed accession
-# allowlist against the bundled 118-enzyme catalog
-# (model_store/cleavage_site_predictor_v1/enzymes/enzyme_catalog.csv), not a
-# keyword filter -- protein names in that catalog are inconsistent enough
-# ("Elastase-1 precursor" covers both neutrophil-adjacent and purely
-# digestive/pancreatic orthologs; "u-/t-Plasminogen activator" entries
-# activate plasmin but aren't the wound-fluid protease itself) that name
-# matching alone pulls in irrelevant enzymes.
-#
-# The panel is missing real human MMP-1/-2/-3/-8/-9/-12 and human neutrophil
-# elastase entirely (README.md's "Known coverage gap") -- their structures
-# failed the source project's alignment check upstream of this migration.
-# Non-human orthologs of the same functional families stand in as
-# directional evidence, grouped by EC number below.
+# Wound-relevant protease selection (step 4): a hand-reviewed accession allowlist against the bundled 118-enzyme catalog
 WOUND_PROTEASE_ACCESSIONS = {
     # MMP-9 / gelatinase B (EC 3.4.24.35)
     "O18733",
@@ -118,54 +104,31 @@ CLEAVAGE_DECAY_RATE = 0.5
 IDEALIZED_CA_STEP_ANGSTROM = 3.8  # extended-chain Ca-Ca spacing along backbone
 
 
-def _get_hemolysis_v2_model() -> HemoPI2PHC50Predictor:
-    global _hemolysis_v2_model
-    if _hemolysis_v2_model is None:
-        _hemolysis_v2_model = HemoPI2PHC50Predictor()
-    return _hemolysis_v2_model
-
-
-def _get_hemolysis_v1_model(use_feature_cache: bool = False) -> ReplicatedHemoPI2Predictor:
+def _get_hemolysis_v1_model() -> ReplicatedHemoPI2Predictor:
     global _hemolysis_v1_model
-    # Rebuild if the cached instance's mode doesn't match what's asked for
-    # now, not just when it's unset -- otherwise a stale instance built with
-    # the opposite use_feature_cache silently ignores this call's flag and
-    # crashes on a mismatched feature_extractor.
-    if (
-        _hemolysis_v1_model is None
-        or _hemolysis_v1_model.use_feature_cache != use_feature_cache
-    ):
-        _hemolysis_v1_model = ReplicatedHemoPI2Predictor(use_feature_cache=use_feature_cache)
+    if _hemolysis_v1_model is None:
+        _hemolysis_v1_model = ReplicatedHemoPI2Predictor()
     return _hemolysis_v1_model
 
 
-def _get_cytotoxicity_model(use_feature_cache: bool = False) -> CytotoxicityClassifier:
+def _get_cytotoxicity_model() -> CytotoxicityClassifier:
     global _cytotoxicity_model
-    if (
-        _cytotoxicity_model is None
-        or _cytotoxicity_model.use_feature_cache != use_feature_cache
-    ):
-        _cytotoxicity_model = CytotoxicityClassifier(use_feature_cache=use_feature_cache)
+    if _cytotoxicity_model is None:
+        _cytotoxicity_model = CytotoxicityClassifier()
     return _cytotoxicity_model
 
 
-def _get_solubility_model(use_feature_cache: bool = False) -> SolubilityPredictor:
+def _get_solubility_model() -> SolubilityPredictor:
     global _solubility_model
-    if (
-        _solubility_model is None
-        or _solubility_model.use_feature_cache != use_feature_cache
-    ):
-        _solubility_model = SolubilityPredictor(use_feature_cache=use_feature_cache)
+    if _solubility_model is None:
+        _solubility_model = SolubilityPredictor()
     return _solubility_model
 
 
-def _get_aggregation_model(use_feature_cache: bool = False) -> AggregationPredictor:
+def _get_aggregation_model() -> AggregationPredictor:
     global _aggregation_model
-    if (
-        _aggregation_model is None
-        or _aggregation_model.use_feature_cache != use_feature_cache
-    ):
-        _aggregation_model = AggregationPredictor(use_feature_cache=use_feature_cache)
+    if _aggregation_model is None:
+        _aggregation_model = AggregationPredictor()
     return _aggregation_model
 
 
@@ -176,7 +139,6 @@ def _get_cleavage_model() -> CleavageSitePredictor:
     return _cleavage_model
 
 
-_hemolysis_v2_model: HemoPI2PHC50Predictor | None = None
 _hemolysis_v1_model: ReplicatedHemoPI2Predictor | None = None
 _cytotoxicity_model: CytotoxicityClassifier | None = None
 _solubility_model: SolubilityPredictor | None = None
@@ -188,37 +150,25 @@ _cleavage_model: CleavageSitePredictor | None = None
 class Stage8Models:
     """Bundle returned by build_models(): every model this stage depends on, lazy-loaded on first use of each."""
 
-    hemolysis: HemoPI2PHC50Predictor | ReplicatedHemoPI2Predictor
-    hemolysis_version: str
+    hemolysis: ReplicatedHemoPI2Predictor
     cytotoxicity: CytotoxicityClassifier
     solubility: SolubilityPredictor
     aggregation: AggregationPredictor
     cleavage: CleavageSitePredictor
 
 
-def build_models(config_params: dict, use_feature_cache: bool = False) -> Stage8Models:
+def build_models(config_params: dict) -> Stage8Models:
     """Factory: import and initialize every Stage 8 model.
 
     Each predictor lazy-loads its own weights on first predict() call, so
     construction here is cheap; this just fixes the one place that knows how
     to build each of them.
     """
-    hemolysis_version = config_params.get("hemolysis_predictor_version", "v1")
-    if hemolysis_version not in ("v1", "v2"):
-        raise ValueError(
-            f"unknown hemolysis_predictor_version {hemolysis_version!r}; expected 'v1' or 'v2'"
-        )
-    hemolysis_model = (
-        _get_hemolysis_v2_model()
-        if hemolysis_version == "v2"
-        else _get_hemolysis_v1_model(use_feature_cache)
-    )
     return Stage8Models(
-        hemolysis=hemolysis_model,
-        hemolysis_version=hemolysis_version,
-        cytotoxicity=_get_cytotoxicity_model(use_feature_cache),
-        solubility=_get_solubility_model(use_feature_cache),
-        aggregation=_get_aggregation_model(use_feature_cache),
+        hemolysis=_get_hemolysis_v1_model(),
+        cytotoxicity=_get_cytotoxicity_model(),
+        solubility=_get_solubility_model(),
+        aggregation=_get_aggregation_model(),
         cleavage=_get_cleavage_model(),
     )
 
@@ -243,29 +193,23 @@ class Stage8(CandidateStage):
         cleavage stability, then rejects candidates that fail any hard
         safety/developability threshold (CLAUDE.md: hard thresholds override
         score, applied throughout -- not as a late add-on)."""
-        models = build_models(config.params, ctx.use_feature_cache)
-        self._hemolysis_version_used = models.hemolysis_version
+        models = build_models(config.params)
         solvent = config.params.get("solubility_solvent", "Ultrapure water")
         # DRAMP_aggregate -> maps to mammalian cell
         cell_type = config.params.get("cytotoxicity_cell_type", "DRAMP_aggregate")
 
-        # Hemolysis is computed up front for every candidate in one call --
-        # v2 (HemoPI2) is a single batched subprocess instead of one process
-        # per sequence; v1 (in-process sklearn reproduction) batches
-        # internally too (one predict_phc50_batch call), so both versions pay
-        # one model-load cost for the whole stage rather than per candidate.
+        # Compute hemolysis for all candidates in one batched prediction,
+        # loading the model once for the whole stage.
         sequences: list[str] = [
             candidate.sequence for candidate in candidates if candidate.sequence
         ]
         if len(sequences) != len(candidates):
             raise ValueError("Stage 8 received a candidate with no sequence")
 
-        use_feature_cache = ctx.use_feature_cache
-        feature_extractor = ctx.feature_extractor if use_feature_cache else None
-        if use_feature_cache:
-            # Warm the shared ESM2 cache once for the whole stage instead of
-            # once per candidate inside compute_cytotoxicity/compute_solubility.
-            ctx.feature_extractor.get_esm2_embedding_batch(sequences)
+        feature_extractor = ctx.feature_extractor
+        # Warm the shared ESM2 cache once for the whole stage instead of
+        # once per candidate inside compute_cytotoxicity/compute_solubility.
+        ctx.feature_extractor.get_esm2_embedding_batch(sequences)
 
         hemolysis_results = self.compute_hemolysis_batch(
             sequences, models.hemolysis, feature_extractor
@@ -316,7 +260,7 @@ class Stage8(CandidateStage):
         return [
             ModelRef(
                 name="hemolysis_predictor",
-                version=getattr(self, "_hemolysis_version_used", "v1"),
+                version="v1",
             ),
             ModelRef(name="cytotoxicity_predictor", version="v1"),
             ModelRef(name="solubility_predictor", version="v1"),
@@ -334,24 +278,16 @@ class Stage8(CandidateStage):
     def compute_hemolysis_batch(
         self,
         sequences: list[str],
-        model: HemoPI2PHC50Predictor | ReplicatedHemoPI2Predictor,
+        model: ReplicatedHemoPI2Predictor,
         feature_extractor=None,
     ) -> list[dict]:
-        """pHC50 for every candidate in one call (v1's in-process batched
-        predict, or v2/HemoPI2's single batched subprocess) instead of one
-        call per sequence. HIGH pHC50 = hemolytic at LOW concentration =
-        worse, same convention for both predictor versions (see
-        hemolysis_predictor_v1/v2's READMEs for their HC50(uM) -> pHC50
-        conversions)."""
+        """Predict pHC50 for all candidates in one v1 batch.
+
+        Higher pHC50 means hemolysis at a lower concentration (worse).
+        """
         if not sequences:
             return []
-        # v2 (HemoPI2 subprocess) has no feature_extractor parameter -- only
-        # v1 (in-process descriptor reproduction) reads the shared cache.
-        phc50_values = (
-            model.predict_phc50_batch(sequences, feature_extractor)
-            if isinstance(model, ReplicatedHemoPI2Predictor)
-            else model.predict_phc50_batch(sequences)
-        )
+        phc50_values = model.predict_phc50_batch(sequences, feature_extractor)
         return [{"phc50": phc50, "status": "ok"} for phc50 in phc50_values]
 
     def compute_cytotoxicity(
@@ -520,14 +456,7 @@ class Stage8(CandidateStage):
         }
         properties: dict[str, str] = {}
 
-        # HIGH pHC50 = hemolytic at LOW concentration = worse (see
-        # routeA.py's _hemolysis_safety_factor: "-> 1 as pHC50 falls (safer),
-        # -> 0 as pHC50 rises (more hemolytic)"). The check here was
-        # previously inverted (rejected on phc50 < min, i.e. rejected the
-        # *safe* candidates) and briefly disabled entirely while that bug
-        # was tracked down; both v1 and v2 predict pHC50 in this same
-        # direction and are trained/validated against HemoPI2's own
-        # benchmark, so this gate is trustworthy for either version.
+        # Higher pHC50 means hemolysis at a lower concentration (worse).
         properties["hemolysis"] = (
             "reject"
             if predictions["hemolysis"]["phc50"] > t["hemolysis_phc50_reject_max"]

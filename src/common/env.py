@@ -6,18 +6,36 @@ from pathlib import Path
 
 _ENV_PATH = Path(__file__).resolve().parents[2] / ".env"
 
+DOTENV_KEYS: list[str] = []
 
-def _load_dotenv(path: Path) -> None:
+
+def _load_dotenv(path: Path) -> list[str]:
     if not path.exists():
-        return
+        return []
+    keys = []
     for line in path.read_text(encoding="utf-8").splitlines():
         line = line.strip()
         if not line or line.startswith("#") or "=" not in line:
             continue
         key, value = line.split("=", 1)
-        os.environ.setdefault(key.strip(), value.strip())
+        key = key.strip()
+        os.environ.setdefault(key, value.strip())
+        keys.append(key)
+    return keys
 
 
-_load_dotenv(_ENV_PATH)
+DOTENV_KEYS = _load_dotenv(_ENV_PATH)
 
-DEV_MODE = os.environ.get("DEV_MODE", False)
+
+def _env_bool(name: str, default: bool = False) -> bool:
+    """os.environ.get(name) is always a string (or missing) -- "False"/"0"
+    are truthy as Python objects, so this parses the value instead of just
+    checking it's set."""
+    raw = os.environ.get(name)
+    if raw is None:
+        return default
+    return raw.strip().lower() in ("1", "true", "yes", "on")
+
+
+DEV_MODE = _env_bool("DEV_MODE")
+SEED_CANDIDATES_FILE = os.environ.get("SEED_CANDIDATES_FILE", "seed_candidates.fasta")

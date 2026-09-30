@@ -1,0 +1,25 @@
+{
+    "case_id": "TC-31_excisional_wound_ERK_activating_pentapeptide",
+    "wound_context": [
+        "acute",
+        "clean"
+    ],
+    "desired_functions": [
+        "keratinocyte_migration"
+    ],
+    "pathogens": [],
+    "min_length": 5,
+    "max_length": 5,
+    "dosing_interval_hours": 24,
+    "manufacturing": {
+        "method": "solid_phase_synthesis"
+    },
+    "stage": "discovery",
+    "reference_peptide": {
+        "name": "AES16-2M",
+        "sequence": "REGRT",
+        "source_organism": "synthetic"
+    },
+    "literature_source": "Lee et al. 2018, Sci Rep (ref 35)",
+    "notes": "5-residue peptide; accelerates healing in vivo via keratinocyte migration through ERK phosphorylation."
+}

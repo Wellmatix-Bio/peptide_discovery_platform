@@ -1,0 +1,27 @@
+{
+    "case_id": "TC-27_diabetic_wound_EGF_chitosan_NP",
+    "wound_context": [
+        "chronic",
+        "high_glucose"
+    ],
+    "desired_functions": [
+        "re_epithelialization",
+        "keratinocyte_migration"
+    ],
+    "pathogens": [],
+    "min_length": 6,
+    "max_length": 50,
+    "dosing_interval_hours": 48,
+    "duration_days": 15,
+    "manufacturing": {
+        "method": "solid_phase_synthesis"
+    },
+    "stage": "discovery",
+    "reference_peptide": {
+        "name": "rhEGF",
+        "sequence": "recombinant_human_EGF",
+        "source_organism": "recombinant"
+    },
+    "literature_source": "Hajimiri et al. 2016 (ref 233)",
+    "notes": "Every-2-day dosing over 15 days; reduced wound area vs. free-EGF and saline controls in diabetic mice. max_length capped at pipeline's 50-residue ceiling -- EGF is a full growth factor, longer than this pipeline's short-peptide design space."
+}

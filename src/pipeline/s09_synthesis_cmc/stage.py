@@ -64,9 +64,9 @@ FINAL_PURITY_DG_NG_RECOVERY_PENALTY = 0.08  # rearrangement isomer co-elutes
 FINAL_PURITY_NON_STANDARD_RECOVERY_PENALTY = 0.05  # per non-standard building block
 
 
-def build_model(use_feature_cache: bool = False) -> SynthesisFeasibilityEnsemble:
+def build_model() -> SynthesisFeasibilityEnsemble:
     """Factory: import and initialize the synthesis-feasibility ML ensemble (supplementary weak prior, not a gate)."""
-    return SynthesisFeasibilityEnsemble(use_feature_cache=use_feature_cache)
+    return SynthesisFeasibilityEnsemble()
 
 
 class Stage9(CandidateStage):
@@ -84,16 +84,16 @@ class Stage9(CandidateStage):
         gate on difficulty_class). Yield, purification, cost, storage, and
         scale-up risk are preserved as soft-penalty scores for Stage 11,
         never rejection reasons on their own."""
-        use_feature_cache = ctx.use_feature_cache
-        model = build_model(use_feature_cache)
-        feature_extractor = ctx.feature_extractor if use_feature_cache else None
-        if use_feature_cache:
-            # Warm the shared ESM2 cache once for the whole stage instead of
-            # once per candidate inside compute_ml_feasibility_prior.
-            sequences = [
-                candidate.sequence for candidate in candidates if candidate.sequence
-            ]
-            ctx.feature_extractor.get_esm2_embedding_batch(sequences)
+        model = build_model()
+        feature_extractor = ctx.feature_extractor
+        # Warm the shared ESM2 cache once for the whole stage instead of
+        # once per candidate inside compute_ml_feasibility_prior.
+        sequences = [
+            candidate.sequence for candidate in candidates if candidate.sequence
+        ]
+        if len(sequences) != len(candidates):
+            raise ValueError("Stage 9 received a candidate with no sequence")
+        ctx.feature_extractor.get_esm2_embedding_batch(sequences)
 
         survivors: list[Candidate] = []
         for candidate in tqdm(candidates, desc="Stage 9"):

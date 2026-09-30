@@ -1,6 +1,5 @@
 {
     "case_id": "TC-10_oral_mucosal_wound",
-    "indication": "oral_mucositis",
     "wound_context": [
         "acute",
         "moist",
@@ -17,15 +16,9 @@
         "Candida_albicans",
         "Streptococcus_mutans"
     ],
-    "delivery_system": "mucoadhesive_gel",
+    "min_length": 6,
     "max_length": 24,
     "dosing_interval_hours": 6,
-    "release_target_hours": 6,
-    "safety_constraints": {
-        "hemolysis": "low",
-        "human_cell_cytotoxicity": "low",
-        "ingestion_safety": "required"
-    },
     "manufacturing": {
         "method": "solid_phase_synthesis",
         "protease_resistance_required": true

@@ -1,0 +1,31 @@
+{
+    "case_id": "TC-25_diabetic_wound_cyclic_peptide_hydrogel",
+    "wound_context": [
+        "chronic",
+        "full_depth",
+        "type2_diabetic"
+    ],
+    "desired_functions": [
+        "keratinocyte_migration",
+        "fibroblast_proliferation",
+        "angiogenesis",
+        "collagen_synthesis",
+        "anti_inflammatory",
+        "antioxidant"
+    ],
+    "pathogens": [],
+    "min_length": 6,
+    "max_length": 7,
+    "dosing_interval_hours": 24,
+    "manufacturing": {
+        "method": "solid_phase_synthesis"
+    },
+    "stage": "discovery",
+    "reference_peptide": {
+        "name": "CyRL-QN15",
+        "sequence": "cyclic_heptapeptide",
+        "source_organism": "derived_from_RL-QN15_Rana_limnocharis"
+    },
+    "literature_source": "Fu et al. 2022, NPG Asia Mater (ref 226)",
+    "notes": "Reduced ROS, drove M2 macrophage polarization, promoted angiogenesis/collagen in full-depth type 2 diabetic wounds."
+}

@@ -1,0 +1,90 @@
+{
+  "model_name": "proliferation_migration_predictor_v1",
+  "targets": ["migration_dominant", "proliferation_dominant"],
+  "feature_cols": [
+    "length",
+    "net_charge",
+    "hydrophobicity_mean",
+    "hydrophobic_moment",
+    "aromatic_fraction",
+    "cationic_fraction",
+    "anionic_fraction",
+    "polar_fraction",
+    "aliphatic_fraction",
+    "proline_fraction",
+    "glycine_fraction",
+    "cysteine_fraction",
+    "charge_density",
+    "isoelectric_proxy",
+    "hydrophobic_fraction"
+  ],
+  "feature_computation": {
+    "length": "len(sequence)",
+    "net_charge": "Henderson-Hasselbalch net charge at pH 7.0 using side-chain pKa (K 10.5, R 12.5, H 6.0, D 3.9, E 4.1, C 8.3, Y 10.1) plus N-term pKa 9.0 and C-term pKa 2.0",
+    "hydrophobicity_mean": "mean Kyte-Doolittle hydrophobicity over residues",
+    "hydrophobic_moment": "Eisenberg hydrophobic moment assuming alpha-helix, 100 deg/residue, normalized by sequence length",
+    "aromatic_fraction": "fraction of residues in {F,W,Y}",
+    "cationic_fraction": "fraction of residues in {K,R,H}",
+    "anionic_fraction": "fraction of residues in {D,E}",
+    "polar_fraction": "fraction of residues in {S,T,N,Q,C,Y}",
+    "aliphatic_fraction": "fraction of residues in {A,V,L,I,M,G}",
+    "proline_fraction": "fraction of residues equal to P",
+    "glycine_fraction": "fraction of residues equal to G",
+    "cysteine_fraction": "fraction of residues equal to C",
+    "charge_density": "net_charge / length",
+    "isoelectric_proxy": "cationic_fraction - anionic_fraction",
+    "hydrophobic_fraction": "fraction of residues with positive Kyte-Doolittle value"
+  },
+  "n_features": 15,
+  "ensemble_architecture": "VotingClassifier(voting='soft') over RandomForestClassifier + XGBClassifier + Pipeline(StandardScaler -> LogisticRegression), one independent ensemble instance per target",
+  "hyperparameters": {
+    "random_forest": {
+      "n_estimators": 300,
+      "max_depth": 4,
+      "min_samples_leaf": 2,
+      "random_state": 0
+    },
+    "xgboost": {
+      "n_estimators": 200,
+      "max_depth": 3,
+      "learning_rate": 0.05,
+      "subsample": 0.8,
+      "colsample_bytree": 0.8,
+      "eval_metric": "logloss",
+      "random_state": 0
+    },
+    "logistic_regression": {
+      "preprocessing": "StandardScaler",
+      "max_iter": 1000,
+      "C": 1.0,
+      "random_state": 0
+    },
+    "voting_classifier": {
+      "voting": "soft",
+      "estimators": ["rf", "xgb", "logreg"]
+    }
+  },
+  "training_data": {
+    "source_csv": "Models/Proliferation + Migration prediction/data/peptide_activity_unique_clean.csv",
+    "n_rows_after_cleaning": 103,
+    "cleaning_filter": "sequence non-null and fullmatch [ACDEFGHIKLMNPQRSTVWY]+; labels derived from 'T'/other flag columns migration_dominant and proliferation_dominant"
+  },
+  "deployment_object_provenance": "FULL-DATA REFIT for deployment. Notebook (pipeline.ipynb) never persists a fitted model: build_ensemble() is built fresh inside every Leave-One-Out CV fold, fit on that fold only, used once, then discarded; no joblib.dump/pickle exists in the notebook. The two .joblib artifacts shipped here were fit once each on the FULL 103-row dataset (no LOO holdout) using the exact same feature code and hyperparameters as the notebook, by a standalone script outside the source project, per explicit user authorization. This is a deliberate deviation from the notebook's own protocol (training-set size only: full data vs n-1 rows per LOO fold).",
+  "evaluation_metrics_source": "notebook's own per-fold Leave-One-Out CV (103 folds per target), NOT a direct evaluation of this deployed full-data-refit object -- reported as the best available generalization estimate since the deployed object has no held-out evaluation of its own",
+  "loo_cv_metrics": {
+    "migration_dominant": {
+      "ACC": 0.650485,
+      "MCC": 0.293402,
+      "F1": 0.608696,
+      "AUC": 0.679711,
+      "n_folds": 103
+    },
+    "proliferation_dominant": {
+      "ACC": 0.708738,
+      "MCC": 0.264395,
+      "F1": 0.802632,
+      "AUC": 0.732835,
+      "n_folds": 103
+    }
+  }
+}

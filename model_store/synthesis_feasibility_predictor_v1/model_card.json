@@ -1,0 +1,45 @@
+{
+  "task": "binary classification: synthesis feasible (label=1) vs not (label=0)",
+  "esm_model_name": "facebook/esm2_t30_150M_UR50D",
+  "esm_pooling": "mean-pooled last_hidden_state, CLS/EOS special tokens masked out before pooling, no L2 normalization",
+  "n_esm2_features": 640,
+  "ensemble_method": "unweighted mean of predict_proba positive-class probability across the 3 models (soft voting); notebook itself does not define a cross-model ensembling scheme, this is a downstream choice",
+  "data_variant": "combined (pipeline_combined_35M_embedding.ipynb, PepSySco.csv + MS2-labeled peptides merged, 3560 peptides)",
+  "models": {
+    "logistic_regression": {
+      "sklearn_class": "sklearn.pipeline.Pipeline",
+      "steps": ["StandardScaler", "LogisticRegression"],
+      "scaler_baked_in": true,
+      "hyperparameters": {
+        "max_iter": 2000,
+        "random_state": 42
+      }
+    },
+    "svm": {
+      "sklearn_class": "sklearn.pipeline.Pipeline",
+      "steps": ["StandardScaler", "SVC"],
+      "scaler_baked_in": true,
+      "hyperparameters": {
+        "kernel": "rbf",
+        "probability": true,
+        "random_state": 42
+      },
+      "probability_calibration_check": "confirmed probability=True at load time; predict_proba is valid (uses Platt scaling internally)"
+    },
+    "random_forest": {
+      "sklearn_class": "sklearn.ensemble.RandomForestClassifier",
+      "scaler_baked_in": false,
+      "hyperparameters": {
+        "n_estimators": 300,
+        "random_state": 42
+      }
+    }
+  },
+  "train_val_split": "5-fold StratifiedKFold, shuffle=True, random_state=42, refit on full dataset for the cached artifacts",
+  "cv_metrics": {
+    "logistic_regression": {"roc_auc": 0.7761, "f1": 0.7340, "accuracy": 0.7107, "mcc": 0.4171},
+    "svm": {"roc_auc": 0.7597, "f1": 0.7273, "accuracy": 0.6927, "mcc": 0.3788},
+    "random_forest": {"roc_auc": 0.7351, "f1": 0.7079, "accuracy": 0.6652, "mcc": 0.3221}
+  },
+  "source_notebook": "pipeline_combined_35M_embedding.ipynb"
+}

@@ -44,27 +44,17 @@ _solubility_model: SolubilityPredictor | None = None
 _aggregation_model: AggregationPredictor | None = None
 
 
-def _get_solubility_model(use_feature_cache: bool = False) -> SolubilityPredictor:
+def _get_solubility_model() -> SolubilityPredictor:
     global _solubility_model
-    # Rebuild if the cached instance's mode doesn't match what's asked for
-    # now, not just when it's unset -- otherwise a stale instance built with
-    # the opposite use_feature_cache silently ignores this call's flag and
-    # crashes on a mismatched feature_extractor.
-    if (
-        _solubility_model is None
-        or _solubility_model.use_feature_cache != use_feature_cache
-    ):
-        _solubility_model = SolubilityPredictor(use_feature_cache=use_feature_cache)
+    if _solubility_model is None:
+        _solubility_model = SolubilityPredictor()
     return _solubility_model
 
 
-def _get_aggregation_model(use_feature_cache: bool = False) -> AggregationPredictor:
+def _get_aggregation_model() -> AggregationPredictor:
     global _aggregation_model
-    if (
-        _aggregation_model is None
-        or _aggregation_model.use_feature_cache != use_feature_cache
-    ):
-        _aggregation_model = AggregationPredictor(use_feature_cache=use_feature_cache)
+    if _aggregation_model is None:
+        _aggregation_model = AggregationPredictor()
     return _aggregation_model
 
 
@@ -129,7 +119,7 @@ OXIDATION_RESIDUES = ("M", "C", "W")
 
 # Guruprasad et al. 1990 DIWV table used by ExPASy ProtParam; unlisted dipeptides default to 1.0.
 
-with open(r"src\pipeline\s05_physchem_screening\diwv.json", "r") as f:
+with open(Path(__file__).with_name("diwv.json"), "r") as f:
     DIWV = json.load(f)
 
 
@@ -147,19 +137,22 @@ class Stage5(CandidateStage):
         ctx: RunContext,
     ) -> list[Candidate]:
         """Screens candidates on sequence/physicochemical properties, rejecting hard failures and flagging soft risks (see compute_screening_verdict)."""
+        if ctx.brief is None:
+            raise ValueError("Stage 5 screening requires the Stage 1 product brief")
         ph = config.params.get("ph", 8)
         solvent = config.params.get("solubility_solvent", "Ultrapure water")
-        desired_functions = ctx.brief.desired_functions if ctx.brief else []
+        desired_functions = ctx.brief.desired_functions
+        max_length = ctx.brief.max_length
 
-        use_feature_cache = ctx.use_feature_cache
-        feature_extractor = ctx.feature_extractor if use_feature_cache else None
-        if use_feature_cache:
-            # Warm the shared ESM2 cache once for the whole stage instead of
-            # one embedding per candidate inside compute_solubility below.
-            sequences = [
-                candidate.sequence for candidate in candidates if candidate.sequence
-            ]
-            ctx.feature_extractor.get_esm2_embedding_batch(sequences)
+        feature_extractor = ctx.feature_extractor
+        # Warm the shared ESM2 cache once for the whole stage instead of
+        # one embedding per candidate inside compute_solubility below.
+        sequences = [
+            candidate.sequence for candidate in candidates if candidate.sequence
+        ]
+        if len(sequences) != len(candidates):
+            raise ValueError("Stage 5 received a candidate with no sequence")
+        ctx.feature_extractor.get_esm2_embedding_batch(sequences)
 
         survivors: list[Candidate] = []
         for candidate in tqdm(candidates, desc="Stage 5"):
@@ -188,16 +181,15 @@ class Stage5(CandidateStage):
                     "solubility": self.compute_solubility(
                         sequence,
                         feature_extractor,
-                        use_feature_cache,
                         solvent=solvent,
                     ),
                     "aggregation_tendency": self.compute_aggregation_tendency(
-                        sequence, feature_extractor, use_feature_cache
+                        sequence, feature_extractor
                     ),
                 }
             )
             verdict = self.compute_screening_verdict(
-                sequence, candidate.predictions, config.params
+                sequence, candidate.predictions, config.params, max_length
             )
             candidate.predictions["screening_verdict"] = verdict
 
@@ -386,20 +378,17 @@ class Stage5(CandidateStage):
         self,
         sequence: str,
         feature_extractor,
-        use_feature_cache: bool = False,
         solvent: str = DEFAULT_SOLUBILITY_SOLVENT,
     ) -> dict:
         """P(soluble) from solubility_predictor_v1 (XGBoost over ESM2 + solvent descriptors).
         `solvent` defaults to a physiological/wound-fluid-like aqueous buffer since the brief's
         delivery_system is free text, not one of the model's 7 trained-on lab solvents.
         """
-        model = _get_solubility_model(use_feature_cache)
+        model = _get_solubility_model()
         score = model.predict_proba(sequence, solvent, feature_extractor)
         return {"score": score, "solvent": solvent, "status": "ok"}
 
-    def compute_aggregation_tendency(
-        self, sequence: str, feature_extractor, use_feature_cache: bool = False
-    ) -> dict:
+    def compute_aggregation_tendency(self, sequence: str, feature_extractor) -> dict:
         """Aggregation-propensity probability from aggregation_predictor_v1 (XGBoost over
         AAindex1/biopython/propy descriptors). Below AGGREGATION_MIN_LENGTH the model's
         feature extraction (QSO/SOCN/PAAC/APAAC lag) is undefined, so it's skipped."""
@@ -408,12 +397,12 @@ class Stage5(CandidateStage):
                 "score": None,
                 "status": "skipped_too_short",
             }
-        model = _get_aggregation_model(use_feature_cache)
+        model = _get_aggregation_model()
         score = model.predict_aggregation(sequence, feature_extractor)
         return {"score": score, "status": "ok"}
 
     def compute_screening_verdict(
-        self, sequence: str, predictions: dict, config_params: dict
+        self, sequence: str, predictions: dict, config_params: dict, max_length: int
     ) -> dict:
         """Applies the Stage 5 filter table's thresholds to this candidate's predictions.
 
@@ -433,9 +422,8 @@ class Stage5(CandidateStage):
             else "pass"
         )
 
-        max_length = config_params.get("max_length")
         properties["length"] = (
-            "flag" if max_length and predictions["length"] > max_length else "pass"
+            "flag" if predictions["length"] > max_length else "pass"
         )
 
         charge = predictions["net_charge"]

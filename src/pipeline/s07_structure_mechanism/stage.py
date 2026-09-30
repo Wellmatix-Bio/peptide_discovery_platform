@@ -24,7 +24,9 @@ if str(MODEL_STORE_DIR) not in sys.path:
     sys.path.insert(0, str(MODEL_STORE_DIR))
 
 from model_store.esmfold_v1 import ESMFoldPredictor  # noqa: E402
-from model_store.pathway_mapping_predictor_v1 import PathwayMappingPredictor  # noqa: E402
+from model_store.pathway_mapping_predictor_v1 import (
+    PathwayMappingPredictor,
+)  # noqa: E402
 
 # Default thresholds (screening table). Override per-run via
 # StageConfig.params — every key here is read with config.params.get(key, default).
@@ -100,6 +102,8 @@ class Stage7(CandidateStage):
         ctx: RunContext,
     ) -> list[Candidate]:
         """Predicts 3D structure (ESMFold) and pathway involvement, then combines them into a mechanistic evidence summary."""
+        if any(not candidate.sequence for candidate in candidates):
+            raise ValueError("Stage 7 received a candidate with no sequence")
         models = build_models()
         t = {
             **DEFAULT_THRESHOLDS,
@@ -110,9 +114,13 @@ class Stage7(CandidateStage):
             structure = self.predict_structure(candidate.sequence, models.esmfold, t)
             candidate.predictions["structure"] = structure
 
-            pathway_involvement = self.predict_pathway_involvement(candidate.sequence, models.pathway)
-            candidate.predictions["mechanism"] = self.build_mechanistic_evidence_summary(
-                structure, pathway_involvement, t
+            pathway_involvement = self.predict_pathway_involvement(
+                candidate.sequence, models.pathway
+            )
+            candidate.predictions["mechanism"] = (
+                self.build_mechanistic_evidence_summary(
+                    structure, pathway_involvement, t
+                )
             )
 
         return candidates
@@ -128,19 +136,27 @@ class Stage7(CandidateStage):
 
     # -- Structure prediction --
 
-    def predict_structure(self, sequence: str, model: ESMFoldPredictor, thresholds: dict) -> dict:
+    def predict_structure(
+        self, sequence: str, model: ESMFoldPredictor, thresholds: dict
+    ) -> dict:
         """ESMFold structure: coordinates, distance matrix, structural confidence, secondary-structure characteristics, exposure."""
         result = model.predict(sequence)
-        ca_coordinates = np.asarray(result["ca_coordinates"], dtype=np.float32)
+        # ca_coordinates = np.asarray(result["ca_coordinates"], dtype=np.float32)
         backbone_atoms = self._extract_backbone_atoms(result["pdb_str"])
 
         return {
             "pdb_str": result["pdb_str"],
             "ca_coordinates": result["ca_coordinates"],
             "ca_distance_matrix": result["ca_distance_matrix"],
-            "confidence": self.compute_structural_confidence(result["per_residue_plddt"], thresholds),
-            "secondary_structure": self.compute_secondary_structure(backbone_atoms, thresholds),
-            "exposure_by_position": self.compute_exposure(result["pdb_str"], len(sequence)),
+            "confidence": self.compute_structural_confidence(
+                result["per_residue_plddt"], thresholds
+            ),
+            "secondary_structure": self.compute_secondary_structure(
+                backbone_atoms, thresholds
+            ),
+            "exposure_by_position": self.compute_exposure(
+                result["pdb_str"], len(sequence)
+            ),
         }
 
     def _extract_backbone_atoms(self, pdb_str: str) -> dict[int, dict[str, np.ndarray]]:
@@ -159,13 +175,18 @@ class Stage7(CandidateStage):
                 seen_residue_numbers[residue_number] = len(residue_order)
                 residue_order.append(residue_number)
             index = seen_residue_numbers[residue_number]
-            xyz = np.array([float(line[30:38]), float(line[38:46]), float(line[46:54])], dtype=np.float32)
+            xyz = np.array(
+                [float(line[30:38]), float(line[38:46]), float(line[46:54])],
+                dtype=np.float32,
+            )
             atoms.setdefault(index, {})[atom_name] = xyz
         return atoms
 
     # -- Structural confidence --
 
-    def compute_structural_confidence(self, per_residue_plddt: list[float], thresholds: dict) -> dict:
+    def compute_structural_confidence(
+        self, per_residue_plddt: list[float], thresholds: dict
+    ) -> dict:
         """Mean pLDDT plus the count/positions of low-confidence residues."""
         plddt = np.asarray(per_residue_plddt, dtype=np.float32)
         low_confidence_positions = [
@@ -213,10 +234,16 @@ class Stage7(CandidateStage):
         if i == 0 or i == n_residues - 1:
             return "C"  # phi needs residue i-1's C, psi needs residue i+1's N; chain termini have neither
         phi = self._dihedral(
-            backbone_atoms[i - 1]["C"], backbone_atoms[i]["N"], backbone_atoms[i]["CA"], backbone_atoms[i]["C"]
+            backbone_atoms[i - 1]["C"],
+            backbone_atoms[i]["N"],
+            backbone_atoms[i]["CA"],
+            backbone_atoms[i]["C"],
         )
         psi = self._dihedral(
-            backbone_atoms[i]["N"], backbone_atoms[i]["CA"], backbone_atoms[i]["C"], backbone_atoms[i + 1]["N"]
+            backbone_atoms[i]["N"],
+            backbone_atoms[i]["CA"],
+            backbone_atoms[i]["C"],
+            backbone_atoms[i + 1]["N"],
         )
         if (
             thresholds["helix_phi_min"] <= phi <= thresholds["helix_phi_max"]
@@ -230,7 +257,9 @@ class Stage7(CandidateStage):
             return "E"
         return "C"
 
-    def _dihedral(self, p0: np.ndarray, p1: np.ndarray, p2: np.ndarray, p3: np.ndarray) -> float:
+    def _dihedral(
+        self, p0: np.ndarray, p1: np.ndarray, p2: np.ndarray, p3: np.ndarray
+    ) -> float:
         """Dihedral angle (degrees) for four consecutive backbone atoms."""
         b0, b1, b2 = p0 - p1, p2 - p1, p3 - p2
         b1 = b1 / np.linalg.norm(b1)
@@ -256,14 +285,17 @@ class Stage7(CandidateStage):
         residue_areas = result.residueAreas().get("A", {})
 
         sasa_by_position = [
-            residue_areas[str(i + 1)].total if str(i + 1) in residue_areas else 0.0 for i in range(length)
+            residue_areas[str(i + 1)].total if str(i + 1) in residue_areas else 0.0
+            for i in range(length)
         ]
         max_sasa = max(sasa_by_position) if any(sasa_by_position) else 1.0
         return [min(sasa / max_sasa, 1.0) for sasa in sasa_by_position]
 
     # -- Pathway involvement --
 
-    def predict_pathway_involvement(self, sequence: str, model: PathwayMappingPredictor) -> dict:
+    def predict_pathway_involvement(
+        self, sequence: str, model: PathwayMappingPredictor
+    ) -> dict:
         """Per-pathway engagement probability from pathway_mapping_predictor_v1."""
         return model.predict(sequence)
 
@@ -279,7 +311,11 @@ class Stage7(CandidateStage):
             if result["probability"] >= thresholds["pathway_engagement_min_probability"]
         ]
         functions_supported = sorted(
-            {PATHWAY_TO_FUNCTION[label] for label in engaged_pathways if label in PATHWAY_TO_FUNCTION}
+            {
+                PATHWAY_TO_FUNCTION[label]
+                for label in engaged_pathways
+                if label in PATHWAY_TO_FUNCTION
+            }
         )
 
         return {
@@ -287,15 +323,28 @@ class Stage7(CandidateStage):
             "engaged_pathways": engaged_pathways,
             "functions_supported": functions_supported,
             "structural_confidence": structure["confidence"]["mean_plddt"],
-            "dominant_secondary_structure": structure["secondary_structure"]["dominant_class"],
-            "summary": self._render_summary(structure, engaged_pathways, functions_supported),
+            "dominant_secondary_structure": structure["secondary_structure"][
+                "dominant_class"
+            ],
+            "summary": self._render_summary(
+                structure, engaged_pathways, functions_supported
+            ),
         }
 
-    def _render_summary(self, structure: dict, engaged_pathways: list[str], functions_supported: list[str]) -> str:
+    def _render_summary(
+        self,
+        structure: dict,
+        engaged_pathways: list[str],
+        functions_supported: list[str],
+    ) -> str:
         confidence = structure["confidence"]["mean_plddt"]
         ss_class = structure["secondary_structure"]["dominant_class"]
-        pathway_text = ", ".join(engaged_pathways) if engaged_pathways else "none above threshold"
-        function_text = ", ".join(functions_supported) if functions_supported else "none"
+        pathway_text = (
+            ", ".join(engaged_pathways) if engaged_pathways else "none above threshold"
+        )
+        function_text = (
+            ", ".join(functions_supported) if functions_supported else "none"
+        )
         return (
             f"Structure: mean pLDDT {confidence:.2f}, dominant fold {ss_class}. "
             f"Pathways engaged: {pathway_text}. Target functions supported: {function_text}."

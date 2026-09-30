@@ -1,6 +1,5 @@
 {
     "case_id": "TC-12_pressure_ulcer_stage4",
-    "indication": "stage_4_pressure_ulcer",
     "wound_context": [
         "chronic",
         "deep",
@@ -22,14 +21,9 @@
         "Proteus_mirabilis",
         "anaerobes"
     ],
-    "delivery_system": "collagen_matrix",
+    "min_length": 6,
     "max_length": 35,
     "dosing_interval_hours": 72,
-    "release_target_hours": 96,
-    "safety_constraints": {
-        "hemolysis": "low",
-        "human_cell_cytotoxicity": "low"
-    },
     "manufacturing": {
         "method": "solid_phase_synthesis",
         "max_cost_per_gram_usd": 500

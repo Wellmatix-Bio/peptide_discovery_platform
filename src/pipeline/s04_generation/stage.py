@@ -23,8 +23,8 @@ def _build_route_a(
     (route_a_ga_params) and hard-reject constraints (route_a_constraint_config)
     — the seed sequence is the only thing that varies per candidate."""
     shared_params = {
-        "min_length": config.params.get("min_length", 6),
-        "max_length": config.params.get("max_length", 35),
+        "min_length": ctx.brief.min_length,
+        "max_length": ctx.brief.max_length,
         **config.params.get("route_a_ga_params", {}),
         **config.params.get("route_a_constraint_config", {}),
     }
@@ -35,10 +35,7 @@ def _build_route_a(
                 for candidate in candidates
                 if candidate.sequence
             ],
-            "use_feature_cache": ctx.use_feature_cache,
-            "feature_extractor": (
-                ctx.feature_extractor if ctx.use_feature_cache else None
-            ),
+            "feature_extractor": ctx.feature_extractor,
         }
     )
 
@@ -50,8 +47,8 @@ def _build_route_b(
         {
             "tags": config.params.get("tags", ["<AMP>"]),
             "n_peptides": config.params.get("n_peptides", 100),
-            "min_length": config.params.get("min_length", 6),
-            "max_length": config.params.get("max_length", 35),
+            "min_length": ctx.brief.min_length,
+            "max_length": ctx.brief.max_length,
             "max_new_tokens": config.params.get("max_new_tokens", 120),
             "batch_size": config.params.get("batch_size", 16),
             "max_attempts": config.params.get("max_attempts", 20),
@@ -79,6 +76,8 @@ class Stage4(CandidateStage):
         config: StageConfig,
         ctx: RunContext,
     ) -> list[Candidate]:
+        if ctx.brief is None:
+            raise ValueError("Stage 4 generation requires the Stage 1 product brief")
         generated: list[Candidate] = []
         for route_key, build_route in self.routes.items():
             route = build_route(candidates, config, ctx)

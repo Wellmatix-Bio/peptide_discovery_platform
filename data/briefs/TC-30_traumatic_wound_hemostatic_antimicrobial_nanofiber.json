@@ -1,0 +1,30 @@
+{
+    "case_id": "TC-30_traumatic_wound_hemostatic_antimicrobial_nanofiber",
+    "wound_context": [
+        "acute",
+        "bleeding",
+        "contaminated"
+    ],
+    "desired_functions": [
+        "hemostatic",
+        "antimicrobial"
+    ],
+    "pathogens": [
+        "Staphylococcus_aureus",
+        "Pseudomonas_aeruginosa"
+    ],
+    "min_length": 6,
+    "max_length": 11,
+    "dosing_interval_hours": null,
+    "manufacturing": {
+        "method": "solid_phase_synthesis"
+    },
+    "stage": "discovery",
+    "reference_peptide": {
+        "name": "Tiger17",
+        "sequence": "WCKPKPKPRCH",
+        "source_organism": "Fejervarya_cancrivora"
+    },
+    "literature_source": "Teixeira et al. 2022 (ref 227)",
+    "notes": "Enhanced clotting of recalcified plasma; antimicrobial vs. S. aureus and P. aeruginosa on the same electrospun mat."
+}

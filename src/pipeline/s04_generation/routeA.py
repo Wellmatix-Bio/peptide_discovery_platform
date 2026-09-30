@@ -145,8 +145,8 @@ class FilterResult:
     computed_attributes: dict = field(default_factory=dict)
 
 
-def compute_attributes(sequence: str, ph: float = 7.4) -> dict:
-    return compute_attributes_batch([sequence], ph=ph)[0]
+# def compute_attributes(sequence: str, ph: float = 7.4) -> dict:
+#     return compute_attributes_batch([sequence], ph=ph)[0]
 
 
 def compute_attributes_batch(sequences: list[str], ph: float = 7.4) -> list[dict]:
@@ -631,84 +631,51 @@ def _summarize_generation(generation: int, population: List) -> None:
     )
 
 
-def _real_amp_predictor(use_feature_cache: bool = False) -> AMPClassifier:
+def _real_amp_predictor() -> AMPClassifier:
     global _amp_model_cache
-    # Rebuild if the cached instance's mode doesn't match what's being asked
-    # for now -- a bare `if _amp_model_cache is None` would silently keep
-    # serving a stale True/False instance to a caller that changed its mind,
-    # and a use_feature_cache=True instance handed a use_feature_cache=False
-    # call's feature_extractor=None crashes instead of falling back.
-    if (
-        _amp_model_cache is None
-        or _amp_model_cache.use_feature_cache != use_feature_cache
-    ):
-        _amp_model_cache = AMPClassifier(use_feature_cache=use_feature_cache)
+    if _amp_model_cache is None:
+        _amp_model_cache = AMPClassifier()
     return _amp_model_cache
 
 
-def _real_hemolysis_predictor(
-    use_feature_cache: bool = False,
-) -> ReplicatedHemoPI2Predictor:
+def _real_hemolysis_predictor() -> ReplicatedHemoPI2Predictor:
     global _hemolysis_model_cache
-    if (
-        _hemolysis_model_cache is None
-        or _hemolysis_model_cache.use_feature_cache != use_feature_cache
-    ):
-        _hemolysis_model_cache = ReplicatedHemoPI2Predictor(
-            use_feature_cache=use_feature_cache
-        )
+    if _hemolysis_model_cache is None:
+        _hemolysis_model_cache = ReplicatedHemoPI2Predictor()
     return _hemolysis_model_cache
 
 
-def predict_amp(
-    sequence: str,
-    feature_extractor: FeatureExtractor | None = None,
-    use_feature_cache: bool = False,
-) -> float:
+def predict_amp(sequence: str, feature_extractor: FeatureExtractor) -> float:
     """Real AMP probability from amp_classifier_v1's saved ensemble."""
-    return _real_amp_predictor(use_feature_cache).predict_proba(
-        sequence, feature_extractor
-    )
+    return _real_amp_predictor().predict_proba(sequence, feature_extractor)
 
 
 def predict_hemolysis_phc50(
-    sequence: str,
-    feature_extractor: FeatureExtractor | None = None,
-    use_feature_cache: bool = False,
+    sequence: str, feature_extractor: FeatureExtractor
 ) -> float:
     """Real hemolysis model output from hemolysis_predictor_v1: pHC50, not a probability."""
-    return _real_hemolysis_predictor(use_feature_cache).predict_phc50(
-        sequence, feature_extractor
-    )
+    return _real_hemolysis_predictor().predict_phc50(sequence, feature_extractor)
 
 
 def predict_amp_batch(
-    sequences: list[str],
-    feature_extractor: FeatureExtractor | None = None,
-    use_feature_cache: bool = False,
+    sequences: list[str], feature_extractor: FeatureExtractor
 ) -> list[float]:
     """Real AMP probabilities from amp_classifier_v1, one ESM2 forward pass
-    for the whole list instead of one pass per sequence. When use_feature_cache
-    is set, warms the shared FeatureExtractor for this batch first, so a
-    sequence already embedded by an earlier GA generation (or by this same
-    run's later stages) is never re-embedded."""
-    if use_feature_cache and feature_extractor is not None and sequences:
+    for the whole list instead of one pass per sequence. Warms the shared
+    FeatureExtractor for this batch first, so a sequence already embedded by
+    an earlier GA generation (or by this same run's later stages) is never
+    re-embedded."""
+    if sequences:
         feature_extractor.get_esm2_embedding_batch(sequences)
-    return _real_amp_predictor(use_feature_cache).predict_proba_batch(
-        sequences, feature_extractor
-    )
+    return _real_amp_predictor().predict_proba_batch(sequences, feature_extractor)
 
 
 def predict_hemolysis_phc50_batch(
-    sequences: list[str],
-    feature_extractor: FeatureExtractor | None = None,
-    use_feature_cache: bool = False,
+    sequences: list[str], feature_extractor: FeatureExtractor
 ) -> list[float]:
     """Real hemolysis pHC50 values from hemolysis_predictor_v1, one
     descriptor-extraction pass for the whole list instead of one per sequence."""
-    return _real_hemolysis_predictor(use_feature_cache).predict_phc50_batch(
-        sequences, feature_extractor
-    )
+    return _real_hemolysis_predictor().predict_phc50_batch(sequences, feature_extractor)
 
 
 class BestIndividual(TypedDict):
@@ -739,7 +706,6 @@ def run_ga(
     hemolysis_predictor_batch: Callable[[list[str]], list[float]] | None = None,
     tournsize: int = 3,
     constraint_config: ConstraintConfig | None = None,
-    use_feature_cache: bool = False,
     feature_extractor: FeatureExtractor | None = None,
 ) -> GAResult:
     validate_inputs(
@@ -753,11 +719,7 @@ def run_ga(
     # override the scalar amp_predictor/hemolysis_predictor keep working.
     if amp_predictor_batch is None:
         amp_predictor_batch = (
-            (
-                lambda sequences: predict_amp_batch(
-                    sequences, feature_extractor, use_feature_cache
-                )
-            )
+            (lambda sequences: predict_amp_batch(sequences, feature_extractor))
             if amp_predictor is None
             else _batch_from_scalar(amp_predictor)
         )
@@ -765,7 +727,7 @@ def run_ga(
         hemolysis_predictor_batch = (
             (
                 lambda sequences: predict_hemolysis_phc50_batch(
-                    sequences, feature_extractor, use_feature_cache
+                    sequences, feature_extractor
                 )
             )
             if hemolysis_predictor is None
@@ -935,7 +897,6 @@ class RouteA(Stage4Route):
                     },
                 )
         seed_candidates = valid_candidates
-        use_feature_cache = self.config.get("use_feature_cache", False)
         feature_extractor = self.config.get("feature_extractor")
         candidates: list[Candidate] = []
         for seed_params in tqdm(seed_candidates, desc="RouteA"):
@@ -960,7 +921,6 @@ class RouteA(Stage4Route):
                     mutation_rate=seed_params.get("mutation_rate", 0.1),
                     random_seed=seed_params.get("random_seed", 42),
                     constraint_config=constraint_config,
-                    use_feature_cache=use_feature_cache,
                     feature_extractor=feature_extractor,
                 )
             except Exception as e:

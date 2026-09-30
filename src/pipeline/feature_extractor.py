@@ -9,7 +9,10 @@
 from __future__ import annotations
 
 import hashlib
+import io
+import json
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any
 
 import numpy as np
@@ -20,6 +23,8 @@ from modlamp.descriptors import GlobalDescriptor, PeptideDescriptor
 from propy.PyPro import GetProDes
 from transformers import AutoTokenizer, EsmModel
 
+from common import storage
+from common.model_sync import sync_model_weights, weights_dir_for
 from model_store.hemolysis_predictor_v1.predictor import (
     Extractor as _HemolysisV1Extractor,
     normalize_sequences as _normalize_hemolysis_v1_sequences,
@@ -28,11 +33,13 @@ from model_store.hemolysis_predictor_v1.property_tables import (
     PROPERTY_TABLES as _HEMOLYSIS_V1_PROPERTY_TABLES,
 )
 
-DEFAULT_ESM2_MODEL_NAME = "facebook/esm2_t33_650M_UR50D"
-# Sequences per forward pass, chosen to bound GPU memory use -- measured at
-# ~4.6GB peak reserved on an 8GB card for 256 sequences of the pipeline's max
-# length (50 residues), leaving headroom against fragmentation/other processes.
-DEFAULT_ESM2_BATCH_SIZE = 256
+_ESM2_EMBEDDINGS_FILE = "esm2_embeddings.npz"
+_ESM2_MANIFEST_FILE = "esm2_manifest.json"
+_DESCRIPTORS_FILE = "descriptors.json"
+
+_ESM2_CODE_DIR = Path(__file__).resolve().parents[2] / "model_store" / "esm2_t30_150M"
+DEFAULT_ESM2_MODEL_PATH = weights_dir_for(_ESM2_CODE_DIR)
+
 
 _AROMATIC = set("FWY")
 _HYDROPHOBIC = set("AVLIMFW")
@@ -72,7 +79,10 @@ def _biopython_features(seq: str) -> dict[str, float]:
         "bp_positive_frac": sum(c in _POSITIVE for c in seq) / n,
         "bp_negative_frac": sum(c in _NEGATIVE for c in seq) / n,
         "bp_small_frac": sum(c in _SMALL for c in seq) / n,
-        "bp_net_charge_frac": (sum(c in _POSITIVE for c in seq) - sum(c in _NEGATIVE for c in seq)) / n,
+        "bp_net_charge_frac": (
+            sum(c in _POSITIVE for c in seq) - sum(c in _NEGATIVE for c in seq)
+        )
+        / n,
     }
 
 
@@ -132,12 +142,12 @@ class FeatureExtractor:
 
     def __init__(
         self,
-        esm2_model_name: str = DEFAULT_ESM2_MODEL_NAME,
-        esm2_batch_size: int = DEFAULT_ESM2_BATCH_SIZE,
+        esm2_model_path: Path = DEFAULT_ESM2_MODEL_PATH,
+        esm2_batch_size: int = 256,
     ) -> None:
-        self.esm2_model_name = esm2_model_name
+        self.esm2_model_path = Path(esm2_model_path)
         self.esm2_batch_size = esm2_batch_size
-        self._esm2_fingerprint = f"esm2:{esm2_model_name}"
+        self._esm2_fingerprint = f"esm2:{self.esm2_model_path.name}"
         self._esm2_cache: dict[str, ESM2Embedding] = {}
         self._modlamp_cache: dict[str, dict[str, float]] = {}
         self._propy_biopython_cache: dict[str, dict[str, float]] = {}
@@ -149,18 +159,88 @@ class FeatureExtractor:
         self._hemolysis_v1_extractor: _HemolysisV1Extractor | None = None
 
     # ------------------------------------------------------------------
+    # Persistence: round-trips the four cache dicts through feature_cache/.
+    # ------------------------------------------------------------------
+
+    def save(self, dir: str) -> None:
+        storage.ensure_dir(dir)
+
+        if self._esm2_cache:
+            arrays: dict[str, np.ndarray] = {}
+            for key, embedding in self._esm2_cache.items():
+                arrays[f"{key}__hidden"] = embedding.hidden_states
+                arrays[f"{key}__ids"] = embedding.input_ids
+            buffer = io.BytesIO()
+            np.savez_compressed(buffer, **arrays)
+            storage.write_bytes(
+                storage.join(dir, _ESM2_EMBEDDINGS_FILE), buffer.getvalue()
+            )
+
+            first = next(iter(self._esm2_cache.values()))
+            manifest = {
+                "keys": list(self._esm2_cache.keys()),
+                "cls_token_id": first.cls_token_id,
+                "eos_token_id": first.eos_token_id,
+            }
+            storage.write_text(
+                storage.join(dir, _ESM2_MANIFEST_FILE), json.dumps(manifest)
+            )
+
+        descriptors = {
+            "modlamp": self._modlamp_cache,
+            "propy_biopython": self._propy_biopython_cache,
+            "hemolysis_v1": self._hemolysis_v1_cache,
+        }
+        storage.write_text(
+            storage.join(dir, _DESCRIPTORS_FILE), json.dumps(descriptors)
+        )
+
+    @classmethod
+    def load(
+        cls,
+        dir: str,
+        esm2_model_path: Path = DEFAULT_ESM2_MODEL_PATH,
+        esm2_batch_size: int = 256,
+    ) -> "FeatureExtractor":
+        """Missing files leave the corresponding dict empty, same as a fresh instance."""
+        extractor = cls(
+            esm2_model_path=esm2_model_path, esm2_batch_size=esm2_batch_size
+        )
+
+        embeddings_path = storage.join(dir, _ESM2_EMBEDDINGS_FILE)
+        manifest_path = storage.join(dir, _ESM2_MANIFEST_FILE)
+        if storage.exists(embeddings_path) and storage.exists(manifest_path):
+            manifest = json.loads(storage.read_text(manifest_path))
+            with np.load(io.BytesIO(storage.read_bytes(embeddings_path))) as npz:
+                for key in manifest["keys"]:
+                    extractor._esm2_cache[key] = ESM2Embedding(
+                        hidden_states=npz[f"{key}__hidden"],
+                        input_ids=npz[f"{key}__ids"],
+                        cls_token_id=manifest["cls_token_id"],
+                        eos_token_id=manifest["eos_token_id"],
+                    )
+
+        descriptors_path = storage.join(dir, _DESCRIPTORS_FILE)
+        if storage.exists(descriptors_path):
+            descriptors = json.loads(storage.read_text(descriptors_path))
+            extractor._modlamp_cache = descriptors.get("modlamp", {})
+            extractor._propy_biopython_cache = descriptors.get("propy_biopython", {})
+            extractor._hemolysis_v1_cache = descriptors.get("hemolysis_v1", {})
+
+        return extractor
+
+    # ------------------------------------------------------------------
     # ESM2
     # ------------------------------------------------------------------
 
     def _load_esm2(self) -> None:
         if self._esm2_model is not None:
             return
+        sync_model_weights(_ESM2_CODE_DIR)
         self._esm2_device = "cuda" if torch.cuda.is_available() else "cpu"
-        self._esm2_tokenizer = AutoTokenizer.from_pretrained(self.esm2_model_name)
+        self._esm2_tokenizer = AutoTokenizer.from_pretrained(self.esm2_model_path)
         self._esm2_model = (
-            EsmModel.from_pretrained(self.esm2_model_name)
-            .to(self._esm2_device)
-            .eval()
+            EsmModel.from_pretrained(self.esm2_model_path).to(self._esm2_device).eval()
         )
 
     def get_esm2_embedding(self, sequence: str) -> ESM2Embedding:
@@ -226,7 +306,9 @@ class FeatureExtractor:
     ) -> list[dict[str, float]]:
         fingerprint = "modlamp"
         keys = [_sequence_cache_key(s, fingerprint) for s in sequences]
-        missing_indices = [i for i, k in enumerate(keys) if k not in self._modlamp_cache]
+        missing_indices = [
+            i for i, k in enumerate(keys) if k not in self._modlamp_cache
+        ]
 
         if missing_indices:
             missing_sequences = [sequences[i].upper() for i in missing_indices]

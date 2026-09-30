@@ -1,0 +1,95 @@
+{
+  "request_id": "request-001",
+  "stages": {
+    "s01_therapeutic_product_brief": {
+      "seed": 42,
+      "brief": {
+        "wound_context": [
+          "chronic",
+          "infected",
+          "diabetic"
+        ],
+        "desired_functions": [
+          "antimicrobial",
+          "keratinocyte_migration",
+          "angiogenesis",
+          "anti_inflammatory"
+        ],
+        "pathogens": [
+          "Staphylococcus_aureus",
+          "Pseudomonas_aeruginosa"
+        ],
+        "min_length": 6,
+        "max_length": 30,
+        "dosing_interval_hours": 48
+      }
+    },
+    "s04_candidate_generation": {
+      "tags": [
+        "<AMP>"
+      ],
+      "n_peptides": 100,
+      "max_new_tokens": 120,
+      "batch_size": 16,
+      "max_attempts": 20,
+      "route_a_ga_params": {
+        "pop_size": 3,
+        "n_generations": 5,
+        "mutation_rate": 0.1,
+        "random_seed": 42
+      },
+      "route_a_constraint_config": {
+        "charge_min": -3.0,
+        "charge_max": 8.0,
+        "hydro_min": -1.0,
+        "hydro_max": 1.0,
+        "aggregation_threshold": 3.0,
+        "ph": 7.4
+      }
+    },
+    "s05_physchem_screening": {
+      "ph": 7.4,
+      "solubility_solvent": "Ultrapure water",
+      "aggregation_tendency_flag_max": 0.6,
+      "solubility_flag_min": 0.4,
+      "amphipathicity_flag_max": 0.8
+    },
+    "s06_functional_models": {
+      "stage6_thresholds": {
+        "min_amp_probability": 0.7,
+        "min_proliferation_migration": 0.5,
+        "min_angiogenic_activity": 0.1,
+        "min_anti_inflammatory_probability": 0.5,
+        "max_mic": {
+          "Escherichia_coli": 32.0,
+          "Staphylococcus_aureus": 32.0,
+          "Pseudomonas_aeruginosa": 32.0
+        },
+        "max_mbic": {
+          "Pseudomonas_aeruginosa": 32.0,
+          "Staphylococcus_aureus": 32.0,
+          "Candida_albicans": 32.0
+        }
+      }
+    },
+    "s07_structure_mechanism": {
+      "plddt_low_confidence_max": 0.5,
+      "pathway_engagement_min_probability": 0.5
+    },
+    "s08_safety_developability": {
+      "hemolysis_phc50_reject_max": 4.0,
+      "solubility_solvent": "Ultrapure water",
+      "cytotoxicity_cell_type": "DRAMP_aggregate",
+      "cytotoxicity_reject_max": 0.5,
+      "aggregation_reject_max": 0.7,
+      "solubility_flag_min": 0.3,
+      "cleavage_stability_reject_min": 0.3,
+      "cleavage_decay_rate": 0.5
+    },
+    "s09_synthesis_cmc": {
+      "rejected_difficulty_classes": [
+        "high"
+      ]
+    }
+  }
+}

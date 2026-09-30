@@ -131,7 +131,8 @@ site/
 
 # ---------- Reports ----------
 *.pdf
-docs/
+# docs/ itself is tracked (project documentation). Generated PDF reports under it
+# stay tracked via the negation below, as before.
 !docs/**/*.pdf
 **/rationale.md
 scripts/
@@ -148,4 +149,4 @@ src/backend/api_stage/Dockerfile
 
 # --------- Miscellaneous ----------
 src/backend/worker_e2e/example_run.json
-src/backend/api_e2e/example_request.json
+src/backend/api_e2e/example_request.json.venv/

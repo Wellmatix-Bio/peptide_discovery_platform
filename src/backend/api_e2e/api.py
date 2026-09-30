@@ -229,6 +229,7 @@ class ComponentStats(BaseModel):
 class CandidateResponse(BaseModel):
     id: str = "?"
     sequence: str | None = None  # 'sequence' key - sibling of predictions
+    ranking: int | None = None  # 'ranking.rank' key in predictions
     amp_probability: float | None = None  # 'amp_prob' key in predictions
     hemolytic_activity_phc50: float | None = (
         None  # 'hemolysis_phc50' key in predictions
@@ -315,6 +316,7 @@ def _candidate_response(candidate: dict) -> CandidateResponse:
     return CandidateResponse(
         id=candidate.get("id", "?"),
         sequence=candidate.get("sequence"),
+        ranking=nested("ranking", "rank"),
         amp_probability=preds.get("amp_probability"),
         hemolytic_activity_phc50=nested("hemolysis", "phc50"),
         molecular_weight=preds.get("molecular_weight"),

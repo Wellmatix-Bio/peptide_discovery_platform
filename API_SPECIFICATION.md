@@ -192,13 +192,15 @@ the source of truth. A job that is still running or failed returns `status` and
 | `candidates` | Typed summaries, see below |
 
 Each entry of `candidates` is a flat
-`CandidateResponse` projected from `predictions` (the sequence and full
-prediction tree are not included; read `candidates_final.json` for those).
-Scalar fields are `null` when the producing stage did not run or abstained.
+`CandidateResponse` projected from the candidate record (the full prediction
+tree is not included; read `candidates_final.json` for it). Scalar fields are
+`null` when the producing stage did not run or abstained.
 
-| Field | Source in `predictions` |
+| Field | Source |
 |---|---|
-| `id` | Candidate `id` (required) |
+| `id` | Candidate `id`; `"?"` if the record has none |
+| `sequence` | Top-level candidate `sequence` (not under `predictions`) |
+| `ranking` | `predictions.ranking.rank`, 1-based position among ranked candidates; `null` if not ranked |
 | `amp_probability` | `amp_probability` |
 | `hemolytic_activity_phc50` | `hemolysis.phc50` |
 | `molecular_weight` | `molecular_weight` (Daltons) |

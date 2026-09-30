@@ -242,6 +242,8 @@ paths:
                     max: 0.94
                 candidates:
                 - id: cand-001
+                  sequence: EFELDRICGYGTARCRKKCRSQEYRIGRCPNTYACCLRKWDESLLNRTKP
+                  ranking: 1
                   amp_probability: 0.91
                   hemolytic_activity_phc50: 5.2
                   molecular_weight: 2140.6
@@ -497,6 +499,23 @@ components:
         id:
           type: string
           title: Id
+          default: '?'
+          description: Candidate id; "?" if the record has none
+        sequence:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Sequence
+          description: Peptide sequence (top-level candidate field, not under
+            predictions)
+        ranking:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Ranking
+          description: predictions.ranking.rank, the 1-based position among ranked
+            candidates. Null for candidates that were not ranked
+            (insufficient evidence).
         amp_probability:
           anyOf:
           - type: number
@@ -642,7 +661,6 @@ components:
           description: predictions.mechanism.engaged_pathways
       type: object
       required:
-      - id
       - log_mic_um
       - pmbic
       title: CandidateResponse

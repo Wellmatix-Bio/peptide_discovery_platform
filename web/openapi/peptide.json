@@ -598,6 +598,84 @@
         "title": "JobStatusResponse",
         "type": "object"
       },
+      "ModelEntry": {
+        "properties": {
+          "model_card": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model Card"
+          },
+          "model_card_present": {
+            "default": false,
+            "title": "Model Card Present",
+            "type": "boolean"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "predictor_sha256": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Predictor Sha256"
+          },
+          "version": {
+            "title": "Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "version"
+        ],
+        "title": "ModelEntry",
+        "type": "object"
+      },
+      "ModelManifest": {
+        "properties": {
+          "caveat": {
+            "title": "Caveat",
+            "type": "string"
+          },
+          "models": {
+            "items": {
+              "$ref": "#/components/schemas/ModelEntry"
+            },
+            "title": "Models",
+            "type": "array"
+          },
+          "weights_source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Weights Source"
+          }
+        },
+        "required": [
+          "models",
+          "caveat"
+        ],
+        "title": "ModelManifest",
+        "type": "object"
+      },
       "RouteAConstraintConfig": {
         "properties": {
           "aggregation_threshold": {
@@ -1249,6 +1327,42 @@
           }
         },
         "summary": "Get Job Status"
+      }
+    },
+    "/api/v1/models": {
+      "get": {
+        "description": "What this deployment declares it will run, read from model_store/ on disk.\n\nHONEST LIMITS, because a provenance endpoint that overstates is worse than none:\n- `predictor_sha256` digests the predictor's CODE (predictor.py), not its weights. The API\n  container does not hold the weights at all -- the worker syncs them from\n  VERTEX_MODEL_STORE at run time -- so this process cannot digest them without downloading\n  them, which a status endpoint has no business doing.\n- `version` is the suffix of the directory name, which is how this project versions a\n  predictor. It is not derived from the weights either.\n- `model_card` is whatever the predictor ships. 7 of the 15 predictors ship none, and\n  `model_card_present` says which, rather than an empty object implying there is nothing\n  to know.",
+        "operationId": "model_manifest_api_v1_models_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelManifest"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Model Manifest"
+      }
+    },
+    "/healthz": {
+      "get": {
+        "description": "Liveness only. It deliberately does NOT check Vertex or GCS: a readiness probe that\ncalls out to Google turns a Google incident into an unhealthy container, and this process\nis perfectly able to answer 503s explaining itself. Whether the settings are present is\nreported here as a fact rather than as health.",
+        "operationId": "healthz_healthz_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Healthz"
       }
     }
   }

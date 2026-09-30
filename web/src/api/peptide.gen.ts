@@ -72,6 +72,60 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/models": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Model Manifest
+         * @description What this deployment declares it will run, read from model_store/ on disk.
+         *
+         *     HONEST LIMITS, because a provenance endpoint that overstates is worse than none:
+         *     - `predictor_sha256` digests the predictor's CODE (predictor.py), not its weights. The API
+         *       container does not hold the weights at all -- the worker syncs them from
+         *       VERTEX_MODEL_STORE at run time -- so this process cannot digest them without downloading
+         *       them, which a status endpoint has no business doing.
+         *     - `version` is the suffix of the directory name, which is how this project versions a
+         *       predictor. It is not derived from the weights either.
+         *     - `model_card` is whatever the predictor ships. 7 of the 15 predictors ship none, and
+         *       `model_card_present` says which, rather than an empty object implying there is nothing
+         *       to know.
+         */
+        get: operations["model_manifest_api_v1_models_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/healthz": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Healthz
+         * @description Liveness only. It deliberately does NOT check Vertex or GCS: a readiness probe that
+         *     calls out to Google turns a Google incident into an unhealthy container, and this process
+         *     is perfectly able to answer 503s explaining itself. Whether the settings are present is
+         *     reported here as a fact rather than as health.
+         */
+        get: operations["healthz_healthz_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -249,6 +303,33 @@ export interface components {
             status: string;
             /** Vertex State */
             vertex_state: string;
+        };
+        /** ModelEntry */
+        ModelEntry: {
+            /** Model Card */
+            model_card?: {
+                [key: string]: unknown;
+            } | null;
+            /**
+             * Model Card Present
+             * @default false
+             */
+            model_card_present: boolean;
+            /** Name */
+            name: string;
+            /** Predictor Sha256 */
+            predictor_sha256?: string | null;
+            /** Version */
+            version: string;
+        };
+        /** ModelManifest */
+        ModelManifest: {
+            /** Caveat */
+            caveat: string;
+            /** Models */
+            models: components["schemas"]["ModelEntry"][];
+            /** Weights Source */
+            weights_source?: string | null;
         };
         /** RouteAConstraintConfig */
         RouteAConstraintConfig: {
@@ -774,6 +855,46 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    model_manifest_api_v1_models_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelManifest"];
+                };
+            };
+        };
+    };
+    healthz_healthz_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
                 };
             };
         };

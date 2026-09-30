@@ -116,7 +116,6 @@ paths:
               example:
                 request_id: request-001
                 job_id: projects/123/locations/us-central1/customJobs/456
-                config_path: gs://bucket/artifacts/runs/456/config.json
                 result_path: gs://bucket/artifacts/runs/456
         '422':
           description: Malformed request body (schema-level validation, caught before
@@ -200,7 +199,7 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
       description: job_id is the complete Vertex resource name containing slashes.
         The server uses a catch-all path parameter; clients must preserve the resource
-        path. `stage` is the last stage name seen in this run's audit_log.jsonl
+        path. `stage` is the stage recorded in this run's results.json
         (`"pending"` if the run hasn't written one yet) -- a worker-progress signal
         independent of `status`, which reflects the Vertex job's own lifecycle
         state only.
@@ -232,7 +231,6 @@ paths:
                 run_id: '456'
                 status: success
                 n_final: 12
-                total_candidates: 12
                 ranked_candidates: 10
                 insufficient_evidence_candidates: 2
                 component_stats:
@@ -244,8 +242,28 @@ paths:
                     max: 0.94
                 candidates:
                 - id: cand-001
-                  sequence: EFELDRICGYGTARCRKKCRSQEYRIGRCPNTYACCLRKWDESLLNRTKP
-                  predictions: {}
+                  amp_probability: 0.91
+                  hemolytic_activity_phc50: 5.2
+                  molecular_weight: 2140.6
+                  net_charge: 4.0
+                  instability_index: 28.4
+                  deamidation_risk: low
+                  oxidation_risk: medium
+                  solubility: 0.72
+                  aggregation_tendency: 0.21
+                  anti_inflammatory_probability: 0.64
+                  angiogenic_activity: 0.33
+                  proliferation_probability: 0.58
+                  migration_probability: 0.61
+                  cytotoxicity_probability: 0.12
+                  cleavage_stability: 0.77
+                  log_mic_um:
+                    Escherichia coli: 0.9
+                    Staphylococcus aureus: 1.1
+                  pmbic:
+                    Staphylococcus aureus: 4.3
+                  engaged_pathways:
+                  - PI3K-Akt
         '404':
           description: Job results not found, or the job succeeded but candidates_final.json
             is missing.
@@ -355,9 +373,6 @@ components:
         job_id:
           type: string
           title: Job Id
-        config_path:
-          type: string
-          title: Config Path
         result_path:
           type: string
           title: Result Path
@@ -365,7 +380,6 @@ components:
       required:
       - request_id
       - job_id
-      - config_path
       - result_path
       title: CreateJobResponse
     JobStatusResponse:
@@ -383,11 +397,15 @@ components:
           - fail
           - stopped
         stage:
-          type: string
+          anyOf:
+          - type: string
+          - type: 'null'
           title: Stage
           default: pending
-          description: Last stage name seen in this run's audit_log.jsonl, or
-            "pending" if none has been written yet.
+          description: Stage the worker was on at its last progress write in
+            results.json, or "pending" if none has been written yet. The
+            handler substitutes "pending" for a missing value, so clients
+            should not normally see null.
         vertex_state:
           type: string
           title: Vertex State
@@ -443,11 +461,6 @@ components:
           - type: integer
           - type: 'null'
           title: N Final
-        total_candidates:
-          anyOf:
-          - type: integer
-          - type: 'null'
-          title: Total Candidates
         ranked_candidates:
           anyOf:
           - type: integer
@@ -466,16 +479,173 @@ components:
         candidates:
           type: array
           items:
-            type: object
-            additionalProperties: true
+            $ref: '#/components/schemas/CandidateResponse'
+          default: []
           title: Candidates
       type: object
       required:
       - job_id
       - run_id
       - status
-      - candidates
       title: JobResultsResponse
+    CandidateResponse:
+      description: Flattened per-candidate summary projected from the candidate's
+        predictions in candidates_final.json. Scalar fields are null when the
+        producing stage did not run or abstained; log_mic_um and pmbic are empty
+        objects in that case. Unlisted predictions are not returned.
+      properties:
+        id:
+          type: string
+          title: Id
+        amp_probability:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Amp Probability
+          description: predictions.amp_probability
+        hemolytic_activity_phc50:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Hemolytic Activity Phc50
+          description: predictions.hemolysis.phc50
+        molecular_weight:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Molecular Weight
+          description: predictions.molecular_weight, in Daltons
+        net_charge:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Net Charge
+          description: predictions.net_charge
+        instability_index:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Instability Index
+          description: predictions.instability_index
+        deamidation_risk:
+          anyOf:
+          - type: string
+            enum:
+            - low
+            - medium
+            - high
+          - type: 'null'
+          title: Deamidation Risk
+          description: predictions.deamidation_risk.risk_category
+        oxidation_risk:
+          anyOf:
+          - type: string
+            enum:
+            - low
+            - medium
+            - high
+          - type: 'null'
+          title: Oxidation Risk
+          description: predictions.oxidation_risk.risk_category
+        solubility:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Solubility
+          description: predictions.solubility.score
+        aggregation_tendency:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Aggregation Tendency
+          description: predictions.aggregation_tendency.score
+        anti_inflammatory_probability:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Anti Inflammatory Probability
+          description: predictions.anti_inflammatory_probability
+        angiogenic_activity:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Angiogenic Activity
+          description: predictions.angiogenic_activity.angiogenic
+        proliferation_probability:
+          anyOf:
+          - type: number
+          - type: 'null'
+          default: 0
+          title: Proliferation Probability
+          description: predictions.proliferation_migration.proliferation. Note the
+            default is 0, not null, when absent.
+        migration_probability:
+          anyOf:
+          - type: number
+          - type: 'null'
+          default: 0
+          title: Migration Probability
+          description: predictions.proliferation_migration.migration. Note the
+            default is 0, not null, when absent.
+        cytotoxicity_probability:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Cytotoxicity Probability
+          description: predictions.cytotoxicity.score
+        cleavage_stability:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Cleavage Stability
+          description: predictions.cleavage_stability.score
+        log_mic_um:
+          type: object
+          propertyNames:
+            enum:
+            - Escherichia coli
+            - Staphylococcus aureus
+            - Pseudomonas aeruginosa
+          additionalProperties:
+            type: number
+          title: Log Mic Um
+          description: predictions.mic.log_mic_um, keyed by pathogen name with a
+            space (not an underscore)
+        pmbic:
+          type: object
+          propertyNames:
+            enum:
+            - Acinetobacter baumannii
+            - Candida albicans
+            - Candida tropicalis
+            - Cutibacterium acnes
+            - Enterococcus faecium
+            - Escherichia coli
+            - Klebsiella pneumoniae
+            - Pseudomonas aeruginosa
+            - Salmonella enterica
+            - Staphylococcus aureus
+            - Staphylococcus epidermidis
+            - Streptococcus mutans
+            - Streptococcus sanguinis
+          additionalProperties:
+            type: number
+          title: Pmbic
+          description: predictions.mbic.pmbic, keyed by pathogen name with a space
+        engaged_pathways:
+          anyOf:
+          - type: array
+            items:
+              type: string
+          - type: 'null'
+          title: Engaged Pathways
+          description: predictions.mechanism.engaged_pathways
+      type: object
+      required:
+      - id
+      - log_mic_um
+      - pmbic
+      title: CandidateResponse
     BriefFields:
       properties:
         wound_context:

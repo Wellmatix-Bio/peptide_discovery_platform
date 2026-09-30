@@ -6,6 +6,7 @@ import re
 import statistics
 import logging
 from functools import lru_cache
+from typing import Literal
 from fastapi import FastAPI, HTTPException
 from google.api_core.exceptions import GoogleAPICallError, NotFound
 from google.auth.exceptions import GoogleAuthError
@@ -45,14 +46,13 @@ class CreateJobRequest(BaseModel):
 class CreateJobResponse(BaseModel):
     request_id: str
     job_id: str
-    config_path: str
     result_path: str
 
 
 class JobStatusResponse(BaseModel):
     job_id: str
     status: str
-    stage: str = "pending"
+    stage: str | None = "pending"
     vertex_state: str
     error: str | None = None
 
@@ -63,10 +63,10 @@ def _label_value(value: str) -> str:
 
 
 def job_name(job_id):
-    # if not re.fullmatch(r"projects/[^/]+/locations/[^/]+/customJobs/[0-9]+", job_id):
-    #     raise HTTPException(
-    #         422, "job_id must be the full Vertex Custom Job resource name"
-    #     )
+    if not re.fullmatch(r"projects/[^/]+/locations/[^/]+/customJobs/[0-9]+", job_id):
+        raise HTTPException(
+            422, "job_id must be the full Vertex Custom Job resource name"
+        )
     return job_id
 
 
@@ -168,7 +168,6 @@ def create_job(request: CreateJobRequest):
     return CreateJobResponse(
         request_id=request.request_id,
         job_id=job.name,
-        config_path=config_path,
         result_path=result_path,
     )
 
@@ -227,20 +226,114 @@ class ComponentStats(BaseModel):
     max: float
 
 
+class CandidateResponse(BaseModel):
+    id: str = "?"
+    sequence: str | None = None  # 'sequence' key - sibling of predictions
+    amp_probability: float | None = None  # 'amp_prob' key in predictions
+    hemolytic_activity_phc50: float | None = (
+        None  # 'hemolysis_phc50' key in predictions
+    )
+    molecular_weight: float | None = (
+        None  # 'molecular_weight' key in predictions (unit: Daltons)
+    )
+    net_charge: float | None = None  # 'net_charge' key in predictions
+    instability_index: float | None = None  # 'instability_index' key in predictions
+    deamidation_risk: Literal["low", "medium", "high"] | None = (
+        None  # deamidation_risk.risk_category
+    )
+    oxidation_risk: Literal["low", "medium", "high"] | None = (
+        None  # oxidation_risk.risk_category
+    )
+    solubility: float | None = None  # 'solubility.score' key in predictions
+    aggregation_tendency: float | None = (
+        None  # 'aggregation_tendency.score' key in predictions
+    )
+    anti_inflammatory_probability: float | None = (
+        None  # 'anti_inflammatory_prob' key in predictions
+    )
+    angiogenic_activity: float | None = (
+        None  # 'angiogenic_activity.angiogenic' key in predictions
+    )
+    proliferation_probability: float | None = (
+        0  # proliferation_migration.proliferation in predictions
+    )
+    migration_probability: float | None = (
+        0  # proliferation_migration.migration in predictions
+    )
+    cytotoxicity_probability: float | None = (
+        None  # 'cytotoxicity.score' key in predictions
+    )
+    cleavage_stability: float | None = None  # cleavage_stability.score in predictions
+    log_mic_um: dict[
+        Literal["Escherichia coli", "Staphylococcus aureus", "Pseudomonas aeruginosa"],
+        float,
+    ]  # 'mic.log_mic_um' key in predictions
+    pmbic: dict[
+        Literal[
+            "Acinetobacter baumannii",
+            "Candida albicans",
+            "Candida tropicalis",
+            "Cutibacterium acnes",
+            "Enterococcus faecium",
+            "Escherichia coli",
+            "Klebsiella pneumoniae",
+            "Pseudomonas aeruginosa",
+            "Salmonella enterica",
+            "Staphylococcus aureus",
+            "Staphylococcus epidermidis",
+            "Streptococcus mutans",
+            "Streptococcus sanguinis",
+        ],
+        float,
+    ]
+    engaged_pathways: list[str] | None = (
+        None  # 'mechanism.engaged_pathways' key in predictions
+    )
+
+
 class JobResultsResponse(BaseModel):
     job_id: str
     run_id: str
     status: str
     n_final: int | None = None
-    total_candidates: int | None = None
     ranked_candidates: int | None = None
     insufficient_evidence_candidates: int | None = None
     component_stats: dict[str, ComponentStats] = Field(default_factory=dict)
-    candidates: list[dict]
+    candidates: list[CandidateResponse] = []
 
 
 def _run_id_from_job_id(job_id: str) -> str:
     return job_id.rsplit("/", 1)[-1]
+
+
+def _candidate_response(candidate: dict) -> CandidateResponse:
+    preds = candidate.get("predictions") or {}
+
+    def nested(key: str, field: str):
+        return (preds.get(key) or {}).get(field)
+
+    return CandidateResponse(
+        id=candidate.get("id", "?"),
+        sequence=candidate.get("sequence"),
+        amp_probability=preds.get("amp_probability"),
+        hemolytic_activity_phc50=nested("hemolysis", "phc50"),
+        molecular_weight=preds.get("molecular_weight"),
+        net_charge=preds.get("net_charge"),
+        instability_index=preds.get("instability_index"),
+        deamidation_risk=nested("deamidation_risk", "risk_category"),
+        oxidation_risk=nested("oxidation_risk", "risk_category"),
+        solubility=nested("solubility", "score"),
+        aggregation_tendency=nested("aggregation_tendency", "score"),
+        anti_inflammatory_probability=preds.get("anti_inflammatory_probability"),
+        angiogenic_activity=nested("angiogenic_activity", "angiogenic"),
+        proliferation_probability=nested("proliferation_migration", "proliferation"),
+        migration_probability=nested("proliferation_migration", "migration"),
+        cytotoxicity_probability=nested("cytotoxicity", "score"),
+        cleavage_stability=nested("cleavage_stability", "score"),
+        log_mic_um=nested("mic", "log_mic_um") or {},
+        pmbic=nested("mbic", "pmbic") or {},
+        engaged_pathways=nested("mechanism", "engaged_pathways"),
+    )
 
 
 def _component_stats(candidates: list[dict]) -> dict[str, ComponentStats]:
@@ -306,16 +399,17 @@ def get_job_results(job_id: str):
         if c.get("predictions", {}).get("ranking", {}).get("status") == "ranked"
     )
 
+    candidates_response = [_candidate_response(c) for c in candidates]
+
     return JobResultsResponse(
         job_id=name,
         run_id=run_id,
         status=status,
         n_final=status_payload.get("n_final"),
-        total_candidates=len(candidates),
         ranked_candidates=ranked,
         insufficient_evidence_candidates=len(candidates) - ranked,
         component_stats=_component_stats(candidates),
-        candidates=candidates,
+        candidates=candidates_response,
     )
 
 

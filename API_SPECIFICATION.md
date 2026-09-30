@@ -1,12 +1,12 @@
 # End-to-end Job API Specification
 
-This specification covers **job creation and status checks only**.
-Machine-readable contract: [`openapi.yaml`](openapi.yaml), OpenAPI 3.1.
-Implementation: [`src/backend/api_e2e/api.py`](src/backend/api_e2e/api.py).
-Stage validation: [`src/schemas/stage_configs.py`](src/schemas/stage_configs.py)
-and [`src/schemas/e2e_config.py`](src/schemas/e2e_config.py).
+This specification covers **job creation, status checks and result reads**.
+Machine-readable contract: `openapi.yaml`, OpenAPI 3.1.
+Implementation: src/backend/api_e2e/api.py.
+Stage and configuration validation: src/schemas/stage_configs.py
+and src/schemas/e2e_config.py
 
-Base URL: `<api-host>`. All bodies use `application/json`.
+All bodies use `application/json`.
 No caller authentication is defined in the application routes; deployment-level
 access controls are separate. The API uses Google Application Default Credentials.
 
@@ -64,7 +64,7 @@ is also accepted, but flat parameter keys cannot be mixed with `params`.
 | `s05_physchem_screening` | Schema defaults |
 | `s06_functional_models` | Schema defaults |
 | `s07_structure_mechanism` | Schema defaults |
-| `s08_safety_developability` | Schema defaults; hemolysis v1 only |
+| `s08_safety_developability` | Schema defaults |
 | `s09_synthesis_cmc` | Schema defaults |
 | `s11_ranking` | Always enabled with the built-in ranking policy |
 
@@ -84,15 +84,6 @@ Stage 11 weights, modifiers, normalization, and input mappings live in code.
 Send `"s11_ranking": {}` or omit it. The current normalizer discards supplied
 Stage 11 settings and always uses an enabled stage with no parameters.
 
-### Submission and configuration
-
-1. Submit the job with `--config <artifacts_dir>/requests/<request_id>/config.json`
-   and `--wait-for-config 120`.
-2. Receive the Vertex resource name and extract its numeric job ID.
-3. Set the internal pipeline `run_id` to that numeric ID.
-4. Write identical JSON configs to the request path and
-   `<artifacts_dir>/runs/<numeric_job_id>/config.json`.
-
 The worker starts when the request-path config appears, waiting at most 120 seconds
 for a missing file. The API returns only after both writes complete. A config
 publication failure returns 502 and triggers a best-effort attempt to stop the job.
@@ -106,7 +97,6 @@ since reusing one shares the request-path config with earlier jobs.
 {
   "request_id": "request-001",
   "job_id": "projects/123/locations/us-central1/customJobs/456",
-  "config_path": "gs://bucket/artifacts/runs/456/config.json",
   "result_path": "gs://bucket/artifacts/runs/456"
 }
 ```
@@ -115,8 +105,7 @@ since reusing one shares the request-path config with earlier jobs.
 |---|---|
 | `request_id` | Echoed request identifier |
 | `job_id` | Full Vertex resource name; pass unchanged to the status endpoint |
-| `config_path` | Complete JSON worker config stored under the numeric job ID |
-| `result_path` | Artifact directory for this job |
+| `result_path` | Artifact directory for this job (the worker config is stored there as `config.json`) |
 
 A 202 means submission and config publication succeeded, not that the pipeline
 finished. The response has no separate `run_id` field.
@@ -151,7 +140,7 @@ slash-separated resource path; some generated clients require custom path handli
 |---|---|
 | `job_id` | Full Vertex job resource name |
 | `status` | From the worker's `results.json` (`"pending"` if not yet written): `running`, `success`, or `failed` |
-| `stage` | From `results.json`: the stage the worker was on at its last progress write, or `"pending"` if not yet written |
+| `stage` | From `results.json`: the stage the worker was on at its last progress write, or `"pending"` if not yet written or null. Typed `string \| null` in the schema, but the handler always substitutes `"pending"`, so clients should not see null |
 | `vertex_state` | Real Vertex `CustomJob.state` enum name, queried live (e.g. `JOB_STATE_RUNNING`, `JOB_STATE_SUCCEEDED`, `JOB_STATE_FAILED`) |
 | `error` | Vertex error message, or null |
 
@@ -163,6 +152,81 @@ OOM-killed, cancelled) before writing a final `results.json` can leave
 `status` stuck at `"running"` and `stage` at an earlier value even though
 `vertex_state` already shows a terminal state. Treat `vertex_state` as
 authoritative for whether the job is still executing.
+
+## Read job results
+
+`GET /api/v1/jobs/{job_id}/results`
+
+Uses the same full-resource-name `job_id` as the status endpoint. Reads
+`results.json` from the run directory; if the worker reported `success`, it also
+reads `candidates_final.json`. Worker output files, not live Vertex state, are
+the source of truth. A job that is still running or failed returns `status` and
+`n_final` only, with an empty `candidates` list.
+
+### Response: 200 OK
+
+```json
+{
+  "job_id": "projects/123/locations/us-central1/customJobs/456",
+  "run_id": "456",
+  "status": "success",
+  "n_final": 12,
+  "ranked_candidates": 10,
+  "insufficient_evidence_candidates": 2,
+  "component_stats": {
+    "wound_closure": {"count": 10, "mean": 0.62, "median": 0.60, "min": 0.31, "max": 0.94}
+  },
+  "candidates": [
+    ...
+  ]
+}
+```
+
+| Field | Meaning |
+|---|---|
+| `run_id` | Numeric Vertex job ID |
+| `n_final` | Final candidate count reported by the worker |
+| `ranked_candidates` | Candidates whose ranking status is `ranked` |
+| `insufficient_evidence_candidates` | Candidates in the final file that are not `ranked` |
+| `component_stats` | Mean/median/min/max per ranking component, over ranked candidates' normalized scores only |
+| `candidates` | Typed summaries, see below |
+
+Each entry of `candidates` is a flat
+`CandidateResponse` projected from `predictions` (the sequence and full
+prediction tree are not included; read `candidates_final.json` for those).
+Scalar fields are `null` when the producing stage did not run or abstained.
+
+| Field | Source in `predictions` |
+|---|---|
+| `id` | Candidate `id` (required) |
+| `amp_probability` | `amp_probability` |
+| `hemolytic_activity_phc50` | `hemolysis.phc50` |
+| `molecular_weight` | `molecular_weight` (Daltons) |
+| `net_charge` | `net_charge` |
+| `instability_index` | `instability_index` |
+| `deamidation_risk`, `oxidation_risk` | `<name>.risk_category`: `low`, `medium`, `high` |
+| `solubility` | `solubility.score` |
+| `aggregation_tendency` | `aggregation_tendency.score` |
+| `anti_inflammatory_probability` | `anti_inflammatory_probability` |
+| `angiogenic_activity` | `angiogenic_activity.angiogenic` |
+| `proliferation_probability`, `migration_probability` | `proliferation_migration.proliferation` / `.migration`; default `0` (not null) when absent |
+| `cytotoxicity_probability` | `cytotoxicity.score` |
+| `cleavage_stability` | `cleavage_stability.score` |
+| `log_mic_um` | `mic.log_mic_um`, keyed by `Escherichia coli`, `Staphylococcus aureus`, `Pseudomonas aeruginosa`; `{}` when absent |
+| `pmbic` | `mbic.pmbic`, keyed by 13 pathogens (see `openapi.yaml`); `{}` when absent |
+| `engaged_pathways` | `mechanism.engaged_pathways` |
+
+Pathogen keys here use spaces (`Staphylococcus aureus`), unlike the request's
+brief vocabulary, which uses underscores (`Staphylococcus_aureus`). A key
+outside the listed pathogens fails response validation.
+
+### Errors
+
+| HTTP status | Meaning |
+|---|---|
+| `404` | `results.json` missing, or the job succeeded but `candidates_final.json` is missing |
+| `422` | Invalid job resource name |
+| `503` | Missing server settings |
 
 ## Error responses
 
@@ -178,8 +242,9 @@ Errors use `{"detail": "message"}` or FastAPI's validation-error list under
 
 ## Artifacts
 
-Read results from GCS after status becomes `success`. Neither endpoint downloads
-candidate data. Files under `result_path` include:
+Read results from GCS after status becomes `success`. Only the results endpoint
+returns candidate data, and only the summary fields above. Files under
+`result_path` include:
 
 - `config.json`: JSON worker input.
 - `config_snapshot.yaml`: runner provenance snapshot, not an input format.
@@ -203,20 +268,7 @@ Use the project ID or number, not the display name. Artifact/model/seed paths
 must be GCS URIs. The service-account setting is an email, not a key file.
 
 `MACHINE_TYPE`/`ACCELERATOR_TYPE`/`ACCELERATOR_COUNT` are set explicitly in
-`.env` to `g2-standard-4`/`NVIDIA_L4`/`1` (L4 only attaches to `g2-standard-*`
-machine types — this pairing is required, not arbitrary). If left unset,
-`api.py` itself falls back to `n1-standard-4`/`NVIDIA_TESLA_T4`/`1`; avoid
-relying on that fallback. `routeb_protgpt2_lora_v1` loads its base model via
-`bitsandbytes` 4-bit (NF4) quantization, which needs an Ampere+ GPU (compute
-capability ≥ 8.0) for reliable GPU dispatch — on a real T4 (Turing, 7.5) job
-it was observed loading successfully but then generating on CPU with 0% GPU
-utilization and no error, not just failing on `bfloat16` (which is a separate,
-already-fixed issue: `bnb_4bit_compute_dtype` must be `torch.float16`, not
-`torch.bfloat16`, since Turing lacks native bf16 support). The current API
-specifies one replica and a 200 GB SSD boot disk. The worker receives
-`DEV_MODE=false` and every `.env` key present at API-server startup (see
-`common.env.DOTENV_KEYS`) as container environment variables. All containers
-install the root [`requirements.txt`](requirements.txt).
+`.env` to `n1-standard-8`/`NVIDIA_TESLA_T4`/`1`.
 
 The OpenAPI file is a standalone contract for these two operations. It does not
 change the service's routes or its automatically generated `/openapi.json`.

@@ -71,3 +71,51 @@ accepted risk, not an oversight.
 | 0.14 | Broken `s4pred` submodule | **Leave untouched**, exclude its 47 tests from the baseline, file for the backend owner. GPL-3.0 makes vendoring a licensing call that is not mine. |
 | 0.15 | `docs/` was gitignored | **Un-ignore it.** The `docs/` line is removed from `.gitignore`; `!docs/**/*.pdf` is kept so tracked PDF reports behave exactly as before. |
 | 0.16 | 7 stale `test_api_e2e.py` failures | **Fix them, in their own commit.** Test-side only: set the three machine env vars in the fixture, mock `storage.exists`, drop the nonexistent `config_path`. No `api.py` change. Restores the spec's before/after guard. |
+
+## Phase 1 record
+
+Accounts service ported from `/home/ajit/Documents/wmxccs/services/accounts` and
+adapted. `crypto.py`, `captcha.py`, `ratelimit.py` and `auth.py` are substantially
+unchanged — 54 of their tests passed with no edit at all, which is the evidence
+the security core survived the move. `proxy.py` and `history.py` were rewritten:
+the original's upstreams were synchronous, so its history rows were terminal when
+written, and this API's are not.
+
+**99 passed, 12 skipped** (`pytest -q services/accounts/tests`). The 12 skips are
+`test_deploy.py`, which reads `deploy/` — built in phase 4. They skip with a
+stated reason rather than silently; phase 4's final run must show them green.
+
+Backend baseline re-run and unchanged: **29 passed / 4 failed / 2 collection
+errors**.
+
+### §12: every guard was broken deliberately
+
+`tests/break_guards.sh` sabotages the service 17 ways and fails if any sabotage
+goes undetected. All 17 are caught. Running it restores every file afterwards.
+
+Three of the four initial misses were **real weaknesses in tests that were
+passing**, and are worth recording because each is the trap §14 describes:
+
+1. `test_a_job_id_in_a_query_value_is_checked_too` put a foreign job id in both
+   the path and the query, so the path check produced the 404 and the query check
+   was never exercised. Now the path carries a run the caller **does** own, so
+   only the query value can cause the refusal. (The §14 trap: "a per-address limit
+   masked the per-email test".)
+2. `test_hiding_a_run_does_not_release_its_ownership` asserted that an intruder
+   still gets 404 — which is true whether or not ownership was released. Now
+   asserted from the owner's side.
+3. The router-level gate could be removed with **no test noticing**, because every
+   handler also takes `user: User = Depends(current_user)` in its signature and
+   that alone makes FastAPI refuse an anonymous call. Introspection and even a
+   behavioural sweep of existing routes both keep passing. What the router-level
+   gate actually protects is a route added *later* by someone who forgets, so the
+   test now registers exactly that — a handler taking no user — on each gated
+   router and requires it to be refused anyway.
+
+### §14 trap confirmed on this FastAPI version
+
+FastAPI here is **0.142.1**, and `app.routes` holds exactly 3 opaque
+`_IncludedRouter` nodes and **no real route**. The obvious route walker finds
+zero routes and every test built on it passes while checking nothing. `routes_of`
+in `tests/conftest.py` descends through each node's `original_router`, and its
+callers assert a minimum count first so it cannot pass vacuously.

@@ -11,12 +11,32 @@ from fastapi import FastAPI, HTTPException
 from google.api_core.exceptions import GoogleAPICallError, NotFound
 from google.auth.exceptions import GoogleAuthError
 from pydantic import BaseModel, ConfigDict, Field, config
-from common import env, storage
+from common import storage
+# Imported for its import-time side effect only: common/env.py loads .env into
+# os.environ, which is what every required() call below reads. Nothing references
+# the module by name any more -- do not remove it as unused.
+from common import env  # noqa: F401
 from schemas.brief import Brief
 from schemas.e2e_config import validate_job_config
 from schemas.stage_configs import E2ERequest
 
 app = FastAPI(title="End-to-end Pipeline Job API")
+
+
+#: Settings forwarded into the worker container, read from the process environment.
+#: Deliberately explicit and minimal: these are the only variables anything on the
+#: worker's own code path reads (common/model_sync.py), and DEV_MODE, which is set
+#: to "false" separately below. Everything else the worker needs travels in its
+#: config.json -- SEED_CANDIDATES_FILE, for instance, reaches it as the config's
+#: seed_candidates_path, not as an environment variable.
+#:
+#: This was previously common/env.py's DOTENV_KEYS, which is populated only by
+#: parsing a .env FILE. An API process configured any other way -- docker compose
+#: `environment:`, Kubernetes, Cloud Run -- forwarded nothing, so the worker fell
+#: back to model_sync.py's placeholder gs://TODO-bucket/model_store and failed
+#: during weight sync rather than at submit time. It also forwarded every other key
+#: in .env, including deployment settings the worker never reads.
+WORKER_ENV_KEYS = ("VERTEX_MODEL_STORE",)
 
 
 def required(name):
@@ -131,8 +151,8 @@ def create_job(request: CreateJobRequest):
                             {"name": "DEV_MODE", "value": "false"},
                             *(
                                 {"name": key, "value": os.environ[key]}
-                                for key in env.DOTENV_KEYS
-                                if key != "DEV_MODE" and key in os.environ
+                                for key in WORKER_ENV_KEYS
+                                if key in os.environ
                             ),
                         ],
                     },

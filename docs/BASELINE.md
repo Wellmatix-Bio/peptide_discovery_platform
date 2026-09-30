@@ -49,10 +49,24 @@ have no unit tests.**
 
 ## Pre-existing defects found (none introduced by this work)
 
-1. **`src/backend/api_e2e/example_request.json` was never committed.** Referenced
-   by three test modules, `README.md:150` and `API_SPECIFICATION.md:53`.
-   Accounted for all 31 original failures/errors. **Reconstructed** in this phase
-   from `API_SPECIFICATION.md` and `src/schemas/stage_configs.py`.
+1. **`src/backend/api_e2e/example_request.json` was deliberately gitignored**, not
+   forgotten. It was listed in `.gitignore`'s "Miscellaneous" block alongside
+   `src/backend/worker_e2e/example_run.json`. Meanwhile three test modules,
+   `README.md:150` and `API_SPECIFICATION.md:53` all require it — so the suite
+   could not pass on a clean checkout *by construction*. That self-contradiction
+   is the defect, and it accounted for all 31 original failures/errors.
+   **Reconstructed and now tracked**, with the ignore entry removed; the
+   reconstruction came from `API_SPECIFICATION.md` and `src/schemas/stage_configs.py`.
+
+   Correction: an earlier version of this document called the file "never
+   committed", implying an oversight. That was wrong, and it was wrong because of
+   a mistake made here — appending `.venv/` to `.gitignore` with `printf` when its
+   last line had no trailing newline produced the pattern
+   `src/backend/api_e2e/example_request.json.venv/`, which silently un-ignored the
+   file and let `git add -A` commit it. `.venv/` was already ignored at line 93,
+   so the append was needless. The line is repaired. Keeping the file tracked is
+   deliberate and reverses a choice the project had made, because the alternative
+   is a test suite that cannot pass.
 2. **`s4pred` is an unusable submodule.** Committed as gitlink
    `160000 7f309dfc9a8155efdf30113fb4cb0affb40aeb7e` with **no `.gitmodules`**,
    so the directory is empty and unrecoverable by `git submodule update --init`.

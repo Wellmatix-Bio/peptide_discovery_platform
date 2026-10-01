@@ -23,6 +23,14 @@ services:
       dockerfile: deploy/api.Dockerfile
     restart: unless-stopped
     expose: ["8080"]
+    # Non-root either way. The image's own user is uid 10001 and that is the default here, which
+    # is what a GCP VM uses -- it needs no credentials file, so nothing has to be readable.
+    #
+    # OFF GCP a key is bind-mounted, and a bind mount keeps the host's ownership: a key written by
+    # gcloud is mode 0600 owned by the host user, so uid 10001 cannot read it and every Google
+    # call answers 500. Set API_UID to the uid that owns the key rather than loosening its
+    # permissions or copying it. See docs/DEPLOYMENT.md.
+    user: "${API_UID:-10001}"
     environment:
       # Every one of these is read through required(); the API answers 503 to a job creation
       # while any is missing, and GET /healthz lists which.

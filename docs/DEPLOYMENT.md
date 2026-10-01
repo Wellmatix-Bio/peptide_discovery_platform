@@ -60,19 +60,32 @@ The API uses Application Default Credentials.
   it read-only at `/secrets/credentials.json`, and `GOOGLE_APPLICATION_CREDENTIALS` must name that
   path.
 
-  **The file must be readable by uid 10001**, which is the non-root user the API container runs
-  as. A bind mount keeps the host's ownership and permissions, so a key written by `gcloud` —
-  mode `0600`, owned by your own uid — is *not* readable inside the container, and the API answers
-  **500** on every call that touches Google. Nothing says why; this was hit while testing.
+  **The container must be able to read that file.** A bind mount keeps the host's ownership and
+  permissions, so a key written by `gcloud` — mode `0600`, owned by your own uid — is *not*
+  readable by the container's default uid 10001, and the API answers **500** on every call that
+  touches Google with nothing saying why. This was hit while testing, not theorised.
 
-  Give it to that uid explicitly rather than making a credentials file world-readable:
+  Set `API_UID` to the uid that owns the key:
+
+  ```bash
+  stat -c %u ~/.config/gcloud/application_default_credentials.json
+  ```
+
+  Put that number in `deploy/.env` as `API_UID` (usually `1000`). The container then runs as that
+  uid — still non-root — and reads the key without its permissions being loosened and without a
+  second copy of your credentials existing anywhere.
+
+  The alternative, if you would rather keep the image's own uid, is to give the key to it:
 
   ```bash
   sudo install -o 10001 -g 10001 -m 0400 /path/to/key.json /etc/peptide/credentials.json
   ```
 
-  then set `GOOGLE_CREDENTIALS_FILE=/etc/peptide/credentials.json`. On a GCP VM none of this
-  applies — leave both variables empty and the metadata server handles it.
+  then point `GOOGLE_CREDENTIALS_FILE` at that path and leave `API_UID` unset.
+
+  **On a GCP VM none of this applies.** Leave `GOOGLE_CREDENTIALS_FILE`,
+  `GOOGLE_APPLICATION_CREDENTIALS` and `API_UID` all empty: no key is mounted, the metadata server
+  supplies credentials, and the container runs as uid 10001.
 
 The service account needs to create and cancel Vertex Custom Jobs, and to read and write the
 `VERTEX_ARTIFACTS_DIR` and `VERTEX_MODEL_STORE` prefixes.

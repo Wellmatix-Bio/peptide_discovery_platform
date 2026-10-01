@@ -24,15 +24,15 @@ WoundContext = Literal[
     "biofilm_positive",
     "burn",
     "chronic",
-    "clean",
+    # "clean",
     "diabetic",
-    "high_exudate",
+    # "high_exudate" -> affects dressing choice and peptide washout, not any current module. It may belong in a later formulation stage instead.
     "high_glucose",
     "infected",
     "ischemic",
     "low_perfusion",
     "necrotic",
-    "radiation_induced",
+    # "radiation_induced", -> the thinnest mappings. The paper says little about either.
     "surgical",
     "traumatic",
 ]

@@ -1,4 +1,4 @@
-# Unit tests for s11_ranking brief-driven (dynamic) objective weights.
+# Unit tests for s11_ranking brief-driven weights (N_k accumulation).
 from __future__ import annotations
 
 import math
@@ -7,163 +7,206 @@ import pytest
 
 from pipeline.s11_ranking.stage import (
     BUILTIN_RANKING_POLICY,
-    COMPONENTS,
-    CandidateScorer,
-    ComponentScores,
-    ModifierRule,
+    MODULE_NAMES,
     ProductObjective,
-    RankingConfig,
-    RankingInput,
-    WeightAdjuster,
-    WeightingConfig,
+    WeightAllocator,
 )
 
-BASELINE = {
-    "wound_closure": 0.22, "antimicrobial": 0.18, "immunomodulation": 0.13,
-    "angiogenesis": 0.12, "collagen_ecm": 0.10, "safety": 0.12, "stability": 0.08,
-    "synthesis_feasibility": 0.03, "mechanistic_confidence": 0.02,
-}
-SCORES = {c: 0.7 for c in COMPONENTS}
-
-RULES = [
-    ModifierRule(reason="antimicrobial_objective", field="desired_functions",
-                 any_of=["antimicrobial"], modifiers={"antimicrobial": 1.25}),
-    ModifierRule(reason="angiogenesis_objective", field="desired_functions",
-                 any_of=["angiogenesis"], modifiers={"angiogenesis": 1.25}),
-    ModifierRule(reason="collagen_objective", field="desired_functions",
-                 any_of=["collagen_synthesis"], modifiers={"collagen_ecm": 1.25}),
-    ModifierRule(reason="infected_wound", field="wound_context", any_of=["infected"],
-                 modifiers={"antimicrobial": 1.25, "immunomodulation": 1.15}),
-    ModifierRule(reason="ischemic", field="wound_context", any_of=["ischemic"],
-                 modifiers={"angiogenesis": 1.35}),
-    ModifierRule(reason="low_perfusion", field="wound_context", any_of=["low_perfusion"],
-                 modifiers={"angiogenesis": 1.35}),
-    ModifierRule(reason="clean_surgical", field="wound_context",
-                 all_of=["clean", "surgical"], modifiers={"antimicrobial": 0.75}),
-    ModifierRule(reason="chronic", field="wound_context", any_of=["chronic"],
-                 modifiers={"stability": 1.2, "safety": 1.15}),
-]
+OBJECTIVES = (
+    "wound_closure", "antimicrobial", "anti_inflammatory", "immunomodulation", "angiogenesis", "collagen_ecm",
+)
+ALWAYS_ON = ("safety", "stability", "synthesis_feasibility", "mechanistic_confidence")
 
 
-def make_config(**overrides) -> RankingConfig:
-    kwargs = {"baseline_weights": dict(BASELINE), "modifier_rules": RULES}
-    kwargs.update(overrides)
-    return RankingConfig(**kwargs)
-
-
-def adjust(functions=(), context=(), config=None):
-    return WeightAdjuster(config or make_config()).adjust(
-        ProductObjective(desired_functions=list(functions), wound_context=list(context))
+def allocate(functions=(), context=(), pathogens=()):
+    return WeightAllocator(BUILTIN_RANKING_POLICY).allocate(
+        ProductObjective(
+            desired_functions=list(functions), wound_context=list(context), pathogens=list(pathogens)
+        )
     )
 
 
-def test_empty_brief_uses_baseline_weights():
-    weights, audit = adjust()
-    for c in COMPONENTS:
-        assert weights[c] == pytest.approx(BASELINE[c])
-        assert audit[c].baseline_weight == BASELINE[c]
-    assert audit["angiogenesis"].reason == "empty brief"
-    assert audit["safety"].reason == "always on"
+def n_k(allocation):
+    return {m: allocation[m].n_k for m in OBJECTIVES}
 
 
-def test_unselected_angiogenesis_drops_near_floor_and_below_baseline():
-    weights, audit = adjust(functions=["antimicrobial"])
-    assert audit["angiogenesis"].relevance == 0.05
-    assert audit["angiogenesis"].reason == "floor"
-    assert weights["angiogenesis"] < BASELINE["angiogenesis"]
-    assert weights["angiogenesis"] < 0.05
+def test_chronic_diabetic_example():
+    a = allocate(["anti_inflammatory"], ["chronic", "diabetic"])
+    assert n_k(a) == {
+        "wound_closure": 1.0,  # chronic + diabetic
+        "antimicrobial": 0.0,
+        "anti_inflammatory": 2.0,  # 1.0 reference + chronic + diabetic
+        "immunomodulation": 1.0,  # chronic + diabetic (not referenced)
+        "angiogenesis": 0.5,  # diabetic
+        "collagen_ecm": 0.0,
+    }
 
 
-def test_selected_weighs_more_than_implied():
-    selected, _ = adjust(functions=["angiogenesis"])
-    implied, audit = adjust(context=["ischemic"])
-    assert audit["angiogenesis"].relevance == 0.5
-    assert selected["angiogenesis"] > implied["angiogenesis"]
+def test_always_on_n_k_is_the_average_of_all_six_objective_n_k():
+    a = allocate(["anti_inflammatory"], ["chronic", "diabetic"])
+    average = (1.0 + 0.0 + 2.0 + 1.0 + 0.5 + 0.0) / 6  # zeros and the placeholder count
+    for module in ALWAYS_ON:
+        assert a[module].n_k == pytest.approx(average)
+        assert a[module].activated is True
+        assert a[module].references == [] and a[module].implications == []
+    total = 4.5 + 4 * average
+    assert a["anti_inflammatory"].nominal_weight == pytest.approx(2.0 / total)
+    assert a["safety"].nominal_weight == pytest.approx(average / total)
 
 
-def test_infected_without_antimicrobial_selected_is_half_relevant():
-    _, audit = adjust(context=["infected"])
-    assert audit["antimicrobial"].relevance == 0.5
-    assert audit["antimicrobial"].reason == "implied by infected"
-    assert audit["antimicrobial"].requested is False
+def test_always_on_modules_all_get_the_same_weight():
+    a = allocate(["angiogenesis"], ["ischemic"])
+    assert len({round(a[m].nominal_weight, 12) for m in ALWAYS_ON}) == 1
 
 
-def test_two_contexts_implying_same_component_do_not_stack():
-    _, audit = adjust(context=["ischemic", "low_perfusion"])
-    assert audit["angiogenesis"].relevance == 0.5
-    assert audit["angiogenesis"].reason == "implied by ischemic, low_perfusion"
+def test_anti_inflammatory_reference_is_one_point_and_immunomodulation_half():
+    a = allocate(["anti_inflammatory"])
+    assert a["anti_inflammatory"].n_k == 1.0
+    assert a["immunomodulation"].n_k == 0.0
+    b = allocate(["immunomodulation"])
+    assert b["immunomodulation"].n_k == 0.5
+    assert b["anti_inflammatory"].n_k == 0.0
+    assert b["immunomodulation"].requested is True
 
 
-def test_decreasing_modifier_does_not_imply_component():
-    _, audit = adjust(context=["clean", "surgical"])
-    assert audit["antimicrobial"].reason == "floor"
+def test_both_functions_reference_their_own_modules():
+    a = allocate(["anti_inflammatory", "immunomodulation"])
+    assert a["anti_inflammatory"].n_k == 1.0
+    assert a["immunomodulation"].n_k == 0.5
 
 
-def test_wound_closure_has_minimum_relevance_and_quality_is_untouched():
-    weights, audit = adjust(functions=["antimicrobial"])
-    assert audit["wound_closure"].relevance == 0.5
-    assert audit["wound_closure"].reason == "wound_closure minimum"
-    # "chronic" carries safety/stability modifiers, which no longer act on weights.
-    _, chronic = adjust(functions=["antimicrobial"], context=["chronic"])
-    for c in ("safety", "stability", "synthesis_feasibility", "mechanistic_confidence"):
-        assert chronic[c].relevance == 1.0
-        assert chronic[c].baseline_weight == BASELINE[c]
+def test_no_wound_context_leaves_wound_closure_out():
+    a = allocate(["anti_inflammatory"])
+    assert a["wound_closure"].n_k == 0.0
+    assert a["wound_closure"].nominal_weight == 0.0
+    assert a["safety"].n_k == pytest.approx(1 / 6)
+
+
+def test_empty_brief_gives_every_module_equal_weight():
+    a = allocate()
+    assert all(a[m].n_k == 1.0 for m in MODULE_NAMES)
+    assert {round(a[m].nominal_weight, 9) for m in MODULE_NAMES} == {round(1 / 10, 9)}
+    assert all(a[m].activated for m in MODULE_NAMES)
+
+
+def test_brief_with_no_mapped_entries_is_treated_as_empty():
+    a = allocate(context=["high_exudate"])
+    assert {round(a[m].nominal_weight, 9) for m in MODULE_NAMES} == {round(1 / 10, 9)}
+
+
+def test_weights_always_sum_to_one():
+    briefs = [
+        dict(),
+        dict(functions=["angiogenesis"], context=["ischemic"]),
+        dict(functions=["anti_inflammatory"], context=["chronic", "diabetic"]),
+        dict(functions=["antimicrobial"], pathogens=["Escherichia_coli"], context=["infected"]),
+    ]
+    for brief in briefs:
+        assert math.fsum(x.nominal_weight for x in allocate(**brief).values()) == pytest.approx(1.0)
+
+
+def test_pathogens_reference_antimicrobial_once():
+    one = allocate(["anti_inflammatory"], pathogens=["Escherichia_coli"])
+    several = allocate(["anti_inflammatory"], pathogens=["Escherichia_coli", "Staphylococcus_aureus"])
+    assert one["antimicrobial"].n_k == several["antimicrobial"].n_k == 1.0
+    assert several["antimicrobial"].requested is True
+
+
+def test_antimicrobial_function_and_pathogens_are_one_reference():
+    assert allocate(["antimicrobial"], pathogens=["Escherichia_coli"])["antimicrobial"].n_k == 1.0
+
+
+def test_several_functions_for_one_module_are_one_reference():
+    migration = allocate(["fibroblast_migration", "keratinocyte_migration"])
+    assert migration["wound_closure"].n_k == 1.0
 
 
 @pytest.mark.parametrize(
-    "functions,context",
-    [([], []), (["antimicrobial"], []), ([], ["infected"]), (["angiogenesis"], ["infected", "ischemic"])],
+    "function, module, points",
+    [
+        ("angiogenesis", "angiogenesis", 1.0),
+        ("anti_inflammatory", "anti_inflammatory", 1.0),
+        ("immunomodulation", "immunomodulation", 0.5),
+        ("antimicrobial", "antimicrobial", 1.0),
+        ("cell_proliferation/migration", "wound_closure", 1.0),
+        ("fibroblast_migration", "wound_closure", 1.0),
+        ("keratinocyte_migration", "wound_closure", 1.0),
+        ("collagen_remodeling", "collagen_ecm", 1.0),
+        ("collagen_synthesis", "collagen_ecm", 1.0),
+    ],
 )
-def test_weights_always_sum_to_one(functions, context):
-    weights, audit = adjust(functions, context)
-    assert math.fsum(weights.values()) == pytest.approx(1.0)
-    assert math.fsum(a.final_weight for a in audit.values()) == pytest.approx(1.0)
+def test_desired_function_maps_to_module(function, module, points):
+    a = allocate([function])
+    assert a[module].n_k == points
+    assert a[module].requested is True
+    assert a[module].references == [function]
 
 
-def scored(stage1, scores=None):
-    return CandidateScorer(make_config()).score(
-        RankingInput(
-            candidate_id="c", sequence="KLLK", stage1=stage1,
-            scores=ComponentScores(**(scores or SCORES)),
-        )
-    )
+@pytest.mark.parametrize(
+    "context, expected",
+    [
+        ("infected", {"antimicrobial", "immunomodulation"}),
+        ("biofilm_positive", {"antimicrobial", "immunomodulation"}),
+        ("necrotic", {"antimicrobial", "wound_closure", "immunomodulation"}),
+        ("chronic", {"anti_inflammatory", "immunomodulation", "wound_closure"}),
+        ("diabetic", {"anti_inflammatory", "immunomodulation", "angiogenesis", "wound_closure"}),
+        ("high_glucose", {"anti_inflammatory"}),
+        ("ischemic", {"angiogenesis"}),
+        ("low_perfusion", {"angiogenesis"}),
+        ("acute", {"wound_closure"}),
+        ("surgical", {"wound_closure"}),
+        ("traumatic", {"wound_closure"}),
+        ("clean", {"wound_closure"}),
+        ("burn", {"anti_inflammatory"}),
+        ("radiation_induced", {"anti_inflammatory"}),
+    ],
+)
+def test_wound_context_implies_modules_at_half_a_point(context, expected):
+    # Reference a module the context does not touch so the brief is not "empty".
+    a = allocate(["collagen_synthesis"], [context])
+    for module in OBJECTIVES:
+        if module == "collagen_ecm":
+            continue
+        assert a[module].n_k == (0.5 if module in expected else 0.0)
+        assert a[module].implications == ([context] if module in expected else [])
 
 
-def test_unmapped_collagen_not_requested_barely_affects_coverage():
-    scores = {**SCORES, "collagen_ecm": None}
-    result = scored(ProductObjective(desired_functions=["antimicrobial"]), scores)
-    assert result.missing_components == ["collagen_ecm"]
-    assert result.requested_components_without_data == []
-    assert result.evidence_coverage > 0.99
+def test_infected_implies_immunomodulation_but_not_anti_inflammatory():
+    a = allocate(["collagen_synthesis"], ["infected"])
+    assert a["immunomodulation"].n_k == 0.5
+    assert a["anti_inflammatory"].n_k == 0.0
 
 
-def test_unmapped_collagen_requested_is_excluded_and_reported():
-    scores = {**SCORES, "collagen_ecm": None}
-    result = scored(ProductObjective(desired_functions=["collagen_synthesis"]), scores)
-    assert result.component_contributions["collagen_ecm"].contribution is None
-    assert result.requested_components_without_data == ["collagen_ecm"]
-    assert result.evidence_coverage < 0.9
+def test_high_glucose_implies_anti_inflammatory_only():
+    a = allocate(["collagen_synthesis"], ["high_glucose"])
+    assert a["anti_inflammatory"].n_k == 0.5
+    assert a["immunomodulation"].n_k == 0.0
 
 
-def test_raw_scores_of_unrequested_components_are_still_reported():
-    result = scored(ProductObjective(desired_functions=["antimicrobial"]))
-    assert result.original_component_scores.angiogenesis == 0.7
-    assert result.normalized_scores.angiogenesis == 0.7
+def test_context_tags_stack():
+    a = allocate(["collagen_synthesis"], ["ischemic", "low_perfusion"])
+    assert a["angiogenesis"].n_k == 1.0
+    assert a["angiogenesis"].implications == ["ischemic", "low_perfusion"]
 
 
-def test_builtin_policy_maps_brief_to_relevance():
-    adjuster = WeightAdjuster(BUILTIN_RANKING_POLICY)
-    _, audit = adjuster.adjust(
-        ProductObjective(
-            wound_context=["chronic"], desired_functions=["anti_inflammatory", "immunomodulation"]
-        )
-    )
-    assert audit["immunomodulation"].reason == "selected"
-    assert audit["angiogenesis"].reason == "implied by chronic"
-    assert audit["antimicrobial"].reason == "floor"
-    assert audit["collagen_ecm"].reason == "floor"
+def test_reference_beats_implication_in_weight():
+    implied = allocate(["anti_inflammatory"], ["ischemic"])
+    referenced = allocate(["anti_inflammatory", "angiogenesis"])
+    assert referenced["angiogenesis"].nominal_weight > implied["angiogenesis"].nominal_weight
 
 
-def test_weighting_config_rejects_floor_above_implied():
-    with pytest.raises(ValueError, match="floor"):
-        WeightingConfig(floor=0.6, context_implied_relevance=0.5)
+def test_unrequested_module_has_weight_zero_and_is_not_activated():
+    a = allocate(["anti_inflammatory"], ["chronic"])
+    assert a["angiogenesis"].nominal_weight == 0.0
+    assert a["collagen_ecm"].nominal_weight == 0.0
+    assert not a["angiogenesis"].activated
+
+
+def test_adding_objectives_raises_the_always_on_n_k():
+    one = allocate(["anti_inflammatory"])
+    many = allocate(["anti_inflammatory", "angiogenesis", "antimicrobial"])
+    assert many["safety"].n_k > one["safety"].n_k
+
+
+def test_every_module_is_allocated():
+    assert set(allocate()) == set(MODULE_NAMES)

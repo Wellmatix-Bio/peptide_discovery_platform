@@ -135,6 +135,7 @@ docs/
 !docs/**/*.pdf
 **/rationale.md
 scripts/
+/scripts/test.py
 
 # --------- Under development / experimental ----------
 backend/api_stage/

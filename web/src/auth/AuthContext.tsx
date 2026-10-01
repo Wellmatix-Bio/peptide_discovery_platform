@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { call, loadSession, onSessionExpired, saveSession, type Stored } from "../api/client";
 import type { Session, User } from "../api/types";
+import { lastRun } from "../workspace";
 
 /* The session lives in localStorage so a new tab is signed in too. It is a bearer token: anything
    that can run script on this origin can read it, which is why the app renders every server string
@@ -22,6 +23,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [expired, setExpired] = useState(false);
 
   const signIn = useCallback((session: Session) => {
+    /* A different account may be signing in to this tab; the remembered run belongs to whoever
+       was here before. See workspace.ts. */
+    lastRun.clear();
     const next = { token: session.token, user: session.user };
     saveSession(next);
     setStored(next);
@@ -37,6 +41,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } catch {
       why = null;
     }
+    lastRun.clear();
     saveSession(null);
     setStored(null);
     return why;
@@ -44,6 +49,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     onSessionExpired(() => {
+      lastRun.clear();
       saveSession(null);
       setStored(null);
       setExpired(true);

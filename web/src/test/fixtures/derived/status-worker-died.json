@@ -1,0 +1,11 @@
+{
+  "_derived_from": {
+    "changed": "status and stage forced to 'pending' with vertex_state JOB_STATE_FAILED and a Vertex error message: a worker that died before writing results.json.",
+    "file": "status-9223232270029029376.json"
+  },
+  "error": "The replica workerpool0-0 exited with a non-zero status of 1.",
+  "job_id": "projects/example-project/locations/us-central1/customJobs/9223232270029029376",
+  "stage": "pending",
+  "status": "pending",
+  "vertex_state": "JOB_STATE_FAILED"
+}

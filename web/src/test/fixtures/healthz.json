@@ -1,0 +1,5 @@
+{
+  "note": "ok reports only that this process is answering; Vertex and Cloud Storage are not contacted by this endpoint.",
+  "ok": true,
+  "settings_missing": []
+}

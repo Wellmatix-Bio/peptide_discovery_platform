@@ -1,0 +1,11 @@
+{
+  "_derived_from": {
+    "changed": "status 'running' at stage s06_functional_models with vertex_state JOB_STATE_RUNNING.",
+    "file": "status-9223232270029029376.json"
+  },
+  "error": null,
+  "job_id": "projects/example-project/locations/us-central1/customJobs/9223232270029029376",
+  "stage": "s06_functional_models",
+  "status": "running",
+  "vertex_state": "JOB_STATE_RUNNING"
+}

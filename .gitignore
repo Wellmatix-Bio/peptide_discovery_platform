@@ -135,7 +135,9 @@ site/
 # stay tracked via the negation below, as before.
 !docs/**/*.pdf
 **/rationale.md
-scripts/
+# Anchored to the repository root. Unanchored, `scripts/` matches ANY directory of that name
+# at any depth -- it was silently excluding web/scripts/, whose openapi.py CI runs.
+/scripts/
 
 # --------- Under development / experimental ----------
 backend/api_stage/

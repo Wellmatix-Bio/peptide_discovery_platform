@@ -1,0 +1,7 @@
+{
+  "error": null,
+  "job_id": "projects/example-project/locations/us-central1/customJobs/156676979574177792",
+  "stage": "pending",
+  "status": "success",
+  "vertex_state": "JOB_STATE_SUCCEEDED"
+}

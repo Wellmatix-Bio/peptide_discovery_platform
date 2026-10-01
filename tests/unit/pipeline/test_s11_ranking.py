@@ -89,11 +89,11 @@ def test_baseline_weights_must_sum_to_one():
 
 
 # ------------------------------------------------------------------
-# Infected-wound weight adjustment
+# Brief-driven weights (detailed cases: test_s11_dynamic_weights.py)
 # ------------------------------------------------------------------
 
 
-def test_infected_wound_increases_antimicrobial_and_immunomodulation():
+def test_infected_wound_implies_antimicrobial_and_immunomodulation():
     config = make_config(modifier_rules=[
         ModifierRule(
             reason="infected_wound", field="wound_context", any_of=["infected"],
@@ -102,18 +102,13 @@ def test_infected_wound_increases_antimicrobial_and_immunomodulation():
     ])
     stage1 = ProductObjective(wound_context=["infected"])
     result = CandidateScorer(config).score(make_input(stage1=stage1))
-    assert result.adjusted_weights["antimicrobial"] > result.baseline_weights["antimicrobial"]
-    assert result.adjusted_weights["immunomodulation"] > result.baseline_weights["immunomodulation"]
-    reasons = {a.reason for a in result.weight_adjustments}
-    assert reasons == {"infected_wound"}
+    assert result.weight_audit["antimicrobial"].relevance == 0.5
+    assert result.weight_audit["immunomodulation"].relevance == 0.5
+    assert result.weight_audit["antimicrobial"].reason == "implied by infected"
+    assert result.weight_audit["angiogenesis"].reason == "floor"
 
 
-# ------------------------------------------------------------------
-# Biological-objective weight adjustment
-# ------------------------------------------------------------------
-
-
-def test_desired_function_increases_matching_component():
+def test_desired_function_raises_matching_component():
     config = make_config(modifier_rules=[
         ModifierRule(
             reason="angiogenesis_objective", field="desired_functions", any_of=["angiogenesis"],
@@ -123,11 +118,7 @@ def test_desired_function_increases_matching_component():
     stage1 = ProductObjective(desired_functions=["angiogenesis"])
     result = CandidateScorer(config).score(make_input(stage1=stage1))
     assert result.adjusted_weights["angiogenesis"] > result.baseline_weights["angiogenesis"]
-
-
-# ------------------------------------------------------------------
-# Weight renormalization
-# ------------------------------------------------------------------
+    assert result.weight_audit["angiogenesis"].reason == "selected"
 
 
 def test_adjusted_weights_still_sum_to_one():
@@ -437,8 +428,7 @@ def test_run_maps_predictions_via_input_sources_and_uses_brief():
     assert ranking["status"] == "ranked"
     assert ranking["original_component_scores"]["antimicrobial"] == 0.9
     assert ranking["stage1"]["wound_context"] == ["infected"]
-    reasons = {a["reason"] for a in ranking["weight_adjustments"]}
-    assert "infected_wound" in reasons
+    assert ranking["weight_audit"]["antimicrobial"]["reason"] == "implied by infected"
 
 
 def test_run_with_no_brief_uses_empty_stage1():

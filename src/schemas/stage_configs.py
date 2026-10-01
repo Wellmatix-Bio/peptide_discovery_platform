@@ -82,6 +82,7 @@ Pathogens = Literal[
 #     max_cost_per_gram_usd: float | None = None
 #
 
+
 class BriefFields(BaseModel):
     wound_context: list[WoundContext] = Field(..., description="Context of the wound")
     desired_functions: list[DesiredFunction] = Field(
@@ -91,9 +92,6 @@ class BriefFields(BaseModel):
     min_length: int = Field(ge=6, le=50)
     max_length: int = Field(ge=6, le=50)
     dosing_interval_hours: int = Field(ge=1, le=168)
-    # manufacturing: ManufacturingFields = Field(
-    #     ..., description="Manufacturing details for the therapeutic product"
-    # )
 
     @model_validator(mode="after")
     def _check_length_bounds(self) -> "BriefFields":

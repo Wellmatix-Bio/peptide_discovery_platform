@@ -42,6 +42,14 @@ COMPONENTS: tuple[Component, ...] = (
     "synthesis_feasibility",
     "mechanistic_confidence",
 )
+# Weights of these follow the brief; the other components are always on.
+OBJECTIVE_COMPONENTS: tuple[Component, ...] = (
+    "wound_closure",
+    "antimicrobial",
+    "immunomodulation",
+    "angiogenesis",
+    "collagen_ecm",
+)
 
 Finite = Annotated[float, Field(strict=True, allow_inf_nan=False)]
 Unit = Annotated[Finite, Field(ge=0, le=1)]
@@ -83,12 +91,20 @@ class RankingInput(StrictModel):
     sequence: str = Field(min_length=1)
     stage1: ProductObjective = Field(default_factory=ProductObjective)
     scores: ComponentScores = Field(default_factory=ComponentScores)
+    flag_values: dict[str, Any] = Field(default_factory=dict)
+    brief_limits: dict[str, Finite] = Field(default_factory=dict)
 
 
-class WeightAdjustment(StrictModel):
-    component: Component
+class WeightAudit(StrictModel):
+    """How one component's weight was set from the brief. `relevance` is 1.0
+    for quality components; `requested` is True only when the brief's
+    desired_functions selected the component."""
+
+    baseline_weight: Unit
+    relevance: Unit
     reason: str
-    modifier: Positive
+    requested: bool
+    final_weight: Unit
 
 
 class ComponentContribution(StrictModel):
@@ -97,10 +113,24 @@ class ComponentContribution(StrictModel):
     contribution: Unit | None
 
 
+class FlagCutAudit(StrictModel):
+    flag: str
+    raw_value: Any
+    severity: Unit
+    cut: Unit
+
+
+class ComponentPenaltyAudit(StrictModel):
+    score_before_penalty: Unit | None
+    flags: list[FlagCutAudit]
+    penalized_score: Unit | None
+
+
 class RankingResult(StrictModel):
     """One candidate's full Stage 11 output: every input, intermediate, and
     final value needed to reproduce or audit the ranking decision without
-    re-running anything."""
+    re-running anything. normalized_scores holds the flag-penalized scores;
+    the pre-penalty values are in flag_penalties."""
 
     candidate_id: str
     sequence: str
@@ -116,7 +146,10 @@ class RankingResult(StrictModel):
     adjusted_weights: dict[Component, Unit]
     component_contributions: dict[Component, ComponentContribution]
     missing_components: list[Component]
-    weight_adjustments: list[WeightAdjustment]
+    # Requested by desired_functions but no score available (e.g. unmapped collagen_ecm).
+    requested_components_without_data: list[Component] = Field(default_factory=list)
+    weight_audit: dict[Component, WeightAudit] = Field(default_factory=dict)
+    flag_penalties: dict[Component, ComponentPenaltyAudit] = Field(default_factory=dict)
 
 
 class BatchResult(StrictModel):
@@ -162,12 +195,72 @@ class NormalizerConfig(StrictModel):
         return self
 
 
+class Bound(StrictModel):
+    """One side of a numeric flag: severity 0 at `line`, 1 at `limit`. A limit
+    below the line means lower-is-worse."""
+
+    line: Finite
+    limit: Finite
+
+    @model_validator(mode="after")
+    def _distinct(self):
+        if self.line == self.limit:
+            raise ValueError("flag line and limit must differ")
+        return self
+
+
+class FlagRule(StrictModel):
+    """One flag-to-component penalty. Numeric flags use `bounds` (two for a
+    two-sided flag); categorical flags use `levels` (str(raw) -> severity).
+    `center` turns the raw value into |raw - center| first. `brief_line_field`
+    shifts the bounds so `line` equals that brief value, keeping the span."""
+
+    component: Component
+    source: str = Field(min_length=1)
+    p: Unit = 0.3
+    bounds: list[Bound] = Field(default_factory=list)
+    levels: dict[str, Unit] = Field(default_factory=dict)
+    center: Finite | None = None
+    brief_line_field: str | None = None
+
+    @model_validator(mode="after")
+    def _validate_rule(self):
+        if any(not part for part in self.source.split(".")):
+            raise ValueError(f"source path {self.source!r} must be dot-separated keys")
+        if bool(self.bounds) == bool(self.levels):
+            raise ValueError("a flag rule needs exactly one of bounds or levels")
+        if self.levels and (self.center is not None or self.brief_line_field):
+            raise ValueError("center/brief_line_field only apply to numeric flags")
+        return self
+
+
+class FlagPenaltyConfig(StrictModel):
+    """Empty `flags` disables the step."""
+
+    max_total_cut: Unit = 0.5
+    flags: dict[str, FlagRule] = Field(default_factory=dict)
+
+
+class WeightingConfig(StrictModel):
+    """Brief-driven relevance of the objective components (WeightAdjuster)."""
+
+    floor: Unit = 0.05  # relevance of an objective neither selected nor implied
+    context_implied_relevance: Unit = 0.5  # relevance when only wound context implies it
+    wound_closure_min_relevance: Unit = 0.5  # wound_closure never drops below this
+
+    @model_validator(mode="after")
+    def _validate_order(self):
+        if self.floor > self.context_implied_relevance:
+            raise ValueError("floor must not exceed context_implied_relevance")
+        return self
+
+
 class ModifierRule(StrictModel):
-    """One Stage-1-driven weight adjustment: a condition on desired_functions
-    or wound_context, and the multiplicative modifiers it applies. Multiple
-    matching rules all apply (multiplicatively) -- there is deliberately no
-    independent weight set per wound type; every adjustment starts from
-    baseline_weights and multiplies from there."""
+    """One Stage-1-driven mapping: a condition on desired_functions or
+    wound_context, and the components it concerns. A desired_functions rule
+    marks its objective components as selected. A wound_context rule marks
+    the objective components whose modifier is > 1 as implied; modifiers are
+    never multiplied into weights, they only carry the mapping."""
 
     reason: str = Field(min_length=1)
     field: Literal["desired_functions", "wound_context"]
@@ -341,6 +434,8 @@ class RankingConfig(StrictModel):
     )
     normalizers: dict[Component, NormalizerConfig] = Field(default_factory=dict)
     input_sources: InputSources = Field(default_factory=InputSources)
+    flag_penalties: FlagPenaltyConfig = Field(default_factory=FlagPenaltyConfig)
+    weighting: WeightingConfig = Field(default_factory=WeightingConfig)
 
     @model_validator(mode="after")
     def _validate_weights(self):
@@ -364,6 +459,74 @@ class RankingConfig(StrictModel):
 # Missing values pass through untouched.
 # ----------------------------------------------------------------------
 
+
+# Flag lines mirror Stage 5's DEFAULT_THRESHOLDS; limits (severity 1) are Stage 11's own.
+DEFAULT_FLAG_PENALTIES: dict[str, Any] = {
+    "max_total_cut": 0.5,
+    "flags": {
+        "net_charge": {
+            "component": "safety",
+            "source": "net_charge",
+            "bounds": [{"line": -5.0, "limit": -10.0}, {"line": 9.0, "limit": 14.0}],
+        },
+        "hydrophobic_moment": {
+            "component": "safety",
+            "source": "hydrophobic_moment",
+            "bounds": [{"line": 0.5, "limit": 1.0}],
+        },
+        "amphipathicity": {
+            "component": "safety",
+            "source": "amphipathicity",
+            "bounds": [{"line": 0.8, "limit": 1.0}],
+        },
+        "oxidation_risk": {
+            "component": "stability",
+            "source": "oxidation_risk.risk_category",
+            "levels": {"medium": 0.5, "high": 1.0},
+        },
+        "deamidation_risk": {
+            "component": "stability",
+            "source": "deamidation_risk.risk_category",
+            "levels": {"medium": 0.5, "high": 1.0},
+        },
+        "instability_index": {
+            "component": "stability",
+            "source": "instability_index",
+            "bounds": [{"line": 40.0, "limit": 100.0}],
+        },
+        "aggregation_tendency": {
+            "component": "stability",
+            "source": "aggregation_tendency.score",
+            "bounds": [{"line": 0.6, "limit": 0.7}],
+        },
+        "solubility": {
+            "component": "stability",
+            "source": "solubility.score",
+            "bounds": [{"line": 0.4, "limit": 0.0}],
+        },
+        "isoelectric_point": {
+            "component": "stability",
+            "source": "isoelectric_point",
+            "center": 7.4,
+            "bounds": [{"line": 0.5, "limit": 0.0}],
+        },
+        "disulfide_complexity": {
+            "component": "synthesis_feasibility",
+            "source": "disulfide_complexity.category",
+            "levels": {"flag": 0.5, "high": 1.0},
+        },
+        "secondary_structure_confidence": {
+            "component": "mechanistic_confidence",
+            "source": "secondary_structure_consistency.mean_confidence",
+            "bounds": [{"line": 0.7, "limit": 0.5}],
+        },
+        "secondary_structure_mechanism": {
+            "component": "mechanistic_confidence",
+            "source": "secondary_structure_consistency.mechanism_consistent",
+            "levels": {"False": 0.5},
+        },
+    },
+}
 
 # Code-owned ranking policy; run configs cannot override it.
 BUILTIN_RANKING_POLICY = RankingConfig.model_validate(
@@ -392,6 +555,7 @@ BUILTIN_RANKING_POLICY = RankingConfig.model_validate(
                 "mechanistic_confidence": "mechanism.structural_confidence",
             }
         },
+        "flag_penalties": DEFAULT_FLAG_PENALTIES,
     }
 )
 
@@ -427,42 +591,84 @@ class ScoreNormalizer:
 
 
 class WeightAdjuster:
-    """baseline_weights * matching modifiers, renormalized to sum to 1.0:
-    adjusted_weight_i = baseline_weight_i * modifier_i, then
-    normalized_weight_i = adjusted_weight_i / sum(all adjusted weights)."""
+    """w_i = baseline_i * relevance_i for objective components, baseline_i for
+    quality components, divided by the sum. Relevance is the max of: 1.0 if
+    selected in desired_functions, context_implied_relevance if implied by
+    wound context (implications do not stack), else the floor;
+    wound_closure is never below wound_closure_min_relevance. An empty brief
+    (no functions, no context) keeps the baseline weights."""
 
     def __init__(self, config: RankingConfig):
         self.config = config
 
+    def _selected(self, stage1: ProductObjective) -> set[Component]:
+        return {
+            component
+            for rule in self.config.modifier_rules
+            if rule.field == "desired_functions" and rule.matches(stage1.desired_functions)
+            for component in rule.modifiers
+            if component in OBJECTIVE_COMPONENTS
+        }
+
+    def _implied(self, stage1: ProductObjective) -> dict[Component, set[str]]:
+        """Objective component -> wound-context terms that imply it."""
+        implied: dict[Component, set[str]] = {}
+        for rule in self.config.modifier_rules:
+            if rule.field != "wound_context" or not rule.matches(stage1.wound_context):
+                continue
+            terms = set(stage1.wound_context) & {*rule.any_of, *rule.all_of}
+            for component, modifier in rule.modifiers.items():
+                if component in OBJECTIVE_COMPONENTS and modifier > 1:
+                    implied.setdefault(component, set()).update(terms)
+        return implied
+
     def adjust(
         self, stage1: ProductObjective
-    ) -> tuple[dict[Component, float], list[WeightAdjustment]]:
-        weights: dict[Component, float] = dict(self.config.baseline_weights)
-        adjustments: list[WeightAdjustment] = []
+    ) -> tuple[dict[Component, float], dict[Component, WeightAudit]]:
+        cfg = self.config.weighting
+        baseline = self.config.baseline_weights
+        empty_brief = not stage1.desired_functions and not stage1.wound_context
+        selected = set() if empty_brief else self._selected(stage1)
+        implied = {} if empty_brief else self._implied(stage1)
 
-        for rule in self.config.modifier_rules:
-            values = (
-                stage1.desired_functions
-                if rule.field == "desired_functions"
-                else stage1.wound_context
-            )
-            if not rule.matches(values):
-                continue
-            for component, modifier in rule.modifiers.items():
-                weights[component] *= modifier
-                adjustments.append(
-                    WeightAdjustment(
-                        component=component, reason=rule.reason, modifier=modifier
-                    )
-                )
+        relevance: dict[Component, float] = {}
+        reason: dict[Component, str] = {}
+        for component in COMPONENTS:
+            if component not in OBJECTIVE_COMPONENTS:
+                relevance[component], reason[component] = 1.0, "always on"
+            elif empty_brief:
+                relevance[component], reason[component] = 1.0, "empty brief"
+            elif component in selected:
+                relevance[component], reason[component] = 1.0, "selected"
+            elif component in implied:
+                relevance[component] = cfg.context_implied_relevance
+                reason[component] = f"implied by {', '.join(sorted(implied[component]))}"
+            else:
+                relevance[component], reason[component] = cfg.floor, "floor"
+            if (
+                component == "wound_closure"
+                and not empty_brief
+                and relevance[component] < cfg.wound_closure_min_relevance
+            ):
+                relevance[component] = cfg.wound_closure_min_relevance
+                reason[component] = "wound_closure minimum"
 
+        weights = {c: baseline[c] * relevance[c] for c in COMPONENTS}
         total = math.fsum(weights.values())
         if total <= 0:
             raise ValueError("all adjusted weights collapsed to zero or below")
-        normalized: dict[Component, float] = {
-            component: weights[component] / total for component in COMPONENTS
+        normalized: dict[Component, float] = {c: weights[c] / total for c in COMPONENTS}
+        audit = {
+            c: WeightAudit(
+                baseline_weight=baseline[c],
+                relevance=relevance[c],
+                reason=reason[c],
+                requested=c in selected,
+                final_weight=normalized[c],
+            )
+            for c in COMPONENTS
         }
-        return normalized, adjustments
+        return normalized, audit
 
 
 # ----------------------------------------------------------------------
@@ -471,9 +677,85 @@ class WeightAdjuster:
 # ----------------------------------------------------------------------
 
 
+class ApplyFlagPenalties:
+    """s'_i = s_i * prod(1 - cut_f), floored at s_i * (1 - max_total_cut), where
+    cut_f = severity_f * p_f. Flags on a missing component are ignored (see
+    docs/TODO.md). Nothing is rejected."""
+
+    def __init__(self, config: FlagPenaltyConfig):
+        self.config = config
+
+    @staticmethod
+    def _severity(rule: FlagRule, raw: Any, brief_limits: dict[str, float]) -> float:
+        if rule.levels:
+            return rule.levels.get(str(raw), 0.0)
+        if isinstance(raw, bool) or not isinstance(raw, (int, float)):
+            raise ValueError(f"flag value {raw!r} is not numeric")
+        if not math.isfinite(raw):
+            raise ValueError("flag value must be finite")
+        value = abs(raw - rule.center) if rule.center is not None else raw
+        shift = 0.0
+        brief_line = brief_limits.get(rule.brief_line_field or "")
+        if brief_line is not None:
+            shift = brief_line - rule.bounds[0].line
+        return max(
+            min(1.0, max(0.0, (value - (b.line + shift)) / (b.limit - b.line)))
+            for b in rule.bounds
+        )
+
+    def _floor(self, cuts: list[FlagCutAudit]) -> float:
+        return max(
+            math.prod(1.0 - c.cut for c in cuts), 1.0 - self.config.max_total_cut
+        )
+
+    def apply(
+        self,
+        normalized: dict[Component, float | None],
+        flag_values: dict[str, Any],
+        brief_limits: dict[str, float],
+    ) -> tuple[
+        dict[Component, float | None],
+        dict[Component, ComponentPenaltyAudit],
+    ]:
+        """Returns penalized scores and the per-component audit."""
+        by_component: dict[Component, list[FlagCutAudit]] = {c: [] for c in COMPONENTS}
+        for name, rule in self.config.flags.items():
+            raw = flag_values.get(name)
+            if raw is None:
+                continue
+            severity = self._severity(rule, raw, brief_limits)
+            if severity > 0:
+                by_component[rule.component].append(
+                    FlagCutAudit(
+                        flag=name,
+                        raw_value=raw,
+                        severity=severity,
+                        cut=severity * rule.p,
+                    )
+                )
+
+        penalized: dict[Component, float | None] = {}
+        audit: dict[Component, ComponentPenaltyAudit] = {}
+        for component in COMPONENTS:
+            score = normalized[component]
+            cuts = by_component[component]
+            if score is None:
+                cuts = []
+                penalized[component] = None
+            else:
+                penalized[component] = score * self._floor(cuts) if cuts else score
+            audit[component] = ComponentPenaltyAudit(
+                score_before_penalty=score,
+                flags=cuts,
+                penalized_score=penalized[component],
+            )
+        return penalized, audit
+
+
 class CandidateScorer:
     def __init__(self, config: RankingConfig):
         self.config = config
+        self.flag_penalties = ApplyFlagPenalties(config.flag_penalties)
         self.adjuster = WeightAdjuster(config)
         self.normalizers = {
             component: ScoreNormalizer(
@@ -483,7 +765,7 @@ class CandidateScorer:
         }
 
     def score(self, candidate: RankingInput) -> RankingResult:
-        adjusted_weights, adjustments = self.adjuster.adjust(candidate.stage1)
+        adjusted_weights, weight_audit = self.adjuster.adjust(candidate.stage1)
 
         normalized: dict[Component, float | None] = {
             component: self.normalizers[component].normalize(
@@ -491,6 +773,9 @@ class CandidateScorer:
             )
             for component in COMPONENTS
         }
+        normalized, penalty_audit = self.flag_penalties.apply(
+            normalized, candidate.flag_values, candidate.brief_limits
+        )
         missing: list[Component] = [
             component for component in COMPONENTS if normalized[component] is None
         ]
@@ -547,7 +832,11 @@ class CandidateScorer:
             adjusted_weights=adjusted_weights,
             component_contributions=contributions,
             missing_components=missing,
-            weight_adjustments=adjustments,
+            requested_components_without_data=[
+                c for c in missing if weight_audit[c].requested
+            ],
+            weight_audit=weight_audit,
+            flag_penalties=penalty_audit,
         )
 
 
@@ -646,6 +935,14 @@ class Stage11(CandidateStage):
             desired_functions=ctx.brief.desired_functions if ctx.brief else [],
         )
 
+        flag_rules = policy.flag_penalties.flags
+        brief_limits = {
+            rule.brief_line_field: value
+            for rule in flag_rules.values()
+            if rule.brief_line_field
+            and (value := getattr(ctx.brief, rule.brief_line_field, None)) is not None
+        }
+
         inputs = []
         for candidate in candidates:
             if not candidate.sequence:
@@ -655,6 +952,11 @@ class Stage11(CandidateStage):
                     candidate_id=candidate.id,
                     sequence=candidate.sequence,
                     stage1=stage1,
+                    flag_values={
+                        name: _read_path(candidate.predictions, rule.source)
+                        for name, rule in flag_rules.items()
+                    },
+                    brief_limits=brief_limits,
                     scores=ComponentScores(
                         **{
                             component: _read_path(candidate.predictions, path)

@@ -111,6 +111,54 @@ a worker that stops before writing anything leaves it at `pending` permanently.
 The Provenance card states plainly that the API returns no model identity with a run, so what was
 serving cannot be recovered from a stored result.
 
+## 8b. The same run, finished
+
+The run was watched to completion. It took **53 minutes** for the minimal brief on a T4, and the
+page polls every 20 seconds without needing the tab to stay open.
+
+| Stage | Reached |
+|---|---|
+| queued | 15:19 |
+| initializing | 15:31 |
+| `s04_candidate_generation` | 15:31 |
+| `s05_physchem_screening` | 15:37 |
+| `s06_functional_models` | 15:38 |
+| `s07_structure_mechanism` | 15:42 |
+| `s08_safety_developability` | 16:04 |
+| succeeded | 16:12 |
+
+Two things that matter: **12 minutes of that was queueing** before a GPU was allocated, and
+**`s07_structure_mechanism` took 22 of the remaining 41** — ESMFold dominates, and it scales with
+candidate count. Anyone sizing a run should start there.
+
+![Running](screenshots/16-run-running.jpg)
+
+While running, the title names the stage, all three fields are shown, and **Cancel this run** is
+offered.
+
+![Succeeded](screenshots/17-run-succeeded.jpg)
+
+**Expected on success:** the Cancel button is gone, the state reads `SUCCEEDED`, and the counts are
+the API's own fields — 22 final candidates, 22 ranked, 0 insufficient evidence. (10 was the
+*generation* parameter; both routes generate, so the final shortlist is larger.)
+
+**`stage` reads `pending` on a succeeded run.** That is not a display bug — it is what the API
+returns, and it confirms from a live run what the captured fixtures showed
+(`web/src/test/fixtures/README.md`). The field is only meaningful mid-run.
+
+![Ranked candidates](screenshots/18-ranked-candidates.jpg)
+
+Real output: ranked peptide sequences with molecular weight, net charge and the pathways the
+mechanism stage found engaged.
+
+![Candidate detail](screenshots/19-candidate-detail.jpg)
+
+Expanding a candidate shows every score the API returned, grouped and labelled with where it came
+from. Note the two per-pathogen blocks: **MIC covers the 3 species a brief may request, while
+pMBIC returns 13** — including *Candida albicans* and *Acinetobacter baumannii*, which the request
+schema refuses to accept as input. That is the contradiction in `docs/BRIEF_VALIDITY.md`, visible
+in a live result.
+
 ## 9. Run history — empty
 
 ![Empty history](screenshots/09-run-history-empty.jpg)
@@ -212,3 +260,8 @@ rather than raise**.
 The API forwarded exactly what it was configured with, so this is not a bug in the code. But the
 README and the deployment disagree about something that silently changes what the pipeline
 produces, and one of the two is wrong. Parked for the backend owner.
+
+**The run succeeded on the T4 regardless**, producing 22 ranked candidates. So whatever Route B
+did, it did not fail loudly — which is exactly the behaviour the README warns about, and the
+reason this is worth settling rather than leaving to chance. Nothing in the API's output says
+which route produced which candidate, so the UI cannot tell you either.

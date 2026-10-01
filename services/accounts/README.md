@@ -16,7 +16,19 @@ browser ──► web (nginx) ──► accounts ──► job API (no host port
 ## Run it
 
 ```bash
-ACCOUNTS_SECRET_KEY=$(python3 -c 'import secrets; print(secrets.token_urlsafe(48))') PEPTIDE_UPSTREAM=http://127.0.0.1:8080 ../../.venv/bin/python -m uvicorn accounts.app:build --factory --port 8081
+ACCOUNTS_SECRET_KEY=$(python3 -c 'import secrets; print(secrets.token_urlsafe(48))') PEPTIDE_UPSTREAM=http://127.0.0.1:8090 ../../.venv/bin/python -m uvicorn accounts.app:build --factory --port 8081
+```
+
+**Set `PEPTIDE_UPSTREAM` explicitly, and check what is on the port.** The default is
+`http://127.0.0.1:8080`, the job API's own default, and that port is popular — Open WebUI
+uses it, among others. The passthrough is deliberately dumb: it forwards to whatever is
+listening and returns the answer unchanged. Pointed at the wrong service it will look like the
+app is broken in confusing ways; during this build, the other service's `/api/v1/models`
+answered **401** and the web app read that as a dead session. Run the job API on a port you
+have checked:
+
+```bash
+PORT=8090 .venv/bin/python -m uvicorn backend.api_e2e.api:app --port 8090 --app-dir src
 ```
 
 Tests (they need no credentials and never reach GCP):

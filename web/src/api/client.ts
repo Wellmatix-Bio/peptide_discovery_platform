@@ -97,6 +97,24 @@ export async function call<T>(path: string, options: Options = {}): Promise<{ st
   if (response.ok || accept.includes(response.status)) {
     return { status: response.status, body: parsed as T };
   }
-  if (response.status === 401 && session && stored) sessionExpired();
-  throw new ApiError(response.status, describe(response.status, parsed, response.statusText), parsed);
+  /* Only the ACCOUNTS service's own 401 means the session is dead. A 401 under /api/ was produced
+     by the upstream and passed through verbatim by the proxy, so it says nothing about this
+     session -- signing out on it would throw the user out of the app over someone else's refusal.
+     This is not hypothetical: with PEPTIDE_UPSTREAM pointing at the wrong service (port 8080 is a
+     common default, and another app was listening on it), the upstream answered 401 and every
+     signed-in user was bounced to the sign-in page reading "your session ended". */
+  if (response.status === 401 && session && stored && !path.startsWith("/api/")) {
+    sessionExpired();
+  }
+  throw new ApiError(
+    response.status,
+    path.startsWith("/api/") && (response.status === 401 || response.status === 403)
+      ? `${describe(response.status, parsed, response.statusText)}\n\n` +
+          "The job API answered " +
+          response.status +
+          ", but it has no authentication of its own — so this almost always means the proxy is" +
+          " pointed at the wrong service. Check PEPTIDE_UPSTREAM."
+      : describe(response.status, parsed, response.statusText),
+    parsed,
+  );
 }

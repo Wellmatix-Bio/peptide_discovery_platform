@@ -1,0 +1,88 @@
+# The whole deployment. Run from the repository root:
+#
+#   cp deploy/.env.example deploy/.env      # then fill it in
+#   docker compose -f deploy/compose.yaml --env-file deploy/.env up -d --build
+#
+# ONLY `web` PUBLISHES A PORT. The job API has no authentication of its own; it is safe to run
+# without it ONLY because nothing outside this network can reach it. Adding a `ports:` entry to
+# api or accounts publishes that service, and services/accounts/tests/test_deploy.py fails on it.
+#
+# ONE INSTANCE. The accounts database is SQLite. Workers inside one container are fine;
+# `docker compose up --scale accounts=2` or a second host is not.
+#
+# THE WORKER IS NOT HERE. The GPU pipeline runs as a Vertex AI Custom Job from an image built
+# separately (src/backend/worker_e2e/Dockerfile, cloudbuild.yaml). This stack only submits jobs
+# and reads their artifacts, so none of these containers needs a GPU.
+
+name: peptide-discovery
+
+services:
+  api:
+    build:
+      context: ..
+      dockerfile: deploy/api.Dockerfile
+    restart: unless-stopped
+    expose: ["8080"]
+    environment:
+      # Every one of these is read through required(); the API answers 503 to a job creation
+      # while any is missing, and GET /healthz lists which.
+      VERTEX_CLOUD_PROJECT: ${VERTEX_CLOUD_PROJECT:?set it in deploy/.env}
+      VERTEX_LOCATION: ${VERTEX_LOCATION:?set it in deploy/.env}
+      VERTEX_ARTIFACTS_DIR: ${VERTEX_ARTIFACTS_DIR:?set it in deploy/.env}
+      SEED_CANDIDATES_FILE: ${SEED_CANDIDATES_FILE:?set it in deploy/.env}
+      WORKER_IMAGE_URI: ${WORKER_IMAGE_URI:?set it in deploy/.env}
+      WORKER_SERVICE_ACCOUNT: ${WORKER_SERVICE_ACCOUNT:?set it in deploy/.env}
+      MACHINE_TYPE: ${MACHINE_TYPE:?set it in deploy/.env}
+      ACCELERATOR_TYPE: ${ACCELERATOR_TYPE:?set it in deploy/.env}
+      ACCELERATOR_COUNT: ${ACCELERATOR_COUNT:?set it in deploy/.env}
+      # Forwarded into the worker container by api.py's WORKER_ENV_KEYS. If it is absent here the
+      # worker falls back to common/model_sync.py's placeholder gs://TODO-bucket/model_store and
+      # fails during weight sync -- minutes into a GPU run, not at submit time.
+      VERTEX_MODEL_STORE: ${VERTEX_MODEL_STORE:?set it in deploy/.env}
+      DEV_MODE: "false"
+      # Application Default Credentials. On a GCP VM with --scopes=cloud-platform this is unset
+      # and the metadata server supplies them. Off GCP, mount a service-account key and point
+      # this at it (see the commented volume below and deploy/.env.example).
+      GOOGLE_APPLICATION_CREDENTIALS: ${GOOGLE_APPLICATION_CREDENTIALS:-}
+    volumes:
+      # Only used off GCP. GOOGLE_CREDENTIALS_FILE is a path on the host; it is mounted read-only
+      # and GOOGLE_APPLICATION_CREDENTIALS must point at /secrets/credentials.json to match.
+      - ${GOOGLE_CREDENTIALS_FILE:-/dev/null}:/secrets/credentials.json:ro
+
+  accounts:
+    build:
+      context: ..
+      dockerfile: deploy/accounts.Dockerfile
+    restart: unless-stopped
+    expose: ["8080"]
+    environment:
+      # Required. Without it the service would invent a per-process key and every sign-in would
+      # break across the two workers and on every restart; compose refuses to start instead.
+      ACCOUNTS_SECRET_KEY: ${ACCOUNTS_SECRET_KEY:?set ACCOUNTS_SECRET_KEY in deploy/.env - see deploy/.env.example}
+      # The service name, not a port on the host. Pointing this at the wrong service is the
+      # failure that looks like a broken app: the passthrough forwards to whatever answers.
+      PEPTIDE_UPSTREAM: http://api:8080
+      WEB_CONCURRENCY: "2"
+      # Rate limits count per client address, read from this header. Safe ONLY because nothing
+      # but nginx can reach this service, and nginx overwrites the header (deploy/nginx.conf).
+      ACCOUNTS_CLIENT_IP_HEADER: x-forwarded-for
+    volumes:
+      # A NAMED volume, not a bind mount: a bind-mounted directory is created root:root and this
+      # service runs as uid 10001. If you switch to a bind mount, chown it to 10001 first.
+      - accounts-data:/data
+    depends_on:
+      api: {condition: service_started}
+
+  web:
+    build:
+      context: ..
+      dockerfile: deploy/web.Dockerfile
+    restart: unless-stopped
+    ports:
+      # Loopback by default. Set WEB_BIND=0.0.0.0 to serve other machines - put TLS in front first.
+      - "${WEB_BIND:-127.0.0.1}:${WEB_PORT:-8088}:80"
+    depends_on:
+      accounts: {condition: service_started}
+
+volumes:
+  accounts-data:

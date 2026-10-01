@@ -1,0 +1,17 @@
+# The JOB API's runtime only -- deliberately NOT the repository's requirements.txt.
+#
+# api.py submits Vertex AI Custom Jobs and reads their artifacts from Cloud Storage. It runs no
+# model: importing it pulls in no torch, transformers, sklearn, xgboost, numpy or pandas (checked,
+# not assumed). Installing requirements.txt here would add the CUDA PyTorch wheel and several GB
+# to an image that would never call it, and would make a security update to the ML stack a rebuild
+# of the public-facing service.
+#
+# The WORKER image is the one that needs requirements.txt; it is built separately
+# (src/backend/worker_e2e/Dockerfile, cloudbuild.yaml) and is not part of this compose stack.
+fastapi>=0.115,<1
+uvicorn>=0.34,<1
+pydantic>=2.11,<3
+PyYAML>=6,<7
+google-cloud-storage>=3,<4
+google-cloud-aiplatform>=1.71,<3
+tqdm>=4.67,<5

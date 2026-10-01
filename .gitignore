@@ -158,3 +158,4 @@ src/backend/worker_e2e/example_run.json
 node_modules/
 web/dist/
 web/*.tsbuildinfo
+deploy/.env

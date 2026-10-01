@@ -224,3 +224,50 @@ describe("the fixtures themselves", () => {
     expect(text).not.toMatch(/iam\.gserviceaccount|docker\.pkg\.dev/);
   });
 });
+
+
+describe("a run that is not yours, or does not exist", () => {
+  /* The proxy answers the SAME 404 either way, deliberately, so it is not an existence oracle.
+     The page must not fill that silence with an invented run: before this was fixed it rendered
+     "submitted", "Accepted by Vertex AI" and a Cancel button for a run the caller could not see
+     (found in docs/WEB_WALKTHROUGH.md). */
+  function refuse() {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        async () =>
+          new Response(
+            JSON.stringify({
+              detail:
+                "no job projects/example-project/locations/us-central1/customJobs/1 under your" +
+                " account. Runs are private to the account that created them",
+            }),
+            { status: 404, headers: { "content-type": "application/json" } },
+          ),
+      ),
+    );
+  }
+
+  it("says the run is not available instead of describing one", async () => {
+    refuse();
+    show();
+    await waitFor(() =>
+      expect(screen.getByText(/This run is not available/i)).toBeInTheDocument(),
+    );
+    // The API's own refusal is shown, and the page adds why it is phrased that way.
+    expect(screen.getByText(/private to the account that created them/i)).toBeInTheDocument();
+    expect(screen.getByText(/cannot be used to find out which/i)).toBeInTheDocument();
+  });
+
+  it("invents no run state, and offers nothing to cancel", async () => {
+    refuse();
+    show();
+    await waitFor(() =>
+      expect(screen.getByText(/This run is not available/i)).toBeInTheDocument(),
+    );
+    expect(screen.queryByText("submitted")).not.toBeInTheDocument();
+    expect(screen.queryByText(/Accepted by Vertex AI/i)).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /cancel this run/i })).not.toBeInTheDocument();
+    expect(screen.queryByText(/Checking again every/i)).not.toBeInTheDocument();
+  });
+});

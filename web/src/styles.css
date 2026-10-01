@@ -54,3 +54,11 @@ table.runs td.num{font-variant-numeric:tabular-nums}
 .side-by-side{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 @media(max-width:900px){.side-by-side{grid-template-columns:1fr}}
 a.btn{display:inline-block;text-decoration:none;margin-left:6px}
+
+/* The source's .kv assumes a full-width card. Inside the two-column .grid at laptop width the
+   fixed 200px label column leaves about 44px for the value, so an email wraps one character per
+   line (measured at 1024px). Below 1200px the LABEL gives way instead of the value. */
+@media(max-width:1200px){.kv{grid-template-columns:minmax(90px,34%) 1fr}}
+/* break-all is right for an opaque id, which is what the source used it for, and wrong for text
+   a person reads. .plain keeps long values from overflowing without shredding them. */
+.kv dd.plain{word-break:normal;overflow-wrap:anywhere}

@@ -257,7 +257,34 @@ export function RunView() {
 
   if (!status && !error) return <Loading>Reading this run…</Loading>;
 
-  const state = status ? runState(status.status, status.vertex_state) : "submitted";
+  /* No status at all. Everything below describes a run; rendering it would invent one -- the
+     default state is "submitted", so a run that is not yours, or does not exist, would appear as
+     accepted by Vertex and still working, complete with a Cancel button. Found by walking the
+     app as a second account (docs/WEB_WALKTHROUGH.md). */
+  if (!status) {
+    return (
+      <>
+        <Hero title="This run is not available" sub={<span className="mono">{decoded}</span>} />
+        <div className="card">
+          <ErrorBox error={error} />
+          <p className="help">
+            You will see the same answer whether the run belongs to another account or never
+            existed &mdash; which is deliberate, so this page cannot be used to find out which.
+          </p>
+          <div className="btns">
+            <Link className="btn secondary" to="/runs">
+              Your runs
+            </Link>
+            <Link className="btn secondary" to="/">
+              Start a run
+            </Link>
+          </div>
+        </div>
+      </>
+    );
+  }
+
+  const state = runState(status.status, status.vertex_state);
   /* `candidates` is the list; `ranked_candidates` and `insufficient_evidence_candidates` are the
      API's own COUNTS (api.py computes them from each candidate's ranking.status). The grouping
      below is for display; the counts shown are always the API's, never re-derived here. */

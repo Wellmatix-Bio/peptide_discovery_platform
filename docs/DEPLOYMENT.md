@@ -60,6 +60,20 @@ The API uses Application Default Credentials.
   it read-only at `/secrets/credentials.json`, and `GOOGLE_APPLICATION_CREDENTIALS` must name that
   path.
 
+  **The file must be readable by uid 10001**, which is the non-root user the API container runs
+  as. A bind mount keeps the host's ownership and permissions, so a key written by `gcloud` —
+  mode `0600`, owned by your own uid — is *not* readable inside the container, and the API answers
+  **500** on every call that touches Google. Nothing says why; this was hit while testing.
+
+  Give it to that uid explicitly rather than making a credentials file world-readable:
+
+  ```bash
+  sudo install -o 10001 -g 10001 -m 0400 /path/to/key.json /etc/peptide/credentials.json
+  ```
+
+  then set `GOOGLE_CREDENTIALS_FILE=/etc/peptide/credentials.json`. On a GCP VM none of this
+  applies — leave both variables empty and the metadata server handles it.
+
 The service account needs to create and cancel Vertex Custom Jobs, and to read and write the
 `VERTEX_ARTIFACTS_DIR` and `VERTEX_MODEL_STORE` prefixes.
 

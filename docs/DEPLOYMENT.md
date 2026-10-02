@@ -83,6 +83,13 @@ The API uses Application Default Credentials.
 
   then point `GOOGLE_CREDENTIALS_FILE` at that path and leave `API_UID` unset.
 
+  **Use a service-account key, not your own `gcloud` credentials.** Application Default
+  Credentials written by `gcloud auth application-default login` are *user* credentials: they
+  expire and need an interactive re-login. Mounted into a long-running service they work until
+  they silently do not, and every call that touches Google then answers **500** with
+  `RefreshError: Reauthentication is needed` buried in the container log. Convenient for an
+  afternoon's testing; not something to deploy. A service-account key does not expire this way.
+
   **On a GCP VM none of this applies.** Leave `GOOGLE_CREDENTIALS_FILE`,
   `GOOGLE_APPLICATION_CREDENTIALS` and `API_UID` all empty: no key is mounted, the metadata server
   supplies credentials, and the container runs as uid 10001.

@@ -56,11 +56,21 @@ def is_job_status(body: dict[str, Any]) -> bool:
 
 
 def is_job_results(body: dict[str, Any]) -> bool:
-    """The results envelope: JobResultsResponse (run_id, n_final, ranked_candidates)."""
+    """The results envelope: JobResultsResponse.
+
+    `candidates` is the LIST. `ranked_candidates` and `insufficient_evidence_candidates` are
+    integer counts the API computes itself. This previously required ranked_candidates to be a
+    list, so it matched NO real results response -- results reads were never recorded at all: no
+    envelope stored, no summary updated, has_envelope permanently false. The accounts tests did
+    not catch it because the fake upstream returned the same wrong shape as the code expected.
+
+    Matched on run_id plus the candidates list, which together distinguish this envelope from the
+    create response (job_id/request_id/result_path) and the status response (vertex_state).
+    """
     return (
         isinstance(body.get("run_id"), str)
+        and isinstance(body.get("candidates"), list)
         and "n_final" in body
-        and isinstance(body.get("ranked_candidates"), list)
     )
 
 
@@ -77,9 +87,19 @@ def _status_summary(body: dict[str, Any]) -> str:
 
 
 def _results_summary(body: dict[str, Any]) -> str:
-    ranked = body.get("ranked_candidates") or []
-    n_final = body.get("n_final")
-    return f"{n_final if n_final is not None else '?'} final candidate(s), {len(ranked)} ranked"
+    """`ranked_candidates` and `insufficient_evidence_candidates` are integer COUNTS the API
+    computes itself (api.py sums candidates whose ranking.status is "ranked"); `candidates` is the
+    list. This previously read `len(ranked_candidates)`, which raises TypeError on every real
+    response -- and because observe() swallows everything, the row silently kept its submission
+    summary forever. The counts are the API's own and are reported as given, not recounted here."""
+
+    def count(key: str) -> str:
+        value = body.get(key)
+        return str(value) if isinstance(value, int) else "?"
+
+    unranked = body.get("insufficient_evidence_candidates")
+    tail = f", {unranked} without a rank" if isinstance(unranked, int) and unranked > 0 else ""
+    return f"{count('n_final')} final candidate(s), {count('ranked_candidates')} ranked{tail}"
 
 
 def _kept(content: bytes, max_envelope_bytes: int) -> tuple[str | None, str | None]:

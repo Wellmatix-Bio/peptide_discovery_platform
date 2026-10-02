@@ -1,0 +1,16 @@
+# Review is auto-requested from these owners. Keep the list current; a stale CODEOWNERS silently
+# stops requesting anyone.
+*                       @Wellmatix-Bio/maintainers
+
+# Changing any of these changes what the project may be published under, or what it claims about
+# its own safety. They deserve a deliberate look.
+/LICENSE                @Wellmatix-Bio/maintainers
+/NOTICE                 @Wellmatix-Bio/maintainers
+/docs/LICENSING.md      @Wellmatix-Bio/maintainers
+/tests/test_licensing.py @Wellmatix-Bio/maintainers
+/requirements.txt       @Wellmatix-Bio/maintainers
+/pyproject.toml         @Wellmatix-Bio/maintainers
+
+# The only route to an API that has no authentication of its own.
+/services/accounts/     @Wellmatix-Bio/maintainers
+/deploy/                @Wellmatix-Bio/maintainers

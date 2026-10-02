@@ -1,0 +1,28 @@
+name: Feature request
+description: Suggest something the project should do
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: The problem
+      description: What are you trying to do that you cannot do now? Describe the need, not the solution.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What you have in mind
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: What you have already tried or considered
+  - type: checkboxes
+    id: scope
+    attributes:
+      label: Scope
+      options:
+        - label: This would change what a result means scientifically, not just how it is presented
+        - label: I am willing to work on this

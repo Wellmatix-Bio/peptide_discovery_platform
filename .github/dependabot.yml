@@ -1,0 +1,40 @@
+version: 2
+updates:
+  - package-ecosystem: pip
+    directory: "/"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      # One PR per group rather than per package: the ML stack moves together and reviewing
+      # torch, transformers and accelerate separately wastes everyone's time.
+      ml:
+        patterns: ["torch", "transformers", "accelerate", "peft", "bitsandbytes", "fair-esm"]
+      google:
+        patterns: ["google-*"]
+    ignore:
+      # Never propose these. They are copyleft and deliberately absent; a Dependabot PR adding
+      # one back would fail tests/test_licensing.py, but it should not be proposed at all.
+      - dependency-name: "propy3"
+      - dependency-name: "s4pred"
+
+  - package-ecosystem: npm
+    directory: "/web"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      react:
+        patterns: ["react", "react-dom", "react-router-dom", "@types/react*"]
+      tooling:
+        patterns: ["vite", "vitest", "typescript", "@vitejs/*", "@testing-library/*"]
+
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: monthly
+
+  - package-ecosystem: docker
+    directory: "/deploy"
+    schedule:
+      interval: monthly

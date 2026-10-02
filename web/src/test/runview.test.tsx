@@ -207,7 +207,9 @@ describe("ties", () => {
     show();
     await waitFor(() => expect(screen.getByText("Shortlist")).toBeInTheDocument());
     expect(screen.getAllByText(/tied/i).length).toBeGreaterThan(0);
-    expect(screen.getAllByText(/2 candidates share this position/i).length).toBeGreaterThan(0);
+    // The wording is incidental; that a shared position is NAMED as shared, with how many share
+    // it, is not.
+    expect(screen.getAllByText(/2 share this position/i).length).toBeGreaterThan(0);
   });
 });
 

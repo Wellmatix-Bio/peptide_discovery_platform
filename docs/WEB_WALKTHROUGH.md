@@ -249,6 +249,32 @@ host's ownership, so the file `gcloud` writes — mode 0600, owned by the host u
 by the API container's uid 10001, and every call that touches Google answers 500 with nothing
 explaining why.
 
+## A fifth defect, found by looking at the screenshots
+
+The selection controls and the result cards were rebuilt after this walkthrough, because the
+screenshots made plain what the code did not.
+
+**The design system was styling checkboxes as text inputs.** Its `.field input` rule sets
+`width:100%`, padding, a border and a white background, and it does not exclude
+`input[type="checkbox"]`. Every checkbox therefore rendered as a full-width box floating above its
+own label — which is why the Stages list looked like a column of stray ticks and the multi-selects
+like boxes with text beside them. That is a bug, not a matter of taste, and it was invisible in
+the markup.
+
+With it fixed, the controls were rebuilt as components rather than left as bare inputs:
+
+- **Wound context, desired functions and pathogens** are selectable pills carrying a check when
+  chosen, with a count beside the legend. The native checkbox is still there for keyboard and
+  screen-reader use; it is hidden visually, not removed, and has a focus ring.
+- **Stages** are switches with the stage name and what turning it off costs on one row, dimmed
+  when off.
+- **Candidates** lead with the rank and the sequence. Expanded, they are four scannable columns.
+
+**The bars follow the same rule as the numbers.** A bar is drawn only where the API's value is on
+a range the API itself defines — the 0-to-1 scores. Haemolysis pHC50 and the instability index get
+the number and no bar, because their range is not stated and a bar implies a scale. Inventing one
+would misrepresent the score as surely as rounding it would.
+
 ## Open question raised by the live run
 
 The run was submitted to a **T4** (`n1-standard-8` / `NVIDIA_TESLA_T4`), because that is what

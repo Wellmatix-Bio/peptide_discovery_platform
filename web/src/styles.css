@@ -62,3 +62,69 @@ a.btn{display:inline-block;text-decoration:none;margin-left:6px}
 /* break-all is right for an opaque id, which is what the source used it for, and wrong for text
    a person reads. .plain keeps long values from overflowing without shredding them. */
 .kv dd.plain{word-break:normal;overflow-wrap:anywhere}
+
+/* ---- ADDED: selection controls and result cards. ------------------------------------------
+   The source's design system is for a form of text inputs. Its `.field input` rule sets
+   width:100%, padding, a border and a white background -- which also hits CHECKBOXES, rendering
+   each one as a full-width box floating above its own label. That is the cause of the broken
+   Stages list and the odd multi-select, not a matter of taste. Fixed first, then the controls
+   are built as real components instead of bare boxes with text beside them. */
+
+.field input[type="checkbox"],.field input[type="radio"]{width:auto;padding:0;border:0;background:none;border-radius:0}
+
+/* A multi-select option. The native input stays for keyboard and screen readers and is hidden
+   visually; the label is the control. */
+.choices{display:flex;flex-wrap:wrap;gap:8px;margin:2px 0 4px}
+.choice{position:relative;display:inline-flex;align-items:center;gap:7px;padding:8px 13px 8px 11px;border:1px solid var(--line);border-radius:999px;background:#fff;font-size:12.5px;color:#41606f;cursor:pointer;user-select:none;transition:background .12s,border-color .12s,color .12s}
+.choice:hover{border-color:#9dbccd;background:#f7fbfd}
+.choice input{position:absolute;opacity:0;width:1px;height:1px;margin:0;pointer-events:none}
+.choice .mark{display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;border:1.5px solid #c2d4de;border-radius:50%;background:#fff;flex:0 0 16px;transition:background .12s,border-color .12s}
+.choice .mark:after{content:"";width:7px;height:4px;border-left:2px solid #fff;border-bottom:2px solid #fff;transform:rotate(-45deg) translateY(-1px);opacity:0;transition:opacity .12s}
+.choice.on{background:var(--blue);border-color:var(--blue);color:#fff;font-weight:600}
+.choice.on .mark{background:rgba(255,255,255,.22);border-color:rgba(255,255,255,.8)}
+.choice.on .mark:after{opacity:1}
+.choice input:focus-visible+.mark{outline:2px solid var(--blue);outline-offset:2px}
+.choice.on input:focus-visible+.mark{outline-color:#fff}
+
+/* A stage: a switch, its name and what turning it off costs, on one row. */
+.toggles{display:flex;flex-direction:column;gap:2px;margin-top:4px}
+.toggle{display:flex;align-items:flex-start;gap:12px;padding:11px 12px;border-radius:9px;cursor:pointer;transition:background .12s}
+.toggle:hover{background:#f6fafc}
+.toggle input{position:absolute;opacity:0;width:1px;height:1px;margin:0;pointer-events:none}
+.toggle .switch{position:relative;flex:0 0 34px;width:34px;height:20px;border-radius:999px;background:#cfdce3;margin-top:1px;transition:background .15s}
+.toggle .switch:after{content:"";position:absolute;top:2px;left:2px;width:16px;height:16px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(20,60,85,.3);transition:transform .15s}
+.toggle.on .switch{background:var(--blue)}
+.toggle.on .switch:after{transform:translateX(14px)}
+.toggle input:focus-visible+.switch{outline:2px solid var(--blue);outline-offset:2px}
+.toggle b{display:block;font-size:13px;color:var(--ink);line-height:1.35}
+.toggle small{display:block;font-size:11px;color:#7c8f99;margin-top:2px;line-height:1.45}
+.toggle.off b,.toggle.off small{color:#9fb0ba}
+
+/* A result card. The rank leads, the sequence is the thing being read, everything else supports. */
+.cand{border:1px solid var(--line);border-radius:12px;background:#fff;margin:10px 0;overflow:hidden;transition:border-color .12s,box-shadow .12s}
+.cand:hover{border-color:#c3d8e4;box-shadow:0 2px 10px rgba(20,60,85,.05)}
+.cand-top{display:flex;align-items:center;gap:13px;padding:13px 15px}
+.cand-rank{flex:0 0 auto;min-width:38px;height:38px;padding:0 9px;border-radius:9px;background:var(--sky);color:var(--ink);font-weight:800;font-size:15px;display:inline-flex;align-items:center;justify-content:center}
+.cand-rank.none{background:#f2f6f8;color:#8aa0ad;font-size:10px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;min-width:74px}
+.cand-main{min-width:0;flex:1}
+.cand-seq{font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:14px;letter-spacing:.9px;color:#1d3b4b;word-break:break-all;line-height:1.4}
+.cand-sub{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-top:6px}
+.cand-facts{display:flex;flex-wrap:wrap;gap:4px 14px;font-size:11px;color:var(--muted)}
+.cand-facts span b{color:#33505f;font-weight:700;font-variant-numeric:tabular-nums}
+.cand-body{border-top:1px solid var(--line);background:#fbfdfe;padding:15px}
+.cand-cols{display:grid;grid-template-columns:repeat(auto-fit,minmax(215px,1fr));gap:18px}
+.cand-col h4{margin:0 0 9px;font-size:10.5px;letter-spacing:.7px;text-transform:uppercase;color:var(--muted);font-weight:800}
+
+/* One number, with its label, and a bar where the value is on a 0-1 scale. */
+.stat{margin-bottom:9px}
+.stat-head{display:flex;justify-content:space-between;align-items:baseline;gap:10px}
+.stat-head span{font-size:11.5px;color:#54707f}
+.stat-head b{font-size:12.5px;color:var(--ink);font-variant-numeric:tabular-nums;font-weight:700}
+.stat-bar{height:4px;border-radius:4px;background:#e8eff3;margin-top:4px;overflow:hidden}
+.stat-bar i{display:block;height:100%;background:var(--blue);border-radius:4px}
+.stat-none{font-size:11.5px;color:#9fb0ba;font-style:italic}
+.pathogen{display:flex;justify-content:space-between;gap:10px;font-size:11.5px;padding:4px 0;border-bottom:1px dashed #e4edf1}
+.pathogen:last-child{border-bottom:0}
+.pathogen i{font-style:italic;color:#54707f}
+.pathogen b{color:var(--ink);font-variant-numeric:tabular-nums}
+@media(max-width:640px){.cand-top{align-items:flex-start}.cand-cols{grid-template-columns:1fr}}

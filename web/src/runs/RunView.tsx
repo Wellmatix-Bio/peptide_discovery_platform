@@ -49,16 +49,32 @@ function Scored({
   value,
   meaning,
   digits = 3,
+  scale,
 }: {
   label: string;
   value: number | null | undefined;
   meaning: string;
   digits?: number;
+  /** Present only where the API's value genuinely lies on a known range. The bar is a reading
+   *  aid for THAT value; it is never drawn for a number whose range is not known, because a bar
+   *  implies a scale and inventing one would misrepresent the score. */
+  scale?: [number, number];
 }) {
   return (
-    <div className="field" style={{ marginBottom: 8 }}>
-      <label title={meaning}>{label}</label>
-      {value == null ? <NoValue /> : <span className="mono">{num(value, digits)}</span>}
+    <div className="stat" title={meaning}>
+      <div className="stat-head">
+        <span>{label}</span>
+        {value == null ? <NoValue /> : <b>{num(value, digits)}</b>}
+      </div>
+      {value != null && scale ? (
+        <div className="stat-bar">
+          <i
+            style={{
+              width: `${Math.max(0, Math.min(1, (value - scale[0]) / (scale[1] - scale[0]))) * 100}%`,
+            }}
+          />
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -72,131 +88,178 @@ function Candidate({
 }) {
   const [open, setOpen] = useState(false);
   return (
-    <div className="candidate">
-      <div className="cand-head">
-        <div>
-          <span className="rank">
-            {candidate.ranking == null ? "unranked" : `#${candidate.ranking}`}
+    <div className="cand">
+      <div className="cand-top">
+        {candidate.ranking == null ? (
+          <span className="cand-rank none" title="The pipeline declined to rank this candidate">
+            unranked
           </span>
-          {tiedWith > 1 ? (
-            <span className="chip" style={{ marginLeft: 8 }}>
-              tied &mdash; {tiedWith} candidates share this position
+        ) : (
+          <span className="cand-rank">#{candidate.ranking}</span>
+        )}
+        <div className="cand-main">
+          <div className="cand-seq">
+            {candidate.sequence ?? (
+              <NoValue why="The API returned no sequence for this candidate." />
+            )}
+          </div>
+          <div className="cand-facts" style={{ marginTop: 6 }}>
+            {candidate.molecular_weight != null ? (
+              <span>
+                mass <b>{num(candidate.molecular_weight, 1)} Da</b>
+              </span>
+            ) : null}
+            {candidate.net_charge != null ? (
+              <span>
+                net charge <b>{num(candidate.net_charge, 1)}</b>
+              </span>
+            ) : null}
+            {candidate.amp_probability != null ? (
+              <span>
+                antimicrobial <b>{num(candidate.amp_probability, 2)}</b>
+              </span>
+            ) : null}
+            <span className="mono" style={{ fontSize: 10, opacity: 0.65 }}>
+              {candidate.id}
             </span>
+          </div>
+          {(candidate.engaged_pathways ?? []).length > 0 || tiedWith > 1 ? (
+            <div className="cand-sub">
+              {tiedWith > 1 ? (
+                <Pill tone="warn">tied &mdash; {tiedWith} share this position</Pill>
+              ) : null}
+              {(candidate.engaged_pathways ?? []).map((pathway) => (
+                <span className="chip" key={pathway}>
+                  {words(pathway)}
+                </span>
+              ))}
+            </div>
           ) : null}
         </div>
-        <button className="btn outline" style={{ padding: "5px 9px" }} onClick={() => setOpen(!open)}>
+        <button
+          className="btn outline"
+          style={{ padding: "6px 11px", flex: "0 0 auto" }}
+          aria-expanded={open}
+          onClick={() => setOpen(!open)}
+        >
           {open ? "Less" : "More"}
         </button>
       </div>
-      <p className="mono" style={{ margin: "8px 0" }}>
-        {candidate.sequence ?? <NoValue why="The API returned no sequence for this candidate." />}
-      </p>
-      <div className="chips">
-        <span className="chip">{candidate.id}</span>
-        {candidate.molecular_weight != null ? (
-          <span className="chip">{num(candidate.molecular_weight, 1)} Da</span>
-        ) : null}
-        {candidate.net_charge != null ? (
-          <span className="chip">net charge {num(candidate.net_charge, 1)}</span>
-        ) : null}
-        {(candidate.engaged_pathways ?? []).map((pathway) => (
-          <span className="chip" key={pathway}>
-            {words(pathway)}
-          </span>
-        ))}
-      </div>
       {open ? (
-        <div className="side-by-side" style={{ marginTop: 12 }}>
-          <div>
-            <p className="section-label">Function</p>
-            <Scored
-              label="Antimicrobial probability"
-              value={candidate.amp_probability}
-              meaning="P(antimicrobial peptide) from amp_classifier_v1. The API calls this a probability."
-            />
-            <Scored
-              label="Anti-inflammatory probability"
-              value={candidate.anti_inflammatory_probability}
-              meaning="From anti_inflammatory_predictor_v1."
-            />
-            <Scored
-              label="Proliferation probability"
-              value={candidate.proliferation_probability}
-              meaning="From proliferation_migration_predictor_v1."
-            />
-            <Scored
-              label="Migration probability"
-              value={candidate.migration_probability}
-              meaning="From proliferation_migration_predictor_v1."
-            />
-            <Scored
-              label="Angiogenic activity"
-              value={candidate.angiogenic_activity}
-              meaning="Score from angiogenic_activity_predictor_v1. The API does not call this a probability."
-            />
-          </div>
-          <div>
-            <p className="section-label">Safety &amp; developability</p>
-            <Scored
-              label="Haemolysis pHC50"
-              value={candidate.hemolytic_activity_phc50}
-              meaning="pHC50 from hemolysis_predictor_v1. Higher is less haemolytic."
-            />
-            <Scored
-              label="Cytotoxicity score"
-              value={candidate.cytotoxicity_probability}
-              meaning="Score from cytotoxicity_predictor_v1, against the cell line the run selected."
-            />
-            <Scored
-              label="Solubility score"
-              value={candidate.solubility}
-              meaning="From solubility_predictor_v1."
-            />
-            <Scored
-              label="Aggregation tendency"
-              value={candidate.aggregation_tendency}
-              meaning="From aggregation_predictor_v1. Higher is more aggregation-prone."
-            />
-            <Scored
-              label="Cleavage stability"
-              value={candidate.cleavage_stability}
-              meaning="From cleavage_site_predictor_v1."
-            />
-            <Scored
-              label="Instability index"
-              value={candidate.instability_index}
-              meaning="Computed physicochemically in stage 5, not by a learned model."
-            />
-            <div className="field" style={{ marginBottom: 8 }}>
-              <label>Deamidation / oxidation risk</label>
-              <span className="mono">
-                {candidate.deamidation_risk ?? "no value"} / {candidate.oxidation_risk ?? "no value"}
-              </span>
+        <div className="cand-body">
+          <div className="cand-cols">
+            <div className="cand-col">
+              <h4>Function</h4>
+              <Scored
+                label="Antimicrobial probability"
+                value={candidate.amp_probability}
+                meaning="P(antimicrobial peptide) from amp_classifier_v1. The API calls this a probability."
+                scale={[0, 1]}
+              />
+              <Scored
+                label="Anti-inflammatory probability"
+                value={candidate.anti_inflammatory_probability}
+                meaning="From anti_inflammatory_predictor_v1."
+                scale={[0, 1]}
+              />
+              <Scored
+                label="Proliferation probability"
+                value={candidate.proliferation_probability}
+                meaning="From proliferation_migration_predictor_v1."
+                scale={[0, 1]}
+              />
+              <Scored
+                label="Migration probability"
+                value={candidate.migration_probability}
+                meaning="From proliferation_migration_predictor_v1."
+                scale={[0, 1]}
+              />
+              <Scored
+                label="Angiogenic activity"
+                value={candidate.angiogenic_activity}
+                meaning="Score from angiogenic_activity_predictor_v1. The API does not call this a probability, so it is not labelled as one."
+                scale={[0, 1]}
+              />
             </div>
-          </div>
-          <div>
-            <p className="section-label">Per-pathogen MIC (log10 µM)</p>
-            {Object.keys(candidate.log_mic_um ?? {}).length === 0 ? (
-              <NoValue why="No MIC was returned for this candidate." />
-            ) : (
-              <dl className="kv">
-                {Object.entries(candidate.log_mic_um ?? {}).map(([organism, value]) => (
-                  <Kv key={organism} k={words(organism)} v={num(value as number, 3)} />
-                ))}
-              </dl>
-            )}
-          </div>
-          <div>
-            <p className="section-label">Per-pathogen pMBIC (biofilm)</p>
-            {Object.keys(candidate.pmbic ?? {}).length === 0 ? (
-              <NoValue why="No biofilm potency was returned for this candidate." />
-            ) : (
-              <dl className="kv">
-                {Object.entries(candidate.pmbic ?? {}).map(([organism, value]) => (
-                  <Kv key={organism} k={words(organism)} v={num(value as number, 3)} />
-                ))}
-              </dl>
-            )}
+
+            <div className="cand-col">
+              <h4>Safety &amp; developability</h4>
+              <Scored
+                label="Cytotoxicity score"
+                value={candidate.cytotoxicity_probability}
+                meaning="Score from cytotoxicity_predictor_v1, against the cell line this run selected. Lower is better."
+                scale={[0, 1]}
+              />
+              <Scored
+                label="Solubility score"
+                value={candidate.solubility}
+                meaning="From solubility_predictor_v1. Higher is better."
+                scale={[0, 1]}
+              />
+              <Scored
+                label="Aggregation tendency"
+                value={candidate.aggregation_tendency}
+                meaning="From aggregation_predictor_v1. Higher is more aggregation-prone."
+                scale={[0, 1]}
+              />
+              <Scored
+                label="Cleavage stability"
+                value={candidate.cleavage_stability}
+                meaning="From cleavage_site_predictor_v1. Higher is more stable."
+                scale={[0, 1]}
+              />
+              <Scored
+                label="Haemolysis pHC50"
+                value={candidate.hemolytic_activity_phc50}
+                meaning="pHC50 from hemolysis_predictor_v1. Higher is less haemolytic. No bar: the API states no range for this value."
+              />
+              <Scored
+                label="Instability index"
+                value={candidate.instability_index}
+                meaning="Computed physicochemically in stage 5, not by a learned model. No bar: it is unbounded and can be negative."
+                digits={2}
+              />
+              <div className="stat">
+                <div className="stat-head">
+                  <span>Deamidation / oxidation risk</span>
+                  <b>
+                    {candidate.deamidation_risk ?? "no value"} /{" "}
+                    {candidate.oxidation_risk ?? "no value"}
+                  </b>
+                </div>
+              </div>
+            </div>
+
+            <div className="cand-col">
+              <h4>MIC by pathogen (log10 µM)</h4>
+              {Object.keys(candidate.log_mic_um ?? {}).length === 0 ? (
+                <p className="stat-none">No MIC was returned for this candidate.</p>
+              ) : (
+                Object.entries(candidate.log_mic_um ?? {}).map(([organism, value]) => (
+                  <div className="pathogen" key={organism}>
+                    <i>{words(organism)}</i>
+                    <b>{num(value as number, 3)}</b>
+                  </div>
+                ))
+              )}
+            </div>
+
+            <div className="cand-col">
+              <h4>Biofilm pMBIC by pathogen</h4>
+              {Object.keys(candidate.pmbic ?? {}).length === 0 ? (
+                <p className="stat-none">No biofilm potency was returned for this candidate.</p>
+              ) : (
+                Object.entries(candidate.pmbic ?? {}).map(([organism, value]) => (
+                  <div className="pathogen" key={organism}>
+                    <i>{words(organism)}</i>
+                    <b>{num(value as number, 3)}</b>
+                  </div>
+                ))
+              )}
+              <p className="help" style={{ marginTop: 8 }}>
+                The biofilm model scores more organisms than a brief may request.
+              </p>
+            </div>
           </div>
         </div>
       ) : null}

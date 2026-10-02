@@ -1,371 +1,132 @@
-# Wellmatix Peptide Platform
+# Wellmatix Peptide Discovery Platform
 
-AI-driven discovery platform for wound-healing therapeutic peptides. Given a
-therapeutic product brief (wound context, desired biological functions, target
-pathogens, and constraints), the pipeline generates, screens, and ranks
-candidate peptide sequences, returning a synthesis-oriented shortlist together
-with safety, developability, and mechanistic evidence for each candidate.
+Generates, screens and ranks candidate peptide sequences for wound healing.
 
----
+You describe a wound and what the peptide should do — context, desired biological functions,
+target pathogens, length and dosing constraints. The pipeline generates candidates, screens them
+through physicochemical, functional, structural, safety and synthesis models, and returns a ranked
+shortlist with the evidence behind each one.
 
-## Architecture
+**Every number it produces is a model's estimate on a computationally generated sequence. None of
+it substitutes for wet-lab validation.** The interface says so too; see [What this platform will
+not answer](#what-this-platform-will-not-answer).
 
-The platform is a linear stage pipeline:
-
-```
-s01_therapeutic_product_brief   Therapeutic product brief -> machine-readable Brief
-s04_candidate_generation        Route A (GA, reference-guided) + Route B (ProtGPT2 LoRA, de novo)
-s05_physchem_screening          Physicochemical properties, soft flags + hard rejects
-s06_functional_models           Antimicrobial, migration, angiogenesis, immunomodulation
-s07_structure_mechanism         ESMFold structure + pathway-engagement mechanism summary
-s08_safety_developability       Hemolysis, cytotoxicity, aggregation, cleavage stability
-s09_synthesis_cmc                Rule-based synthesis difficulty, cost bands, purity ceiling
-s11_ranking                     Weighted multi-objective ranking
-```
-
-Each candidate stage declares the fields it `requires` and `produces`; a stage
-may filter candidates out directly based on its own thresholds, logging what it
-removed and why. `s02_wound_biology_and_targets` and `s03_data_integration`
-have working implementations but are force-disabled for the deployed job path
-(see `src/schemas/e2e_config.py`). `s10`, `s12`-`s14` exist as directories
-under `src/pipeline/` with no implementation yet.
-
-### Remote execution flow
-
-```
-Client (POST /api/v1/jobs/create)
-    |
-    v
-FastAPI job API (src/backend/api_e2e/api.py)
-    |  validates request, writes a staging config to GCS,
-    |  submits a Vertex AI Custom Job
-    v
-Vertex AI Custom Job
-    |  runs the worker container (src/backend/worker_e2e/, Dockerfile)
-    |  pulls its config from GCS, syncs model weights from GCS
-    v
-Docker worker (backend.worker_e2e.worker)
-    |  executes PipelineRunner over the configured stages
-    v
-Google Cloud Storage
-    - config.json, results.json, audit_log.jsonl
-    - candidates/<stage>.jsonl (per-stage boundary output)
-    - candidates_final.json (final ranked shortlist)
-```
-
-Clients poll job status/results through the same FastAPI service
-(`GET /api/v1/jobs/{job_id}/status`, `GET /api/v1/jobs/{job_id}/results`),
-which reads those same GCS artifacts rather than talking to the worker
-directly.
+[![Licence](https://img.shields.io/badge/licence-Apache--2.0-blue)](LICENSE)
 
 ---
 
-## Requirements
+## Try it without any cloud account
 
-- **Python** 3.11+
-- **Docker** with GPU support (`--gpus all`) for running the worker container
-  locally; NVIDIA Container Toolkit installed on the host.
-- **GCP project** with:
-  - Vertex AI API enabled (for Custom Jobs)
-  - A GCS bucket for model weights, run artifacts, and seed sequences
-  - Artifact Registry (or another registry) to host the worker image
-  - A service account with permissions to create/cancel Vertex Custom Jobs and
-    read/write the GCS paths above
-- **GPU**: the worker loads several PyTorch models (ESMFold, ProtGPT2+LoRA,
-  ESM2, XGBoost/sklearn ensembles) and is CUDA-accelerated. CPU-only execution
-  works but is significantly slower. `routeb_protgpt2_lora_v1` loads its base
-  model via `bitsandbytes` 4-bit (NF4) quantization, which requires an Ampere+
-  GPU (compute capability ≥ 8.0) for reliable GPU dispatch — on a T4 (Turing,
-  7.5) it can silently fall back to CPU rather than raise an error. This
-  deployment's `.env` configures `NVIDIA_L4`/`g2-standard-4` for exactly this
-  reason; `api.py`'s own code fallback (used only if `ACCELERATOR_TYPE`/
-  `MACHINE_TYPE` are unset) still defaults to T4 and should not be relied on.
-
----
-
-## Installation
+The pipeline runs locally. No Google Cloud, no Docker, no GPU required.
 
 ```bash
-git clone <repo-url> wellmatix-peptide-platform
-cd wellmatix-peptide-platform
-
-python -m venv .venv
-source .venv/bin/activate    # .venv\Scripts\activate on Windows
-
-pip install -r requirements.txt
-pip install pytest
-
-cp .env.example .env
+git clone https://github.com/Wellmatix-Bio/peptide_discovery_platform.git
+cd peptide_discovery_platform
 ```
+
+```bash
+python -m venv .venv && source .venv/bin/activate && pip install -r requirements.txt
+```
+
+```bash
+python main.py configs/runs/test_run.yaml
+```
+
+That executes the whole pipeline against local paths. It is slower on CPU, and the predictors need
+model weights (see [Model weights](#model-weights)), but nothing about it is a reduced version of
+the cloud path — it is the same code.
+
+Running the web app and the full service stack is in [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
 
 ---
 
-## Configuration
+## What it is made of
 
-All configuration is via environment variables, loaded from `.env` at the
-repository root (see `src/common/env.py`). Copy `.env.example` and fill in
-real values — never commit actual credentials or a filled-in `.env`.
-
-```
-DEV_MODE=false
-VERTEX_CLOUD_PROJECT=<your-gcp-project-id>
-VERTEX_LOCATION=us-central1
-VERTEX_ARTIFACTS_DIR=gs://<your-bucket>/artifacts
-VERTEX_MODEL_STORE=gs://<your-bucket>/model_weights
-SEED_CANDIDATES_FILE=gs://<your-bucket>/curated_peptides.fasta
-WORKER_IMAGE_URI=<region>-docker.pkg.dev/<project>/<repository>/worker-e2e:<tag>
-WORKER_SERVICE_ACCOUNT=<worker-runtime>@<project>.iam.gserviceaccount.com
-MACHINE_TYPE=g2-standard-4
-ACCELERATOR_TYPE=NVIDIA_L4
-ACCELERATOR_COUNT=1
-```
-
-| Variable | Purpose |
+| | |
 |---|---|
-| `DEV_MODE` | `true` for local runs against local paths/weights; `false` for the deployed worker path (GCS paths, real job IDs). |
-| `VERTEX_CLOUD_PROJECT` / `VERTEX_LOCATION` | Identify the Vertex AI project/region the job API submits Custom Jobs to. |
-| `VERTEX_ARTIFACTS_DIR` | GCS prefix where run configs, status, and results are written. |
-| `VERTEX_MODEL_STORE` | GCS prefix model weights are synced from on first use (`common/model_sync.py`). |
-| `SEED_CANDIDATES_FILE` | GCS path to the seed peptide FASTA used when a run doesn't start from de novo generation alone. |
-| `WORKER_IMAGE_URI` | The worker image the job API tells Vertex to run. |
-| `WORKER_SERVICE_ACCOUNT` | Service account the Custom Job runs as. |
-| `MACHINE_TYPE` / `ACCELERATOR_TYPE` / `ACCELERATOR_COUNT` | Vertex Custom Job machine spec. This deployment sets `g2-standard-4` / `NVIDIA_L4` / `1` explicitly (required pairing — L4 only attaches to `g2-standard-*`); if unset, `api.py` itself falls back to `n1-standard-4` / `NVIDIA_TESLA_T4` / `1`, which is **not** recommended (see the GPU note above). |
+| **Pipeline** | 14 stage directories under `src/pipeline/`, 8 implemented |
+| **Models** | 15 predictors in `model_store/` — ESM-2 embeddings with XGBoost/sklearn heads, a BiLSTM+CNN MIC ensemble, ESMFold for structure, ProtGPT2+LoRA for de novo generation |
+| **Job API** | `src/backend/api_e2e/` — submits Vertex AI Custom Jobs, reads their artifacts |
+| **Accounts** | `services/accounts/` — email/password accounts and the authenticating proxy |
+| **Web app** | `web/` — React, TypeScript, one origin, no CORS |
+| **Deployment** | `deploy/` — three containers, only the web one publishes a port |
 
-Authentication uses Google Application Default Credentials
-(`gcloud auth application-default login` locally; the service account
-attached to the job when running on Vertex).
+[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) explains how they fit together and what you can leave
+out.
 
 ---
 
-## How to run
+## What is optional
 
-### Local API server
+The core has **no hard dependency** on Google Cloud, on a GPU, or on any copyleft library. Each is
+an addition, and each announces itself when missing rather than failing obscurely.
 
-```bash
-cd src
-python -m backend.api_e2e.api
-# or: uvicorn backend.api_e2e.api:app --host 127.0.0.1 --port 8080 --reload
-```
+| Leave out | Install with | Without it |
+|---|---|---|
+| Google Cloud | `pip install -e '.[gcp]'` | Local paths work normally; a `gs://` path raises an error naming the fix |
+| `propy3` (GPL-2.0-only) | `pip install -e '.[aggregation]'` | The aggregation screen reports `not_screened` — never a silent pass |
+| `s4pred` (GPL-3.0) | vendor it yourself | The secondary-structure screen reports itself unavailable |
+| A GPU | — | Runs on CPU, slowly. ESMFold in stage 7 dominates |
 
-Then submit a job (see `src/backend/api_e2e/example_request.json` for a
-complete, valid request body):
-
-```bash
-curl -X POST http://127.0.0.1:8080/api/v1/jobs/create \
-  -H "Content-Type: application/json" \
-  -d @src/backend/api_e2e/example_request.json
-```
-
-This submits a real Vertex AI Custom Job (billed GPU time) once
-`WORKER_IMAGE_URI`/`WORKER_SERVICE_ACCOUNT` point at real resources.
-
-### Local worker (Docker), without submitting to Vertex
-
-Build the worker image from the repository root:
-
-```bash
-docker build -f src/backend/worker_e2e/Dockerfile -t worker-e2e:local .
-```
-
-Run it directly against a self-contained run config (local or `gs://`):
-
-```bash
-docker run --gpus all \
-  --env-file .env \
-  -e GOOGLE_APPLICATION_CREDENTIALS=/gcp/adc.json \
-  -v "$HOME/.config/gcloud/application_default_credentials.json:/gcp/adc.json:ro" \
-  worker-e2e:local \
-  --config gs://<your-bucket>/configs/my-run.json
-```
-
-The run config shape matches `RunConfig` (`src/schemas/run_config.py`):
-`run_id`, `seed`, `seed_candidates_path`, `artifacts_dir`, `model_store`,
-`stages`. This is a different (flatter) shape than the API's
-`CreateJobRequest` body — the API injects the GCS paths server-side rather
-than accepting them from the client.
-
-### Local pipeline (no worker/API, dev only)
-
-```bash
-python main.py configs/test_run.yaml
-```
-
-`configs/test_run.yaml` is the run manifest (`run_id`, `seed`,
-`seed_candidates_path`, `artifacts_dir`, `model_store`); the matching
-`configs/runs/<run_id>.yaml` holds per-stage `enabled`/`params`. `run_id` from
-the manifest is only honored when `DEV_MODE=true`.
-
-### Vertex AI deployment / job execution
-
-See [Deployment](#deployment) below for building and pushing the image, then
-submit jobs through the API's `/api/v1/jobs/create` endpoint as shown above.
+Both copyleft packages are optional on purpose. See [docs/LICENSING.md](docs/LICENSING.md).
 
 ---
 
-## Inputs and outputs
+## Model weights
 
-### Request schema
+**Not in this repository.** `model_store/<predictor>/` holds code and a model card;
+`model_store/model_weights/` is gitignored and populated at run time from wherever
+`VERTEX_MODEL_STORE` points.
 
-`POST /api/v1/jobs/create` takes `{"request_id": str, "stages": {...}}`. Full
-field-by-field reference: [`docs/parameter_usage.md`](docs/parameter_usage.md)
-and the machine-readable contract [`openapi.yaml`](openapi.yaml). Stage
-parameters are validated per stage name (`src/schemas/stage_configs.py`);
-unknown stage names or unknown fields on a public stage object are rejected.
-
-### `request_id`, `job_id`, and the Vertex job name
-
-- **`request_id`**: caller-supplied, used to name the staging config object
-  (`<artifacts_dir>/requests/<request_id>/config.json`) and as a Vertex job
-  label. Not unique-enforced by the API itself.
-- **Vertex job name**: the full resource name Vertex assigns on creation,
-  e.g. `projects/<project>/locations/<region>/customJobs/<numeric-id>`.
-- **`job_id`** (as used in status/results/cancel URLs): the numeric suffix of
-  the Vertex job name. The pipeline's own `run_id` is set to this same value
-  after job creation — so GCS run artifacts live under
-  `<artifacts_dir>/runs/<job_id>/`, keyed by the Vertex job ID, not by
-  `request_id`.
-
-### Where files go in GCS
-
-```
-<artifacts_dir>/
-  requests/<request_id>/config.json     staging config, written before job creation
-  runs/<job_id>/
-    config.json                         final config (run_id set to job_id)
-    config_snapshot.yaml                fully-resolved config, written at run start
-    results.json                        {"run_id", "status", "progress", "stage"} while running;
-                                         {"status": "success", "n_final": N} or
-                                         {"status": "failed", "error": "..."} once terminal
-    audit_log.jsonl                     per-stage/per-prediction audit trail
-    candidates/<stage_name>.jsonl       per-stage boundary output (survivors only)
-    candidates_final.json               final ranked shortlist
-    stats_<run_id>.txt                  summary (DEV_MODE only)
-    feature_cache/                      serialized shared ESM2/descriptor cache
-```
-
-### Result format
-
-`GET /api/v1/jobs/{job_id}/results` returns `status`, `n_final`,
-`total_candidates`, `ranked_candidates`, `insufficient_evidence_candidates`,
-per-ranking-component summary statistics (`component_stats`), and the full
-candidate list (each with its `predictions` dict populated by every stage that
-ran).
+How outside users obtain them is **not yet settled**. Weights carry their own terms, including
+those of the upstream models they derive from (ESM-2, ESMFold, ProtGPT2), and **7 of the 15
+predictors ship no model card**, so their training data and applicability domain are undocumented.
+Tracked in [docs/LICENSING.md](docs/LICENSING.md).
 
 ---
 
-## Project structure
+## What this platform will not answer
 
-```
-platform/
-├── src/
-│   ├── backend/
-│   │   ├── api_e2e/          FastAPI job-submission service (create/status/results/cancel)
-│   │   └── worker_e2e/       Docker worker entrypoint + Dockerfile, run on Vertex
-│   ├── pipeline/             s01-s14 stage packages + feature_extractor.py + base.py
-│   ├── schemas/               Candidate, RunConfig, Brief, and related pydantic models
-│   ├── common/                 audit, GCS/local storage, GPU release, env loading, stats, logging
-│   ├── registry.py            stage-name -> stage-class registration
-│   └── runner.py               PipelineRunner: loads config, resolves stages, executes them
-├── model_store/               model weights + predictor.py wrappers, one directory per model (gitignored)
-├── configs/                    run manifests and per-run stage configs (configs/runs/)
-├── data/                       briefs/, raw/ seed sequences (gitignored except manifests)
-├── docs/                       architecture, stage contracts, schema changelog, parameter reference
-├── tests/                      unit (per-stage), integration, and schema tests
-├── openapi.yaml                machine-readable API contract
-├── API_SPECIFICATION.md        job-creation/status API reference
-├── requirements.txt
-└── README.md
-```
+Stated plainly because the interface states it too:
+
+- **Pathogens other than *E. coli*, *S. aureus* and *P. aeruginosa*.** A pathogen outside that list
+  is skipped, not scored — it is not an error and produces no warning in the results.
+- **Peptides shorter than 6 or longer than 50 residues.** Refused rather than scored out of domain.
+- **Wound contexts and desired functions outside the API's vocabularies.** Note that the 32 example
+  briefs in `data/briefs/` use many terms it rejects — see
+  [docs/BRIEF_VALIDITY.md](docs/BRIEF_VALIDITY.md).
+- **Which models produced a given result.** No run carries a model identity.
+- **Whether a candidate works.** That is what a laboratory is for.
 
 ---
 
-## Development / testing
+## Known issues
 
-```bash
-pytest                          # full suite
-pytest tests/unit/pipeline      # per-stage unit tests
-pytest tests/integration        # API + worker integration tests (mocked GCP)
-```
+Open and documented rather than discovered later:
 
-`pyproject.toml` sets `pythonpath = ["src"]` for pytest.
-
-Adding a stage or model:
-
-1. Create the package under `src/pipeline/sNN_<name>/` with a `stage.py`
-   defining a `CandidateStage` (or `SetupStage` for s01-s03) subclass.
-2. Register the class in `src/registry.py`'s `SETUP_STAGE_CLASSES` or
-   `CANDIDATE_STAGE_CLASSES` — an unregistered stage never executes.
-3. If the stage calls a model, add it under `model_store/<model_name>_vN/`
-   with its own `predictor.py`, following the existing
-   lazy-load-on-first-`predict()` pattern (see `common/model_sync.py`).
-4. Add a unit test under `tests/unit/pipeline/test_sNN_<name>.py`.
+- The biofilm model scores 13 pathogens while a brief may request 3, and `antibiofilm` is a valid
+  generation tag but not a valid desired function — [docs/BRIEF_VALIDITY.md](docs/BRIEF_VALIDITY.md)
+- `status` never reflects the Vertex job state; a dead worker reports `"pending"` forever —
+  [docs/BASELINE.md](docs/BASELINE.md)
+- `s4pred` is committed as a git submodule pointer with no `.gitmodules`, so it does not resolve
+- Stages s05–s09 have no unit tests
 
 ---
 
-## Deployment
+## Documentation
 
-### 1. Build and push the worker image
-
-```bash
-gcloud builds submit . \
-  --config=src/backend/worker_e2e/cloudbuild.yaml \
-  --substitutions=_IMAGE_URI=<region>-docker.pkg.dev/<project>/<repository>/worker-e2e:<tag>
-```
-
-Set `WORKER_IMAGE_URI` in `.env` to the same value.
-
-### 2. Required IAM permissions
-
-The identity running the job API (locally or however it's hosted) needs:
-- `roles/aiplatform.user` (create/get/cancel Custom Jobs)
-- `roles/storage.objectAdmin` (or narrower, scoped to the artifacts/model
-  bucket)
-
-The `WORKER_SERVICE_ACCOUNT` the Custom Job itself runs as needs:
-- `roles/storage.objectViewer` on the model-store bucket (reads weights)
-- `roles/storage.objectAdmin` on the artifacts bucket (reads its config,
-  writes results/candidates)
-
-### 3. Start a Custom Job
-
-Jobs are started through the API (`POST /api/v1/jobs/create`), not manually
-via `gcloud`; see [How to run](#how-to-run).
+| | |
+|---|---|
+| [ARCHITECTURE.md](docs/ARCHITECTURE.md) | How the pieces fit, what is optional |
+| [DEPLOYMENT.md](docs/DEPLOYMENT.md) | Running the stack, locally and on a VM |
+| [LICENSING.md](docs/LICENSING.md) | Apache-2.0, the copyleft optionals, model weights |
+| [CONTRIBUTING.md](CONTRIBUTING.md) | Setup, tests, how changes are reviewed |
+| [API_SPECIFICATION.md](API_SPECIFICATION.md) | The job API's endpoints |
+| [BASELINE.md](docs/BASELINE.md) | Measured test baseline and the defects behind it |
+| [WEB_WALKTHROUGH.md](docs/WEB_WALKTHROUGH.md) | Every page, with screenshots |
 
 ---
 
-## Troubleshooting
+## Licence
 
-**GCS `403` on `storage.objects.get`**
-The identity making the call (your local ADC user, or
-`WORKER_SERVICE_ACCOUNT` on Vertex) lacks read access to the bucket/prefix. On
-a local Docker run, confirm `GOOGLE_APPLICATION_CREDENTIALS` points at a
-mounted, unexpired ADC file (`gcloud auth application-default login` if
-expired).
-
-**Artifact Registry permission denied on push**
-The identity running `gcloud builds submit`/`docker push` needs
-`roles/artifactregistry.writer` on the target repository.
-
-**GPU/CUDA issues on Vertex**
-This deployment runs on `NVIDIA_L4` (Ada Lovelace, compute capability 8.9),
-configured explicitly via `.env` rather than relying on `api.py`'s own T4
-fallback default. Do not switch back to a T4 or other pre-Ampere accelerator
-without re-verifying `routeb_protgpt2_lora_v1`: its `bitsandbytes` 4-bit
-(NF4) quantized load was observed to silently fall back to CPU on a real T4
-job (0% GPU utilization, no error raised) despite loading correctly on
-Ampere+/Ada hardware — `bfloat16` vs `float16` alone (see
-`bnb_4bit_compute_dtype`) does not fix this; the quantization kernels
-themselves need Ampere+. If you must run on T4, drop `bitsandbytes`
-quantization for that model and load the base model directly in
-`torch.float16` instead (more VRAM, no quantization-kernel dependency).
-`esmfold_v1`'s existing `.half()` usage remains T4-safe either way.
-
-**Model-weight download/cache issues**
-Weights sync from `VERTEX_MODEL_STORE` on first use per process
-(`common/model_sync.py`), a no-op under `DEV_MODE=true` or when
-`VERTEX_MODEL_STORE` is a local path. A model appearing to "hang" on first
-call is usually this download; check `sync_model_weights`'s `download_dir`
-progress logs. If a model's local `model_weights/<name>/` directory is present
-but corrupt/partial, delete it and let the next run re-sync (or run
-`scripts/smoke_test_model_sync.py <model_name>` to test the sync path in
-isolation).
+Apache-2.0 — see [LICENSE](LICENSE) and [NOTICE](NOTICE). Model weights are **not** covered by it.

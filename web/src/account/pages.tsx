@@ -96,9 +96,9 @@ export function Account() {
           <div className="card">
             <h2>This account</h2>
             <dl className="kv">
-              <Kv k="Email" v={user?.email ?? "—"} />
+              <Kv k="Email" v={user?.email ?? "—"} plain />
               <Kv k="Account id" v={String(user?.id ?? "—")} />
-              <Kv k="Created" v={user?.created_at ?? "—"} />
+              <Kv k="Created" v={user?.created_at ?? "—"} plain />
             </dl>
           </div>
 

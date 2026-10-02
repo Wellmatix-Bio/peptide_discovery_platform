@@ -37,6 +37,17 @@ jobs:
       - name: Install the job API's runtime
         run: pip install -r deploy/api.requirements.txt
 
+      - name: Install what the backend suite imports beyond the API's own runtime
+        # structlog (src/common/logging.py) and pandas, which the worker tests reach through the
+        # runner. Without them four tests become collection errors and the baseline check reports
+        # a regression that is really a missing dependency -- which is why check_baseline.py now
+        # asserts these are importable before it counts anything.
+        #
+        # NOT the whole of requirements.txt: nothing in the collectable suite needs torch,
+        # transformers, sklearn or xgboost, and installing the CUDA wheel here would add several
+        # GB to every CI run for tests that cannot be collected anyway (s4pred).
+        run: pip install "structlog>=25,<27" "pandas>=2.2,<4"
+
       - name: OpenAPI snapshot is current
         # Generated types are built from this snapshot; if it drifts from api.py the web app's
         # types describe an API that no longer exists.

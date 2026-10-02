@@ -114,26 +114,30 @@ function Chooser({
   chosen: string[];
   onChange: (next: string[]) => void;
 }) {
+  /* The native checkbox stays, for the keyboard and for screen readers, and is hidden visually;
+     the pill is the control. Previously these were bare checkboxes, which the design system's
+     `.field input` rule rendered as full-width text inputs stacked above their own labels. */
   return (
     <div className="field">
-      <label>{legend}</label>
-      <div className="chips" style={{ gap: 8 }}>
+      <label>
+        {legend}
+        {chosen.length > 0 ? (
+          <span style={{ fontWeight: 400, color: "var(--muted)" }}> — {chosen.length} selected</span>
+        ) : null}
+      </label>
+      <div className="choices">
         {values.map((value) => {
           const on = chosen.includes(value);
           return (
-            <label
-              key={value}
-              className={`tab${on ? " on" : ""}`}
-              style={{ cursor: "pointer", userSelect: "none" }}
-            >
+            <label key={value} className={`choice${on ? " on" : ""}`}>
               <input
                 type="checkbox"
                 checked={on}
                 onChange={() =>
                   onChange(on ? chosen.filter((one) => one !== value) : [...chosen, value])
                 }
-                style={{ marginRight: 6 }}
               />
+              <span className="mark" aria-hidden="true" />
               {humanise(value)}
             </label>
           );
@@ -395,25 +399,30 @@ export function SubmitRun() {
                 All on by default. Turning one off skips its scoring &mdash; and its filtering, so
                 candidates it would have rejected survive.
               </p>
-              {STAGES.map(([stage, label, note]) => (
-                <label key={stage} className="field" style={{ display: "block", cursor: "pointer" }}>
-                  <input
-                    type="checkbox"
-                    checked={advanced.stages[stage] ?? true}
-                    onChange={(event) =>
-                      setAdvanced({
-                        ...advanced,
-                        stages: { ...advanced.stages, [stage]: event.target.checked },
-                      })
-                    }
-                    style={{ marginRight: 8 }}
-                  />
-                  <b style={{ fontSize: 13 }}>{label}</b>
-                  <span className="help" style={{ display: "block", marginLeft: 24 }}>
-                    {note}
-                  </span>
-                </label>
-              ))}
+              <div className="toggles">
+                {STAGES.map(([stage, label, note]) => {
+                  const on = advanced.stages[stage] ?? true;
+                  return (
+                    <label key={stage} className={`toggle${on ? " on" : " off"}`}>
+                      <input
+                        type="checkbox"
+                        checked={on}
+                        onChange={(event) =>
+                          setAdvanced({
+                            ...advanced,
+                            stages: { ...advanced.stages, [stage]: event.target.checked },
+                          })
+                        }
+                      />
+                      <span className="switch" aria-hidden="true" />
+                      <span>
+                        <b>{label}</b>
+                        <small>{note}</small>
+                      </span>
+                    </label>
+                  );
+                })}
+              </div>
               <div className="field">
                 <label htmlFor="cell-type">Cytotoxicity reference cells</label>
                 <select

@@ -14,6 +14,7 @@ needs updating. Both deserve a human's attention.
 
 from __future__ import annotations
 
+import importlib.util
 import re
 import subprocess
 import sys
@@ -21,8 +22,40 @@ import sys
 #: From docs/BASELINE.md. Update BOTH together, never just this.
 EXPECTED = {"passed": 29, "failed": 4, "errors": 2}
 
+#: THE BASELINE IS A PROPERTY OF AN ENVIRONMENT, NOT JUST OF THE CODE. A module the suite imports
+#: but that is not installed turns tests into collection ERRORS, and the count moves exactly as it
+#: would for a real regression -- which is misleading in precisely the moment you need to trust it.
+#: These are the imports the recorded numbers assume. They are checked first so a missing one is
+#: reported as what it is, instead of being counted as a regression.
+#:
+#: Deliberately NOT the whole of requirements.txt: nothing here needs torch, transformers, sklearn
+#: or xgboost, because the 47 tests that would are uncollectable anyway (s4pred, docs/BASELINE.md).
+ASSUMED_IMPORTS = ("fastapi", "pydantic", "yaml", "google.cloud.storage", "structlog", "pandas")
+
+
+def missing_imports() -> list[str]:
+    absent = []
+    for name in ASSUMED_IMPORTS:
+        try:
+            if importlib.util.find_spec(name) is None:
+                absent.append(name)
+        except (ImportError, ValueError):
+            absent.append(name)
+    return absent
+
 
 def main() -> int:
+    absent = missing_imports()
+    if absent:
+        print(
+            "This environment is missing modules the recorded baseline assumes:\n"
+            f"  {', '.join(absent)}\n\n"
+            "Those would be counted as collection ERRORS and look identical to a regression.\n"
+            "Install them and run again; see the python job in .github/workflows/ci.yml.",
+            file=sys.stderr,
+        )
+        return 2
+
     run = subprocess.run(
         [sys.executable, "-m", "pytest", "-q", "--continue-on-collection-errors",
          "--ignore=services", "--ignore=web"],

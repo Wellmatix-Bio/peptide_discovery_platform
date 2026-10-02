@@ -94,3 +94,43 @@ describe.skipIf(available)("design source unavailable", () => {
     expect(available).toBe(false);
   });
 });
+
+
+describe("the additions correct what the source's form rules do to checkboxes", () => {
+  const css = readFileSync(COPY, "utf8");
+
+  it("still inherits the source's .field input rule, which is why the override is needed", () => {
+    // The verbatim block styles every input in a .field as a text box: full width, padding, a
+    // border and a white background. Applied to a checkbox that renders a full-width box
+    // floating above its own label, which is what the Stages list and the multi-selects looked
+    // like before. If this rule ever stops existing, the override below is dead weight.
+    expect(css).toContain(".field input,.field select,.field textarea{width:100%");
+  });
+
+  it("resets width, padding, border and background for checkboxes and radios", () => {
+    const override = css.match(
+      /\.field input\[type="checkbox"\],\.field input\[type="radio"\]\{([^}]*)\}/,
+    );
+    expect(override, "the checkbox override is missing").not.toBeNull();
+    const body = override![1]!;
+    expect(body).toContain("width:auto");
+    expect(body).toContain("padding:0");
+    expect(body).toContain("border:0");
+    expect(body).toContain("background:none");
+  });
+
+  it("hides the native control in the selection components without removing it", () => {
+    // Visually hidden, not display:none -- it has to stay focusable and announced.
+    for (const selector of [".choice input{", ".toggle input{"]) {
+      const rule = css.slice(css.indexOf(selector)).slice(0, 200);
+      expect(rule).toContain("opacity:0");
+      expect(rule).not.toContain("display:none");
+      expect(rule).not.toContain("visibility:hidden");
+    }
+  });
+
+  it("gives both selection components a visible focus ring", () => {
+    expect(css).toContain(".choice input:focus-visible+.mark");
+    expect(css).toContain(".toggle input:focus-visible+.switch");
+  });
+});

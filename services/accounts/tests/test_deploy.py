@@ -70,6 +70,16 @@ def test_the_proxy_points_at_the_in_network_upstream():
     assert env["PEPTIDE_UPSTREAM"] == "http://api:8080"
 
 
+def test_the_api_defaults_to_the_images_own_non_root_uid():
+    """API_UID exists so an off-GCP deployment can read a bind-mounted key whose owner it cannot
+    change. It must DEFAULT to the image's own uid, so a GCP deployment that sets nothing is
+    unaffected -- and it must never default to 0."""
+    user = str(SERVICES["api"]["user"])
+    assert "API_UID" in user, "the api user should be configurable for off-GCP credentials"
+    assert ":-10001}" in user, f"the api user must default to uid 10001, not {user!r}"
+    assert ":-0}" not in user
+
+
 def test_accounts_and_apis_run_as_non_root():
     for dockerfile in ("accounts.Dockerfile", "api.Dockerfile"):
         text = (DEPLOY / dockerfile).read_text(encoding="utf-8")

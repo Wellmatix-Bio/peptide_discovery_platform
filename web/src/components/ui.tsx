@@ -20,11 +20,13 @@ export function Metric({ label, value }: { label: string; value: ReactNode }) {
   );
 }
 
-export function Kv({ k, v }: { k: string; v: ReactNode }) {
+/** `plain` for values a person reads (an email, a date); the default keeps the source's
+ *  break-all, which suits an opaque id and shreds anything else. */
+export function Kv({ k, v, plain = false }: { k: string; v: ReactNode; plain?: boolean }) {
   return (
     <>
       <dt>{k}</dt>
-      <dd className="mono">{v}</dd>
+      <dd className={plain ? "mono plain" : "mono"}>{v}</dd>
     </>
   );
 }

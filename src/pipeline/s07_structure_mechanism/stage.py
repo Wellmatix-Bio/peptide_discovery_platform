@@ -24,7 +24,7 @@ if str(MODEL_STORE_DIR) not in sys.path:
     sys.path.insert(0, str(MODEL_STORE_DIR))
 
 from model_store.esmfold_v1 import ESMFoldPredictor  # noqa: E402
-from model_store.pathway_mapping_predictor_v1 import (
+from model_store.pathway_mapping_predictor_v2 import (
     PathwayMappingPredictor,
 )  # noqa: E402
 
@@ -128,7 +128,7 @@ class Stage7(CandidateStage):
     def models_used(self) -> list[ModelRef]:
         return [
             ModelRef(name="esmfold", version="v1"),
-            ModelRef(name="pathway_mapping_predictor", version="v1"),
+            ModelRef(name="pathway_mapping_predictor", version="v2"),
         ]
 
     def release_models(self) -> None:
@@ -296,7 +296,7 @@ class Stage7(CandidateStage):
     def predict_pathway_involvement(
         self, sequence: str, model: PathwayMappingPredictor
     ) -> dict:
-        """Per-pathway engagement probability from pathway_mapping_predictor_v1."""
+        """Per-pathway engagement probability from pathway_mapping_predictor_v2."""
         return model.predict(sequence)
 
     # -- Mechanistic evidence summary --

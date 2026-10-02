@@ -67,12 +67,10 @@ class StrictModel(BaseModel):
 
 class ImmuneInputs(StrictModel):
     """The model outputs the immunomodulation module combines: the NF-kB and
-    cytokine/macrophage pathway probabilities (Stage 7) and P(anti-inflammatory)
-    (Stage 6). None means missing."""
+    cytokine/macrophage pathway probabilities (Stage 7). None means missing."""
 
     nfkb: Finite | None = None
     cytokine: Finite | None = None
-    anti_inflammatory: Finite | None = None
 
 
 class RankingInput(StrictModel):
@@ -199,53 +197,57 @@ class Measurement(StrictModel):
 
 
 class ImmuneAlignment(StrictModel):
-    """The immunomodulation measurement, computed from several model outputs:
+    """The immunomodulation measurement, computed from the NF-kB and cytokine pathway probabilities:
 
-        R   = 1 - (1 - p_NFkB) * (1 - p_cytokine)     does the peptide engage the immune system
-        d   = 2 * P(anti-inflammatory) - 1            direction (-1 pro-, +1 anti-inflammatory)
-        d*  = sum of `context_offsets` over the brief's wound-context tags, clamped to [-1, 1]
-        score = R * (1 - |d - d*| / 2) - R * max(0, -d)
+        d_NFkB = 1 - 2 * p_NFkB, d_cyto = 1 - 2 * p_cytokine   (+1 inhibitor / anti-inflammatory, -1 activator / pro-inflammatory)
+        d      = w * d_NFkB + (1 - w) * d_cyto
+        d*     = minimum of `context_targets` over the brief's wound-context tags (0 if none match)
+        match  = 1 - |d - d*| / (1 + |d*|)
+        agree  = 1 - |d_NFkB - d_cyto| / 2
+        score  = match * (0.5 + 0.5 * agree)
 
-    A missing pathway probability makes the score missing; a missing
-    P(anti-inflammatory) makes d = 0 (direction unknown, so no guess is
-    rewarded) and removes the pro-inflammatory penalty."""
+    A missing pathway probability makes the score missing."""
 
     kind: Literal["immune_alignment"] = "immune_alignment"
     nfkb_source: str
     cytokine_source: str
-    direction_source: str
-    context_offsets: dict[str, Finite]
+    nfkb_weight: Unit = 0.5
+    context_targets: dict[str, Finite]
 
     @model_validator(mode="after")
     def _validate_sources(self):
-        for path in (self.nfkb_source, self.cytokine_source, self.direction_source):
+        for path in (self.nfkb_source, self.cytokine_source):
             _validate_source_path(path)
         return self
 
     def target_direction(self, wound_context: list[str]) -> float:
-        total = math.fsum(self.context_offsets.get(tag, 0.0) for tag in set(wound_context))
-        return max(-1.0, min(1.0, total))
+        targets = [self.context_targets[tag] for tag in set(wound_context) if tag in self.context_targets]
+        return min(targets) if targets else 0.0
 
     def evaluate(
         self, inputs: ImmuneInputs, wound_context: list[str]
     ) -> tuple[float | None, dict[str, float] | None]:
         if inputs.nfkb is None or inputs.cytokine is None:
             return None, None
-        relevance = 1.0 - (1.0 - inputs.nfkb) * (1.0 - inputs.cytokine)
-        direction = 0.0 if inputs.anti_inflammatory is None else 2.0 * inputs.anti_inflammatory - 1.0
+        d_nfkb = 1.0 - 2.0 * inputs.nfkb
+        d_cyto = 1.0 - 2.0 * inputs.cytokine
+        direction = self.nfkb_weight * d_nfkb + (1.0 - self.nfkb_weight) * d_cyto
         target = self.target_direction(wound_context)
-        penalty = relevance * max(0.0, -direction)
-        score = max(0.0, min(1.0, relevance * (1.0 - abs(direction - target) / 2.0) - penalty))
+        match = 1.0 - abs(direction - target) / (1.0 + abs(target))
+        agreement = 1.0 - abs(d_nfkb - d_cyto) / 2.0
+        score = max(0.0, min(1.0, match * (0.5 + 0.5 * agreement)))
         return score, {
-            "relevance": relevance,
+            "direction_nfkb": d_nfkb,
+            "direction_cytokine": d_cyto,
             "direction": direction,
             "target_direction": target,
-            "pro_inflammatory_penalty": penalty,
+            "match": match,
+            "agreement": agreement,
         }
 
     @property
     def label(self) -> str:
-        return f"immune_alignment({self.nfkb_source}, {self.cytokine_source}, {self.direction_source})"
+        return f"immune_alignment({self.nfkb_source}, {self.cytokine_source})"
 
 
 class Bound(StrictModel):
@@ -427,29 +429,27 @@ BUILTIN_RANKING_POLICY = RankingConfig(
         ),
         "anti_inflammatory": ModuleSpec(
             group="objective",
-            measurement=Measurement(source="anti_inflammatory_probability"),I 
+            measurement=Measurement(source="anti_inflammatory_probability"),
         ),
         "immunomodulation": ModuleSpec(
             group="objective",
             measurement=ImmuneAlignment(
                 nfkb_source="mechanism.pathway_involvement.NF_KB.probability",
                 cytokine_source="mechanism.pathway_involvement.CYTOKINE_MACROPHAGE.probability",
-                direction_source="anti_inflammatory_probability",
-                # d* offsets: where the wound context wants inflammation to sit
-                # (+ = calmer, - = some immune response is useful). Additive.
-                context_offsets={
-                    "chronic": 0.40,
-                    "diabetic": 0.30,
-                    "high_glucose": 0.20,
-                    "burn": 0.25,
-                    "surgical": 0.30,
-                    "ischemic": 0.15,
-                    "low_perfusion": 0.10,
-                    "traumatic": 0.10,
+                # d* per tag (+ = calmer, - = some immune response is useful); the minimum across tags wins.
+                context_targets={
+                    "diabetic": 0.7,
+                    "high_glucose": 0.7,
+                    "chronic": 0.7,
+                    "ischemic": 0.5,
+                    "burn": 0.4,
+                    "low_perfusion": 0.4,
+                    "surgical": 0.3,
+                    "traumatic": 0.1,
                     "acute": 0.0,
-                    "infected": -0.20,
-                    "biofilm_positive": -0.15,
-                    "necrotic": -0.20,
+                    "biofilm_positive": 0.0,
+                    "necrotic": 0.0,
+                    "infected": -0.1,
                 },
             ),
         ),
@@ -927,7 +927,6 @@ class Stage11(CandidateStage):
                     immune_inputs=ImmuneInputs(
                         nfkb=_read_path(candidate.predictions, immune.nfkb_source),
                         cytokine=_read_path(candidate.predictions, immune.cytokine_source),
-                        anti_inflammatory=_read_path(candidate.predictions, immune.direction_source),
                     )
                     if immune
                     else ImmuneInputs(),

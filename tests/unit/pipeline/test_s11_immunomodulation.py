@@ -20,109 +20,102 @@ from schemas.run_config import StageConfig
 SPEC = BUILTIN_RANKING_POLICY.modules["immunomodulation"].measurement
 
 
-def evaluate(nfkb, cytokine, anti, context=()):
-    return SPEC.evaluate(
-        ImmuneInputs(nfkb=nfkb, cytokine=cytokine, anti_inflammatory=anti), list(context)
-    )
+def evaluate(nfkb, cytokine, context=()):
+    return SPEC.evaluate(ImmuneInputs(nfkb=nfkb, cytokine=cytokine), list(context))
 
 
 def test_builtin_module_uses_immune_alignment_on_the_pathway_probabilities():
     assert isinstance(SPEC, ImmuneAlignment)
     assert SPEC.nfkb_source == "mechanism.pathway_involvement.NF_KB.probability"
     assert SPEC.cytokine_source == "mechanism.pathway_involvement.CYTOKINE_MACROPHAGE.probability"
-    assert SPEC.direction_source == "anti_inflammatory_probability"
 
 
-def test_relevance_is_high_if_either_pathway_is_likely():
-    r = lambda a, b: evaluate(a, b, 0.5)[1]["relevance"]
-    assert r(0.8, 0.0) == pytest.approx(0.8)
-    assert r(0.0, 0.8) == pytest.approx(0.8)
-    assert r(0.8, 0.5) == pytest.approx(1 - 0.2 * 0.5)
-    assert r(0.0, 0.0) == 0.0
+def test_each_probability_becomes_a_direction():
+    _, detail = evaluate(0.0, 1.0)
+    assert detail["direction_nfkb"] == pytest.approx(1.0)  # surely an inhibitor
+    assert detail["direction_cytokine"] == pytest.approx(-1.0)  # surely an activator
+    assert evaluate(0.5, 0.5)[1]["direction"] == pytest.approx(0.0)
 
 
-def test_low_relevance_gives_a_low_score_whatever_the_direction():
-    score, _ = evaluate(0.05, 0.05, 1.0, ["chronic"])
-    assert score < 0.1
+def test_directions_are_blended_equally():
+    assert evaluate(0.1, 0.5)[1]["direction"] == pytest.approx(0.5 * 0.8 + 0.5 * 0.0)
 
 
-def test_direction_is_two_p_minus_one():
-    assert evaluate(0.5, 0.5, 1.0)[1]["direction"] == pytest.approx(1.0)
-    assert evaluate(0.5, 0.5, 0.5)[1]["direction"] == pytest.approx(0.0)
-    assert evaluate(0.5, 0.5, 0.0)[1]["direction"] == pytest.approx(-1.0)
-
-
-def test_unknown_direction_is_zero_and_earns_no_reward_or_penalty():
-    score, detail = evaluate(0.6, 0.6, None)
-    assert detail["direction"] == 0.0
-    assert detail["pro_inflammatory_penalty"] == 0.0
-    assert score == pytest.approx(detail["relevance"])  # no context: d* = 0
+def test_blend_weight_is_configurable():
+    spec = SPEC.model_copy(update={"nfkb_weight": 0.8})
+    _, detail = spec.evaluate(ImmuneInputs(nfkb=0.1, cytokine=0.5), [])
+    assert detail["direction"] == pytest.approx(0.8 * 0.8 + 0.2 * 0.0)
 
 
 @pytest.mark.parametrize(
     "context, expected",
     [
         ([], 0.0),
-        (["chronic"], 0.40),
-        (["diabetic"], 0.30),
-        (["chronic", "diabetic"], 0.70),  # additive
-        (["chronic", "diabetic", "high_glucose"], 0.90),
-        (["infected"], -0.20),
-        (["infected", "chronic"], 0.20),
+        (["chronic"], 0.7),
+        (["diabetic"], 0.7),
+        (["surgical"], 0.3),
+        (["burn"], 0.4),
+        (["infected"], -0.1),
+        (["diabetic", "infected"], -0.1),  # the minimum wins
+        (["chronic", "diabetic", "high_glucose"], 0.7),  # not additive
+        (["surgical", "traumatic"], 0.1),
         (["acute"], 0.0),
-        (["clean"], 0.0),  # not in the offset table
-        (["chronic", "chronic"], 0.40),  # a repeated tag counts once
+        (["clean"], 0.0),  # not in the table
+        (["clean", "surgical"], 0.3),  # unknown tags are ignored
+        (["chronic", "chronic"], 0.7),
     ],
 )
-def test_target_direction_adds_the_context_offsets(context, expected):
+def test_target_direction_is_the_minimum_over_the_tags(context, expected):
     assert SPEC.target_direction(context) == pytest.approx(expected)
 
 
-def test_target_direction_is_clamped_to_plus_minus_one():
-    heavy = ["chronic", "diabetic", "high_glucose", "burn", "surgical", "ischemic"]
-    assert SPEC.target_direction(heavy) == 1.0
-    assert SPEC.target_direction(["infected", "necrotic", "biofilm_positive"]) == pytest.approx(-0.55)
-
-
 def test_score_formula_matches_the_spec():
-    # R = 1 - 0.3 * 0.5 = 0.85, d = 0.6, d* = 0.4 (chronic)
-    score, detail = evaluate(0.7, 0.5, 0.8, ["chronic"])
-    assert detail["relevance"] == pytest.approx(0.85)
-    assert detail["direction"] == pytest.approx(0.6)
-    assert detail["target_direction"] == pytest.approx(0.4)
-    assert score == pytest.approx(0.85 * (1 - abs(0.6 - 0.4) / 2))
+    # d_n = 0.6, d_c = 0.0, d = 0.3, d* = 0.7 (chronic)
+    score, detail = evaluate(0.2, 0.5, ["chronic"])
+    assert detail["direction"] == pytest.approx(0.3)
+    assert detail["target_direction"] == pytest.approx(0.7)
+    assert detail["match"] == pytest.approx(1 - 0.4 / 1.7)
+    assert detail["agreement"] == pytest.approx(1 - 0.6 / 2)
+    assert score == pytest.approx((1 - 0.4 / 1.7) * (0.5 + 0.5 * 0.7))
 
 
-def test_matching_the_target_direction_scores_the_relevance():
-    # d* = 0.4 (chronic); P(anti-inflammatory) = 0.7 gives d = 0.4
-    score, detail = evaluate(0.6, 0.6, 0.7, ["chronic"])
-    assert score == pytest.approx(detail["relevance"])
+def test_a_perfect_match_with_full_agreement_scores_one():
+    # p = 0.15 on both: d = 0.7 = d* (chronic)
+    score, _ = evaluate(0.15, 0.15, ["chronic"])
+    assert score == pytest.approx(1.0)
 
 
-def test_pro_inflammatory_peptide_is_penalized():
-    score, detail = evaluate(0.8, 0.8, 0.2, [])  # d = -0.6, d* = 0, R = 0.96
-    assert detail["pro_inflammatory_penalty"] == pytest.approx(0.96 * 0.6)
-    assert score == pytest.approx(max(0.0, 0.96 * (1 - 0.6 / 2) - 0.96 * 0.6))
-    calm, _ = evaluate(0.8, 0.8, 0.8, [])
-    assert score < calm
+def test_disagreement_discounts_the_score():
+    agree, _ = evaluate(0.5, 0.5, [])  # d = 0
+    split, detail = evaluate(0.0, 1.0, [])  # d = 0 too, but the pathways disagree fully
+    assert detail["agreement"] == 0.0
+    assert split == pytest.approx(agree * 0.5)
+
+
+def test_worst_possible_miss_scores_zero():
+    # d* = 0.7 and d = -1: |d - d*| = 1.7 = 1 + |d*|
+    score, detail = evaluate(1.0, 1.0, ["chronic"])
+    assert detail["match"] == pytest.approx(0.0)
+    assert score == 0.0
+
+
+def test_infected_wound_penalizes_strong_suppression():
+    strong_inhibitor, _ = evaluate(0.0, 0.0, ["infected"])  # d = 1, d* = -0.1
+    balanced, _ = evaluate(0.55, 0.55, ["infected"])  # d = -0.1
+    assert balanced > strong_inhibitor
 
 
 def test_score_never_leaves_zero_to_one():
     for p in (0.0, 0.2, 0.5, 1.0):
-        for context in ([], ["chronic", "diabetic", "burn"], ["infected", "necrotic"]):
-            score, _ = evaluate(1.0, 1.0, p, context)
-            assert 0.0 <= score <= 1.0
+        for q in (0.0, 0.5, 1.0):
+            for context in ([], ["chronic", "diabetic", "burn"], ["infected", "necrotic"]):
+                score, _ = evaluate(p, q, context)
+                assert 0.0 <= score <= 1.0
 
 
 def test_a_missing_pathway_probability_makes_the_score_missing():
-    assert evaluate(None, 0.5, 0.8) == (None, None)
-    assert evaluate(0.5, None, 0.8) == (None, None)
-
-
-def test_infected_context_prefers_a_less_anti_inflammatory_peptide():
-    strongly_anti, _ = evaluate(0.7, 0.7, 0.95, ["infected"])
-    neutral, _ = evaluate(0.7, 0.7, 0.4, ["infected"])
-    assert neutral > strongly_anti
+    assert evaluate(None, 0.5) == (None, None)
+    assert evaluate(0.5, None) == (None, None)
 
 
 def test_scorer_uses_the_computed_score_and_reports_its_parts():
@@ -130,12 +123,12 @@ def test_scorer_uses_the_computed_score_and_reports_its_parts():
     result = scorer.score(RankingInput(
         candidate_id="c1", sequence="KLLK",
         brief=Brief(min_length=5, max_length=30, desired_functions=["immunomodulation"], wound_context=["chronic"]),
-        immune_inputs=ImmuneInputs(nfkb=0.7, cytokine=0.5, anti_inflammatory=0.8),
+        immune_inputs=ImmuneInputs(nfkb=0.2, cytokine=0.5),
     ))
     module = result.modules["immunomodulation"]
-    assert module.raw_measurement == pytest.approx(0.85 * 0.9)
+    assert module.raw_measurement == pytest.approx((1 - 0.4 / 1.7) * 0.85)
     assert module.score == pytest.approx(module.raw_measurement)
-    assert module.measurement_detail["target_direction"] == pytest.approx(0.4)
+    assert module.measurement_detail["target_direction"] == pytest.approx(0.7)
     assert module.measurement_source.startswith("immune_alignment(")
     assert module.activated is True
 
@@ -150,11 +143,11 @@ def test_scorer_marks_missing_pathways_as_missing_evidence():
     assert result.modules["immunomodulation"].measurement_detail is None
 
 
-def test_run_reads_the_pathway_and_direction_sources_from_predictions():
+def test_run_reads_the_pathway_sources_from_predictions():
     candidate = Candidate(id="c1", sequence="KLLK", predictions={
         "anti_inflammatory_probability": 0.8,
         "mechanism": {"pathway_involvement": {
-            "NF_KB": {"probability": 0.7}, "CYTOKINE_MACROPHAGE": {"probability": 0.5},
+            "NF_KB": {"probability": 0.2}, "CYTOKINE_MACROPHAGE": {"probability": 0.5},
         }},
     })
     ctx = SimpleNamespace(
@@ -164,8 +157,8 @@ def test_run_reads_the_pathway_and_direction_sources_from_predictions():
     )
     ranking = Stage11().run([candidate], StageConfig(params={}), ctx)[0].predictions["ranking"]
     module = ranking["modules"]["immunomodulation"]
-    assert module["measurement_detail"]["relevance"] == pytest.approx(0.85)
-    assert module["score"] == pytest.approx(0.85 * 0.9)
+    assert module["measurement_detail"]["direction"] == pytest.approx(0.3)
+    assert module["score"] == pytest.approx((1 - 0.4 / 1.7) * 0.85)
     anti = ranking["modules"]["anti_inflammatory"]
     assert anti["raw_measurement"] == 0.8
     assert anti["n_k"] == 0.5  # chronic implies it; only immunomodulation was referenced

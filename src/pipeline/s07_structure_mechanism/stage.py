@@ -33,7 +33,7 @@ from model_store.pathway_mapping_predictor_v2 import (
 DEFAULT_THRESHOLDS = {
     # pLDDT is a 0-1 fraction for this checkpoint.
     "plddt_low_confidence_max": 0.5,
-    # Pathway-label probability threshold for "engaged" in the mechanistic summary.
+    # Pathway P(activator) >= this is "activated"; <= 1 - this is "inhibited"; in between is uncertain.
     "pathway_engagement_min_probability": 0.5,
     # Ramachandran-region backbone dihedral classification (alpha-helix / beta-sheet boxes).
     "helix_phi_min": -100.0,
@@ -296,7 +296,7 @@ class Stage7(CandidateStage):
     def predict_pathway_involvement(
         self, sequence: str, model: PathwayMappingPredictor
     ) -> dict:
-        """Per-pathway engagement probability from pathway_mapping_predictor_v2."""
+        """Per-pathway P(activator) from pathway_mapping_predictor_v2."""
         return model.predict(sequence)
 
     # -- Mechanistic evidence summary --
@@ -305,47 +305,53 @@ class Stage7(CandidateStage):
         self, structure: dict, pathway_involvement: dict, thresholds: dict
     ) -> dict:
         """Combines structure and pathway evidence into the Stage 7 MoA summary (CLAUDE.md's MoA-map output)."""
-        engaged_pathways = [
+        cutoff = thresholds["pathway_engagement_min_probability"]
+        activated_pathways = [
+            label for label, result in pathway_involvement.items() if result["probability"] >= cutoff
+        ]
+        inhibited_pathways = [
             label
             for label, result in pathway_involvement.items()
-            if result["probability"] >= thresholds["pathway_engagement_min_probability"]
+            if result["probability"] <= 1.0 - cutoff and label not in activated_pathways
         ]
         functions_supported = sorted(
             {
                 PATHWAY_TO_FUNCTION[label]
-                for label in engaged_pathways
+                for label in activated_pathways
                 if label in PATHWAY_TO_FUNCTION
             }
         )
 
         return {
             "pathway_involvement": pathway_involvement,
-            "engaged_pathways": engaged_pathways,
+            "activated_pathways": activated_pathways,
+            "inhibited_pathways": inhibited_pathways,
             "functions_supported": functions_supported,
             "structural_confidence": structure["confidence"]["mean_plddt"],
             "dominant_secondary_structure": structure["secondary_structure"][
                 "dominant_class"
             ],
             "summary": self._render_summary(
-                structure, engaged_pathways, functions_supported
+                structure, activated_pathways, inhibited_pathways, functions_supported
             ),
         }
 
     def _render_summary(
         self,
         structure: dict,
-        engaged_pathways: list[str],
+        activated_pathways: list[str],
+        inhibited_pathways: list[str],
         functions_supported: list[str],
     ) -> str:
         confidence = structure["confidence"]["mean_plddt"]
         ss_class = structure["secondary_structure"]["dominant_class"]
-        pathway_text = (
-            ", ".join(engaged_pathways) if engaged_pathways else "none above threshold"
-        )
+        activated_text = ", ".join(activated_pathways) if activated_pathways else "none"
+        inhibited_text = ", ".join(inhibited_pathways) if inhibited_pathways else "none"
         function_text = (
             ", ".join(functions_supported) if functions_supported else "none"
         )
         return (
             f"Structure: mean pLDDT {confidence:.2f}, dominant fold {ss_class}. "
-            f"Pathways engaged: {pathway_text}. Target functions supported: {function_text}."
+            f"Pathways activated: {activated_text}. Pathways inhibited: {inhibited_text}. "
+            f"Target functions supported: {function_text}."
         )

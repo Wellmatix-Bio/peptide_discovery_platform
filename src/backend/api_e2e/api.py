@@ -277,8 +277,11 @@ class CandidateResponse(BaseModel):
         ],
         float,
     ]
-    engaged_pathways: list[str] | None = (
-        None  # 'mechanism.engaged_pathways' key in predictions
+    activated_pathways: list[str] | None = (
+        None  # 'mechanism.activated_pathways' key in predictions
+    )
+    inhibited_pathways: list[str] | None = (
+        None  # 'mechanism.inhibited_pathways' key in predictions
     )
 
 
@@ -327,7 +330,8 @@ def _candidate_response(candidate: dict) -> CandidateResponse:
         cleavage_stability=nested("cleavage_stability", "score"),
         log_mic_um=nested("mic", "log_mic_um") or {},
         pmbic=nested("mbic", "pmbic") or {},
-        engaged_pathways=nested("mechanism", "engaged_pathways"),
+        activated_pathways=nested("mechanism", "activated_pathways"),
+        inhibited_pathways=nested("mechanism", "inhibited_pathways"),
     )
 
 

@@ -268,8 +268,10 @@ paths:
                     Staphylococcus aureus: 1.1
                   pmbic:
                     Staphylococcus aureus: 4.3
-                  engaged_pathways:
-                  - PI3K-Akt
+                  activated_pathways:
+                  - PI3K_AKT_MTOR
+                  inhibited_pathways:
+                  - NF_KB
         '404':
           description: Job results not found, or the job succeeded but candidates_final.json
             is missing.
@@ -682,14 +684,24 @@ components:
             type: number
           title: Pmbic
           description: predictions.mbic.pmbic, keyed by pathogen name with a space
-        engaged_pathways:
+        activated_pathways:
           anyOf:
           - type: array
             items:
               type: string
           - type: 'null'
-          title: Engaged Pathways
-          description: predictions.mechanism.engaged_pathways
+          title: Activated Pathways
+          description: predictions.mechanism.activated_pathways (pathway_mapping_predictor_v2
+            P(activator) >= pathway_engagement_min_probability)
+        inhibited_pathways:
+          anyOf:
+          - type: array
+            items:
+              type: string
+          - type: 'null'
+          title: Inhibited Pathways
+          description: predictions.mechanism.inhibited_pathways (P(activator) <= 1
+            - pathway_engagement_min_probability)
       type: object
       required:
       - log_mic_um

@@ -219,7 +219,8 @@ tree is not included; read `candidates_final.json` for it). Scalar fields are
 | `cleavage_stability` | `cleavage_stability.score` |
 | `log_mic_um` | `mic.log_mic_um`, keyed by `Escherichia coli`, `Staphylococcus aureus`, `Pseudomonas aeruginosa`; `{}` when absent |
 | `pmbic` | `mbic.pmbic`, keyed by 13 pathogens (see `openapi.yaml`); `{}` when absent |
-| `engaged_pathways` | `mechanism.engaged_pathways` |
+| `activated_pathways` | `mechanism.activated_pathways`: pathways whose v2 P(activator) is >= `pathway_engagement_min_probability` |
+| `inhibited_pathways` | `mechanism.inhibited_pathways`: pathways whose v2 P(activator) is <= 1 - `pathway_engagement_min_probability` |
 
 Pathogen keys here use spaces (`Staphylococcus aureus`), unlike the request's
 brief vocabulary, which uses underscores (`Staphylococcus_aureus`). A key

@@ -1,4 +1,9 @@
 # Shared runtime dependencies for all API and worker containers.
+#
+# NOT HERE, DELIBERATELY: propy3 (GPL-2.0-only) and s4pred (GPL-3.0). This project is
+# Apache-2.0 and neither requires nor vendors them; both are optional and the pipeline
+# reports the screens they enable as not run when they are absent. See docs/LICENSING.md.
+# Install them yourself only if you accept their terms:  pip install propy3
 # Install locally with: python -m pip install -r requirements.txt
 # Worker Dockerfiles select the CUDA 12.8 PyTorch wheel before installing this file.
 torch==2.11.0
@@ -22,7 +27,6 @@ freesasa>=2.2,<3
 gemmi>=0.7,<1
 openmm>=8.2,<9
 # pdbfixer @ git+https://github.com/openmm/pdbfixer.git@v1.12
-propy3>=1.1,<3
 fair-esm==2.0.0
 deap>=1.4,<2
 rapidfuzz>=3.14,<4

@@ -20,7 +20,25 @@ import pandas as pd
 import torch
 from Bio.SeqUtils.ProtParam import ProteinAnalysis
 from modlamp.descriptors import GlobalDescriptor, PeptideDescriptor
-from propy.PyPro import GetProDes
+# propy3 is OPTIONAL and is GPL-2.0-only. This project is Apache-2.0 and does not require it
+# (see docs/LICENSING.md). It is NOT a cosmetic dependency: _propy_features() reproduces
+# aggregation_predictor_v1's feature layout exactly, so without propy3 that predictor has no
+# inputs and MUST NOT be run. Callers check PROPY_AVAILABLE and report the screen as not run --
+# an unrun safety screen is never reported as a pass.
+try:
+    from propy.PyPro import GetProDes
+
+    PROPY_AVAILABLE = True
+    PROPY_UNAVAILABLE_REASON = None
+except Exception as problem:  # noqa: BLE001 - any import failure means "not installed here"
+    GetProDes = None  # type: ignore[assignment]
+    PROPY_AVAILABLE = False
+    PROPY_UNAVAILABLE_REASON = (
+        "propy3 is not installed, so the aggregation predictor could not run. It is optional and"
+        " GPL-2.0-only; this project does not require it. The candidate has NOT been screened for"
+        " aggregation -- this is not a pass. See docs/LICENSING.md."
+        f" ({type(problem).__name__})"
+    )
 from transformers import AutoTokenizer, EsmModel
 
 from common import storage
@@ -93,8 +111,19 @@ def _safe_descriptor(fn, fallback_keys, *args, **kwargs) -> dict[str, float]:
         return {k: np.nan for k in fallback_keys}
 
 
+class PropyUnavailable(RuntimeError):
+    """Raised when a propy3-derived feature set is requested but propy3 is not installed.
+
+    Deliberately an exception rather than a default or an empty dict: the aggregation predictor's
+    feature vector has a fixed layout, and handing it zeros would produce a confident-looking
+    score computed from nothing.
+    """
+
+
 def _propy_features(seq: str) -> dict[str, float]:
     """Matches aggregation_predictor_v1's pybiomed_features exactly."""
+    if not PROPY_AVAILABLE:
+        raise PropyUnavailable(PROPY_UNAVAILABLE_REASON)
     gp = GetProDes(seq)
     feats: dict[str, float] = {}
     feats.update(gp.GetAAComp())

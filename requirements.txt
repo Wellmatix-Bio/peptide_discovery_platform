@@ -13,7 +13,7 @@ structlog>=25,<27
 google-cloud-storage>=3,<4
 numpy>=2.3,<3
 pandas>=2.2,<4
-scikit-learn>=1.6,<2
+scikit-learn>=1.9.1,<2
 xgboost>=3,<4
 transformers==5.10.2
 peft>=0.17,<1

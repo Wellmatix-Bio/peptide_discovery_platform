@@ -16,12 +16,12 @@ from pipeline.s11_ranking.stage import (
     Measurement,
     ModuleSpec,
     NormalizerConfig,
-    ProductObjective,
     RankingConfig,
     RankingInput,
     Stage11,
     Stage11Service,
 )
+from schemas.brief import Brief
 from schemas.candidate import Candidate
 from schemas.run_config import StageConfig
 
@@ -48,11 +48,11 @@ def make_config(**overrides) -> RankingConfig:
     return RankingConfig(**kwargs)
 
 
-def make_input(candidate_id="c1", scores=None, stage1=None, flag_values=None) -> RankingInput:
+def make_input(candidate_id="c1", scores=None, brief=None, flag_values=None) -> RankingInput:
     return RankingInput(
         candidate_id=candidate_id,
         sequence="KLLKLLKK",
-        stage1=stage1 or ProductObjective(desired_functions=ALL_FUNCTIONS),
+        brief=brief or Brief(min_length=5, max_length=30, desired_functions=ALL_FUNCTIONS),
         measurements=SCORES if scores is None else scores,
         flag_values=flag_values or {},
     )
@@ -133,8 +133,8 @@ def test_unrequested_placeholder_does_not_count_against_coverage():
 
 
 def test_requested_placeholder_is_missing_and_reported():
-    stage1 = ProductObjective(desired_functions=["anti_inflammatory", "collagen_synthesis"])
-    result = score(stage1=stage1)
+    brief = Brief(min_length=5, max_length=30, desired_functions=["anti_inflammatory", "collagen_synthesis"])
+    result = score(brief=brief)
     assert result.modules["collagen_ecm"].activated is True
     assert result.modules["collagen_ecm"].score is None
     assert "collagen_ecm" in result.missing_modules
@@ -342,8 +342,8 @@ def _ctx(brief=None):
 
 
 def _brief(**kw):
-    base = {"wound_context": [], "desired_functions": ["antimicrobial"], "pathogens": []}
-    return SimpleNamespace(**{**base, **kw})
+    base = {"min_length": 5, "max_length": 30, "desired_functions": ["antimicrobial"]}
+    return Brief(**{**base, **kw})
 
 
 def test_run_rejects_policy_overrides():
@@ -362,7 +362,7 @@ def test_run_maps_predictions_via_measurement_sources_and_uses_brief():
     assert antimicrobial["raw_measurement"] == 0.9
     assert antimicrobial["n_k"] == 1.5  # referenced (1.0) + infected (0.5)
     assert antimicrobial["measurement_source"] == "amp_probability"
-    assert ranking["stage1"]["wound_context"] == ["infected"]
+    assert "brief" not in ranking
 
 
 def test_run_with_no_brief_weights_objectives_equally():

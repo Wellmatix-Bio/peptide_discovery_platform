@@ -17,6 +17,7 @@ from pydantic import BaseModel, ConfigDict, Field, StrictBool, model_validator
 
 from common.logging import get_logger
 from pipeline.base import CandidateStage, RunContext
+from schemas.brief import Brief
 from schemas.candidate import Candidate
 from schemas.run_config import StageConfig
 
@@ -64,14 +65,6 @@ class StrictModel(BaseModel):
 # ----------------------------------------------------------------------
 
 
-class ProductObjective(StrictModel):
-    """Stage 1's product brief, as far as Stage 11 needs it."""
-
-    wound_context: list[str] = Field(default_factory=list)
-    desired_functions: list[str] = Field(default_factory=list)
-    pathogens: list[str] = Field(default_factory=list)
-
-
 class ImmuneInputs(StrictModel):
     """The model outputs the immunomodulation module combines: the NF-kB and
     cytokine/macrophage pathway probabilities (Stage 7) and P(anti-inflammatory)
@@ -90,7 +83,7 @@ class RankingInput(StrictModel):
 
     candidate_id: str = Field(min_length=1)
     sequence: str = Field(min_length=1)
-    stage1: ProductObjective = Field(default_factory=ProductObjective)
+    brief: Brief | None = None
     measurements: dict[ModuleName, Finite | None] = Field(default_factory=dict)
     immune_inputs: ImmuneInputs = Field(default_factory=ImmuneInputs)
     flag_values: dict[str, Any] = Field(default_factory=dict)
@@ -135,7 +128,6 @@ class RankingResult(StrictModel):
 
     candidate_id: str
     sequence: str
-    stage1: ProductObjective
     status: Literal["ranked", "insufficient_evidence"]
     final_score: Unit | None
     rank: int | None = None
@@ -435,7 +427,7 @@ BUILTIN_RANKING_POLICY = RankingConfig(
         ),
         "anti_inflammatory": ModuleSpec(
             group="objective",
-            measurement=Measurement(source="anti_inflammatory_probability"),
+            measurement=Measurement(source="anti_inflammatory_probability"),I 
         ),
         "immunomodulation": ModuleSpec(
             group="objective",
@@ -660,7 +652,7 @@ class WeightAllocator:
         self.config = config
 
     def _counts(
-        self, stage1: ProductObjective
+        self, brief: Brief | None
     ) -> tuple[
         dict[ModuleName, list[str]], dict[ModuleName, float], dict[ModuleName, list[tuple[str, float]]]
     ]:
@@ -668,23 +660,25 @@ class WeightAllocator:
         references: dict[ModuleName, list[str]] = {}
         reference_points: dict[ModuleName, float] = {}
         implications: dict[ModuleName, list[tuple[str, float]]] = {}
-        for function in stage1.desired_functions:
+        if brief is None:
+            return references, reference_points, implications
+        for function in brief.desired_functions:
             link = cfg.function_links.get(function)
             if link is not None:
                 references.setdefault(link.module, []).append(function)
                 reference_points[link.module] = max(reference_points.get(link.module, 0.0), link.points)
-        if stage1.pathogens:
+        if brief.pathogens:
             link = cfg.pathogen_link
-            references.setdefault(link.module, []).extend(stage1.pathogens)
+            references.setdefault(link.module, []).extend(brief.pathogens)
             reference_points[link.module] = max(reference_points.get(link.module, 0.0), link.points)
-        for tag in stage1.wound_context:
+        for tag in brief.wound_context:
             for link in cfg.context_links.get(tag, []):
                 implications.setdefault(link.module, []).append((tag, link.points))
         return references, reference_points, implications
 
-    def allocate(self, stage1: ProductObjective) -> dict[ModuleName, ModuleWeight]:
+    def allocate(self, brief: Brief | None) -> dict[ModuleName, ModuleWeight]:
         cfg = self.config.objective_weighting
-        references, reference_points, implications = self._counts(stage1)
+        references, reference_points, implications = self._counts(brief)
         objectives = self.config.objective_modules
         n_k: dict[ModuleName, float] = {
             m: reference_points.get(m, 0.0) + math.fsum(p for _, p in implications.get(m, []))
@@ -733,7 +727,7 @@ class CandidateScorer:
         }
 
     def score(self, candidate: RankingInput) -> RankingResult:
-        allocation = self.allocator.allocate(candidate.stage1)
+        allocation = self.allocator.allocate(candidate.brief)
 
         # Per module: normalize the measurement, then deduct its flags.
         raw: dict[ModuleName, float | None] = {}
@@ -746,7 +740,7 @@ class CandidateScorer:
             spec = self.config.modules[name]
             if isinstance(spec.measurement, ImmuneAlignment):
                 raw[name], detail[name] = spec.measurement.evaluate(
-                    candidate.immune_inputs, candidate.stage1.wound_context
+                    candidate.immune_inputs, candidate.brief.wound_context if candidate.brief else []
                 )
             else:
                 raw[name], detail[name] = candidate.measurements.get(name), None
@@ -821,7 +815,6 @@ class CandidateScorer:
         return RankingResult(
             candidate_id=candidate.candidate_id,
             sequence=candidate.sequence,
-            stage1=candidate.stage1.model_copy(deep=True),
             status=status,
             final_score=final_score,
             evidence_coverage=evidence_coverage,
@@ -911,11 +904,6 @@ class Stage11(CandidateStage):
                 "Stage 11 ranking policy is built into the code; parameters are not accepted"
             )
         policy = BUILTIN_RANKING_POLICY.model_copy(deep=True)
-        stage1 = ProductObjective(
-            wound_context=ctx.brief.wound_context if ctx.brief else [],
-            desired_functions=ctx.brief.desired_functions if ctx.brief else [],
-            pathogens=getattr(ctx.brief, "pathogens", None) or [] if ctx.brief else [],
-        )
 
         flag_rules = policy.flag_rules
         immune = next(
@@ -930,7 +918,7 @@ class Stage11(CandidateStage):
                 RankingInput(
                     candidate_id=candidate.id,
                     sequence=candidate.sequence,
-                    stage1=stage1,
+                    brief=ctx.brief,
                     measurements={
                         name: _read_path(candidate.predictions, spec.measurement.source)
                         for name, spec in policy.modules.items()

@@ -124,6 +124,7 @@ notebooks/scratch/
 *~
 .DS_Store
 Thumbs.db
+graphify-out/
 
 # ---------- Docs build ----------
 docs/_build/

@@ -11,10 +11,10 @@ from pipeline.s11_ranking.stage import (
     FlagRule,
     Measurement,
     ModuleSpec,
-    ProductObjective,
     RankingConfig,
     RankingInput,
 )
+from schemas.brief import Brief
 
 OBJECTIVES = ("wound_closure", "antimicrobial", "anti_inflammatory", "immunomodulation", "angiogenesis")
 SCORES = {
@@ -68,7 +68,7 @@ def make_input(candidate_id="c1", scores=None, flag_values=None):
     return RankingInput(
         candidate_id=candidate_id,
         sequence="KLLKLLKK",
-        stage1=ProductObjective(desired_functions=["antimicrobial", "anti_inflammatory"]),
+        brief=Brief(min_length=5, max_length=30, desired_functions=["antimicrobial", "anti_inflammatory"]),
         measurements=SCORES if scores is None else scores,
         flag_values=flag_values or {},
     )

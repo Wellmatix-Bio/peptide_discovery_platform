@@ -8,9 +8,9 @@ import pytest
 from pipeline.s11_ranking.stage import (
     BUILTIN_RANKING_POLICY,
     MODULE_NAMES,
-    ProductObjective,
     WeightAllocator,
 )
+from schemas.brief import Brief
 
 OBJECTIVES = (
     "wound_closure", "antimicrobial", "anti_inflammatory", "immunomodulation", "angiogenesis", "collagen_ecm",
@@ -20,7 +20,8 @@ ALWAYS_ON = ("safety", "stability", "synthesis_feasibility", "mechanistic_confid
 
 def allocate(functions=(), context=(), pathogens=()):
     return WeightAllocator(BUILTIN_RANKING_POLICY).allocate(
-        ProductObjective(
+        Brief(
+            min_length=5, max_length=30,
             desired_functions=list(functions), wound_context=list(context), pathogens=list(pathogens)
         )
     )

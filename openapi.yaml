@@ -244,6 +244,10 @@ paths:
                 - id: cand-001
                   sequence: EFELDRICGYGTARCRKKCRSQEYRIGRCPNTYACCLRKWDESLLNRTKP
                   ranking: 1
+                  final_score: 0.71
+                  evidence_coverage: 0.9
+                  missing_modules:
+                  - collagen_ecm
                   amp_probability: 0.91
                   hemolytic_activity_phc50: 5.2
                   molecular_weight: 2140.6
@@ -287,7 +291,8 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
       description: Reads run_dir/results.json for job status; if the job succeeded,
         also reads candidates_final.json and computes per-component mean/median/min/max
-        over normalized_scores of candidates with ranking status "ranked". Jobs
+        over each ranking module's post-deduction `score` (predictions.ranking.modules)
+        of candidates with ranking status "ranked". Jobs
         that are still running or failed return status only, with an empty candidates
         list. Worker output files, not the live Vertex job state, are the source
         of truth here.
@@ -309,8 +314,9 @@ paths:
           Contains slash-separated path segments.
       responses:
         '200':
-          description: Cancellation requested; the job may still take time to
-            actually stop.
+          description: Cancellation requested (`cancelling`; the job may still take
+            time to actually stop), or nothing to do because the job was already
+            cancelling/cancelled (`cancelled`) or had already failed/expired (`failed`).
           content:
             application/json:
               schema:
@@ -322,6 +328,8 @@ paths:
                     type: string
                     enum:
                     - cancelling
+                    - cancelled
+                    - failed
                 example:
                   job_id: projects/123/locations/us-central1/customJobs/456
                   status: cancelling
@@ -508,6 +516,29 @@ components:
           title: Sequence
           description: Peptide sequence (top-level candidate field, not under
             predictions)
+        final_score:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Final Score
+          description: predictions.ranking.final_score, in [0, 1]. Null for
+            insufficient_evidence candidates.
+        evidence_coverage:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Evidence Coverage
+          description: predictions.ranking.evidence_coverage, the fraction of
+            activated ranking modules that have a score
+        missing_modules:
+          anyOf:
+          - type: array
+            items:
+              type: string
+          - type: 'null'
+          title: Missing Modules
+          description: predictions.ranking.missing_modules, activated ranking
+            modules with no score
         ranking:
           anyOf:
           - type: integer

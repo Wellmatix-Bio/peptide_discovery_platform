@@ -10,10 +10,10 @@ from pipeline.s11_ranking.stage import (
     CandidateScorer,
     ImmuneAlignment,
     ImmuneInputs,
-    ProductObjective,
     RankingInput,
     Stage11,
 )
+from schemas.brief import Brief
 from schemas.candidate import Candidate
 from schemas.run_config import StageConfig
 
@@ -129,7 +129,7 @@ def test_scorer_uses_the_computed_score_and_reports_its_parts():
     scorer = CandidateScorer(BUILTIN_RANKING_POLICY)
     result = scorer.score(RankingInput(
         candidate_id="c1", sequence="KLLK",
-        stage1=ProductObjective(desired_functions=["immunomodulation"], wound_context=["chronic"]),
+        brief=Brief(min_length=5, max_length=30, desired_functions=["immunomodulation"], wound_context=["chronic"]),
         immune_inputs=ImmuneInputs(nfkb=0.7, cytokine=0.5, anti_inflammatory=0.8),
     ))
     module = result.modules["immunomodulation"]
@@ -143,7 +143,7 @@ def test_scorer_uses_the_computed_score_and_reports_its_parts():
 def test_scorer_marks_missing_pathways_as_missing_evidence():
     result = CandidateScorer(BUILTIN_RANKING_POLICY).score(RankingInput(
         candidate_id="c1", sequence="KLLK",
-        stage1=ProductObjective(desired_functions=["immunomodulation"]),
+        brief=Brief(min_length=5, max_length=30, desired_functions=["immunomodulation"]),
     ))
     assert "immunomodulation" in result.missing_modules
     assert "immunomodulation" in result.requested_modules_without_data
@@ -158,8 +158,8 @@ def test_run_reads_the_pathway_and_direction_sources_from_predictions():
         }},
     })
     ctx = SimpleNamespace(
-        run_id="r", brief=SimpleNamespace(
-            wound_context=["chronic"], desired_functions=["immunomodulation"], pathogens=[],
+        run_id="r", brief=Brief(
+            min_length=5, max_length=30, wound_context=["chronic"], desired_functions=["immunomodulation"],
         ),
     )
     ranking = Stage11().run([candidate], StageConfig(params={}), ctx)[0].predictions["ranking"]

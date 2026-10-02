@@ -705,15 +705,12 @@ components:
             - biofilm_positive
             - burn
             - chronic
-            - clean
             - diabetic
-            - high_exudate
             - high_glucose
             - infected
             - ischemic
             - low_perfusion
             - necrotic
-            - radiation_induced
             - surgical
             - traumatic
             type: string

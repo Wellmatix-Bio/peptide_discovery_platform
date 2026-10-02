@@ -33,7 +33,6 @@ dependencies = [
     "gemmi>=0.7",
     "openmm>=8.6",
     "pdbfixer>=1.12",
-    "propy3>=2.0",
     "fair-esm>=2.0",
     # Route A/C generation
     "deap>=1.4",
@@ -43,6 +42,22 @@ dependencies = [
 [project.optional-dependencies]
 dev = [
     "pytest>=9.1",
+]
+# COPYLEFT, and deliberately not a default. This project is Apache-2.0 and requires neither of
+# these; the pipeline reports the screens they enable as not run when they are absent, never as
+# passed. Installing one means your installation combines Apache-2.0 code with GPL code, and that
+# dependency's terms then govern what you may distribute. See docs/LICENSING.md.
+#
+# s4pred (GPL-3.0) is not on PyPI and so cannot be listed here at all; obtain it from upstream.
+aggregation = [
+    "propy3>=2.0",  # GPL-2.0-only -- enables the aggregation predictor's feature set
+]
+
+# Google Cloud: Vertex AI job submission and Cloud Storage artifacts. Not needed to run the
+# pipeline locally -- see docs/ARCHITECTURE.md for the storage and compute backends.
+gcp = [
+    "google-cloud-storage>=3,<4",
+    "google-cloud-aiplatform>=1.71,<3",
 ]
 
 [tool.pytest.ini_options]

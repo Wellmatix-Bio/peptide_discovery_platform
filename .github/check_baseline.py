@@ -20,7 +20,7 @@ import subprocess
 import sys
 
 #: From docs/BASELINE.md. Update BOTH together, never just this.
-EXPECTED = {"passed": 29, "failed": 4, "errors": 2}
+EXPECTED = {"passed": 82, "failed": 7, "errors": 0}
 
 #: THE BASELINE IS A PROPERTY OF AN ENVIRONMENT, NOT JUST OF THE CODE. A module the suite imports
 #: but that is not installed turns tests into collection ERRORS, and the count moves exactly as it
@@ -31,6 +31,14 @@ EXPECTED = {"passed": 29, "failed": 4, "errors": 2}
 #: Deliberately NOT the whole of requirements.txt: nothing here needs torch, transformers, sklearn
 #: or xgboost, because the 47 tests that would are uncollectable anyway (s4pred, docs/BASELINE.md).
 ASSUMED_IMPORTS = ("fastapi", "pydantic", "yaml", "google.cloud.storage", "structlog", "pandas")
+
+#: The baseline also assumes MODEL WEIGHTS ARE ABSENT. They are gitignored and synced at run time,
+#: so CI and a fresh clone never have them -- but a developer who has synced them locally will see
+#: three stage-4 tests pass that cannot pass here, and the count will move. That is a better
+#: environment, not a regression, and the message below says so rather than leaving someone to
+#: guess. The two optional copyleft dependencies (propy3, s4pred) are likewise assumed ABSENT;
+#: installing them also makes more tests runnable. See docs/LICENSING.md.
+WEIGHTS_DIR = "model_store/model_weights"
 
 
 def missing_imports() -> list[str]:
@@ -45,6 +53,18 @@ def missing_imports() -> list[str]:
 
 
 def main() -> int:
+    from pathlib import Path
+
+    if Path(WEIGHTS_DIR).is_dir():
+        print(
+            f"{WEIGHTS_DIR} exists, but the recorded baseline was measured without model"
+            " weights.\nTests that need them will pass here and cannot in CI, so the count will"
+            " not match.\nThis is a richer environment, not a regression; compare against a"
+            " clean checkout before concluding anything.",
+            file=sys.stderr,
+        )
+        return 2
+
     absent = missing_imports()
     if absent:
         print(

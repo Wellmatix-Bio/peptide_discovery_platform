@@ -18,13 +18,29 @@ logger = get_logger(__name__)
 
 AMINO_ACID_SET = set("ACDEFGHIKLMNPQRSTVWY")
 
-# s4pred is vendored (not pip-installed), so its package dir must be on sys.path before import.
+# s4pred is OPTIONAL and is GPL-3.0. This project is Apache-2.0 and neither vendors it nor
+# requires it, so the import must not be able to fail the module (see docs/LICENSING.md). When it
+# is absent the secondary-structure screen reports itself unavailable; every other stage-5 screen
+# is unaffected. Install it yourself if you want that screen, accepting its licence.
 _S4PRED_DIR = Path(__file__).parent / "s4pred"
 if str(_S4PRED_DIR) not in sys.path:
     sys.path.insert(0, str(_S4PRED_DIR))
 
-from .s4pred.network import S4PRED  # noqa: E402
-from .s4pred.utilities import aas2int  # noqa: E402
+try:
+    from .s4pred.network import S4PRED  # noqa: E402
+    from .s4pred.utilities import aas2int  # noqa: E402
+
+    S4PRED_AVAILABLE = True
+    S4PRED_UNAVAILABLE_REASON = None
+except Exception as problem:  # noqa: BLE001 - any import failure means "not installed here"
+    S4PRED = None  # type: ignore[assignment]
+    aas2int = None  # type: ignore[assignment]
+    S4PRED_AVAILABLE = False
+    S4PRED_UNAVAILABLE_REASON = (
+        "s4pred is not installed, so the secondary-structure screen did not run. It is optional"
+        " and GPL-3.0; this project neither vendors nor requires it. See docs/LICENSING.md."
+        f" ({type(problem).__name__})"
+    )
 
 MODEL_STORE_DIR = Path(__file__).resolve().parents[3] / "model_store"
 if str(MODEL_STORE_DIR) not in sys.path:
@@ -325,7 +341,13 @@ class Stage5(CandidateStage):
     def compute_secondary_structure_consistency(
         self, sequence: str, desired_functions: list[str], config_params: dict
     ) -> dict:
-        """s4pred secondary-structure screen: flags low-confidence/ambiguous folds and folds inconsistent with the candidate's intended mechanism."""
+        """s4pred secondary-structure screen: flags low-confidence/ambiguous folds and folds inconsistent with the candidate's intended mechanism.
+
+        Returns `available: False` with the reason when s4pred is not installed, rather than a
+        verdict. A screen that did not run is reported as not run -- never as a pass.
+        """
+        if not S4PRED_AVAILABLE:
+            return {"available": False, "reason": S4PRED_UNAVAILABLE_REASON}
         t = {
             **DEFAULT_THRESHOLDS,
             **{k: v for k, v in config_params.items() if k in DEFAULT_THRESHOLDS},
@@ -351,6 +373,7 @@ class Stage5(CandidateStage):
         flag = stability != "stable" or not mechanism_consistent
 
         return {
+            "available": True,
             "predicted_ss": ss,
             "mean_confidence": mean_confidence,
             "stability": stability,
@@ -396,6 +419,16 @@ class Stage5(CandidateStage):
             return {
                 "score": None,
                 "status": "skipped_too_short",
+                "reason": (
+                    f"sequence is shorter than {AGGREGATION_MIN_LENGTH} residues, below which the"
+                    " model's QSO/SOCN/PAAC/APAAC lag features are undefined"
+                ),
+            }
+        if not PROPY_AVAILABLE:
+            return {
+                "score": None,
+                "status": "unavailable",
+                "reason": PROPY_UNAVAILABLE_REASON,
             }
         model = _get_aggregation_model()
         score = model.predict_aggregation(sequence, feature_extractor)

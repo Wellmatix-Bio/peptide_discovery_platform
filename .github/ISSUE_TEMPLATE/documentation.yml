@@ -1,0 +1,18 @@
+name: Documentation
+description: Something is missing, wrong, or misleading in the docs
+labels: ["documentation"]
+body:
+  - type: input
+    id: where
+    attributes:
+      label: Which file or page
+      placeholder: docs/ARCHITECTURE.md, or the README
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: What is wrong or missing
+      description: If it is misleading rather than absent, say what you concluded from it.
+    validations:
+      required: true

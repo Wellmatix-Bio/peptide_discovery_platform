@@ -179,3 +179,37 @@ container must get a real bind-mounted `.env`, or `api.py` should forward an
 explicit list read from the process environment. The second is the better fix and
 would make the test pass as written; it is a backend change, so it is not made
 here.
+
+
+---
+
+# Update: after making the copyleft dependencies optional
+
+**82 passed / 7 failed / 0 collection errors**, under
+`DEV_MODE=true .venv/bin/python -m pytest -q --continue-on-collection-errors --ignore=services --ignore=web`.
+
+The baseline was 29 passed / 4 failed / 2 collection errors. Of the extra passes, 7 are the new
+`tests/test_licensing.py`; the other 46 are not new tests at all: making `s4pred` an optional import removed the failure that made the **entire `pipeline`
+package unimportable**, so `test_s04_generation.py` (19 tests) and `test_s11_ranking.py` (30)
+collect for the first time. Defect 2 in the list above is therefore no longer blocking, though
+the underlying gitlink is untouched and should still be fixed.
+
+## What the 7 failures are
+
+| Count | Tests | Cause |
+|---|---|---|
+| 4 | `test_status_queries_vertex` | The stale `test_api_e2e.py` disagreements recorded above. Unchanged. |
+| 3 | `test_s04_generation.py` | Need `model_store/model_weights/esm2_t30_150M`, which is gitignored and synced at run time. Environmental, exactly as the 47 were. |
+
+## The baseline's environment, stated
+
+A count is only meaningful against a stated environment, which is why `check_baseline.py` now
+asserts all of this before counting rather than reporting a mismatch as a regression:
+
+- The modules in `ASSUMED_IMPORTS` are installed.
+- **Model weights are absent.** With them synced, three more stage-4 tests pass.
+- **`propy3` and `s4pred` are absent.** Both are optional and copyleft (`docs/LICENSING.md`);
+  installing either makes more of the pipeline runnable.
+
+Each of those is a *better* environment that produces a *different* number. The script says which
+one it hit instead of leaving someone to work it out.

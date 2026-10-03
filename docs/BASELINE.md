@@ -206,10 +206,39 @@ the underlying gitlink is untouched and should still be fixed.
 A count is only meaningful against a stated environment, which is why `check_baseline.py` now
 asserts all of this before counting rather than reporting a mismatch as a regression:
 
-- The modules in `ASSUMED_IMPORTS` are installed.
+- **The whole of `requirements.txt` is installed**, with the CPU PyTorch wheel
+  (`pip install --extra-index-url https://download.pytorch.org/whl/cpu -r requirements.txt`).
+  Not a subset: see below.
+- The modules in `ASSUMED_IMPORTS` are importable — now the full list, not just the API's own
+  runtime.
 - **Model weights are absent.** With them synced, three more stage-4 tests pass.
 - **`propy3` and `s4pred` are absent.** Both are optional and copyleft (`docs/LICENSING.md`);
   installing either makes more of the pipeline runnable.
 
 Each of those is a *better* environment that produces a *different* number. The script says which
 one it hit instead of leaving someone to work it out.
+
+## How this was got wrong once, and the lesson in it
+
+The commit that recorded 82/7/0 left CI installing a deliberately slim set — the job API's runtime
+plus `structlog` and `pandas` — justified by a comment reading, in substance, *nothing in the
+collectable suite needs torch, transformers, sklearn or xgboost, because the 47 tests that would
+are uncollectable anyway (s4pred)*.
+
+That was true when it was written. **The same commit made it false.** Making `s4pred` optional is
+precisely what made those 47 tests collectable, and `pipeline/__init__.py` imports stage 5 eagerly
+while stage 5 imports `torch` at module level. CI therefore measured 34 passed / 6 failed / 2
+errors and reported a regression, which is the one thing this check exists not to do.
+
+`ASSUMED_IMPORTS` did not catch it because `torch` was not in it — excluded by the same reasoning
+that had just been invalidated. A guard resting on a premise is only as good as the premise, and
+nothing re-checked the premise when the code beneath it changed.
+
+Both are fixed: CI installs the full file, and `ASSUMED_IMPORTS` lists everything the collectable
+suite imports. Verified by building the CI environment from scratch (82/7/0, matching) and by
+simulating the old partial install, which now exits 2 with *"This environment is missing modules
+the recorded baseline assumes"* rather than 1 with *"a regression was introduced"*.
+
+The cost is honest: ~2.4 GB installed and a slower cold CI run, cached between runs. The
+alternative — a second baseline for a slim environment — means two numbers to keep in step and two
+permanent collection errors in CI, which is how a real import regression would hide.

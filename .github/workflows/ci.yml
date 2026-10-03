@@ -1,8 +1,9 @@
 # Three jobs, per the build spec: python, web, images.
 #
-# The backend suite cannot be green (s4pred is an unusable gitlink; see docs/BASELINE.md), so the
-# python job compares its OUTCOME to the recorded baseline instead of requiring a zero exit. A new
-# failure fails CI; so does a new pass, because that means the baseline is stale.
+# The backend suite cannot be green (four stale test_api_e2e expectations, three tests needing
+# model weights; see docs/BASELINE.md), so the python job compares its OUTCOME to the recorded
+# baseline instead of requiring a zero exit. A new failure fails CI; so does a new pass, because
+# that means the baseline is stale.
 
 name: CI
 
@@ -38,15 +39,19 @@ jobs:
         run: pip install -r deploy/api.requirements.txt
 
       - name: Install what the backend suite imports beyond the API's own runtime
-        # structlog (src/common/logging.py) and pandas, which the worker tests reach through the
-        # runner. Without them four tests become collection errors and the baseline check reports
-        # a regression that is really a missing dependency -- which is why check_baseline.py now
-        # asserts these are importable before it counts anything.
+        # THE WHOLE of requirements.txt, with the CPU PyTorch index. This step used to install
+        # only structlog and pandas, on the stated grounds that "nothing in the collectable suite
+        # needs torch, transformers, sklearn or xgboost, because the 47 tests that would are
+        # uncollectable anyway (s4pred)". Making s4pred an optional import removed exactly that
+        # barrier: pipeline/__init__.py imports stage 5 eagerly, stage 5 imports torch at module
+        # level, and those 47 tests now collect and need the real ML stack. The slim install then
+        # produced 34 passed / 6 failed / 2 errors and the baseline check called it a regression.
         #
-        # NOT the whole of requirements.txt: nothing in the collectable suite needs torch,
-        # transformers, sklearn or xgboost, and installing the CUDA wheel here would add several
-        # GB to every CI run for tests that cannot be collected anyway (s4pred).
-        run: pip install "structlog>=25,<27" "pandas>=2.2,<4"
+        # Reproducing the recorded baseline needs effectively all of requirements.txt -- verified
+        # by building this exact environment from scratch, which lands on 82/7/0. The CPU index
+        # matters: the default torch wheel is the CUDA build. The worker Dockerfiles select the
+        # CUDA wheel themselves and are unaffected. ~2.4 GB installed, amortised by the pip cache.
+        run: pip install --extra-index-url https://download.pytorch.org/whl/cpu -r requirements.txt
 
       - name: OpenAPI snapshot is current
         # Generated types are built from this snapshot; if it drifts from api.py the web app's

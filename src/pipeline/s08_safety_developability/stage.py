@@ -330,11 +330,16 @@ class Stage8(CandidateStage):
     def compute_cleavage_stability(
         self, candidate: Candidate, model: CleavageSitePredictor, config_params: dict
     ) -> dict:
-        """Per-protease cleavage-site prediction (predict_one()/predict() return
-        per-enzyme results, not a single pooled risk number -- see
-        cleavage_site_predictor_v1/README.md's usage example), filtered to
-        wound-relevant proteases, weighted by structural exposure, and
-        collapsed into one stability score used as a reject/flag gate.
+        """Protease-cleavage stability score of a candidate, in (0, 1]; 1.0 = no predicted cleavage sites.
+
+        Predicts cleavage sites for each wound-relevant protease (the allowlist
+        intersected with the model's enzyme panel), using the Stage 7 Ca distance
+        matrix and per-residue exposure. Each site's severity is its cleavage
+        probability times the residue's exposure; the score is
+        exp(-decay_rate * total severity). Stage 8 rejects scores below
+        CLEAVAGE_STABILITY_REJECT_MIN, and Stage 11 uses the score as the stability
+        measurement. Returns score None with status "no_wound_relevant_enzymes_in_panel"
+        when no allowlisted enzyme is in the panel.
         """
         sequence = candidate.sequence
         distance_matrix = self._get_distance_matrix(candidate)

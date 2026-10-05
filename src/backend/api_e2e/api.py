@@ -227,19 +227,6 @@ def get_job_status(job_id: str):
     )
 
 
-RANKING_COMPONENTS = (
-    "wound_closure",
-    "antimicrobial",
-    "immunomodulation",
-    "angiogenesis",
-    "collagen_ecm",
-    "safety",
-    "stability",
-    "synthesis_feasibility",
-    "mechanistic_confidence",
-)
-
-
 class ComponentStats(BaseModel):
     count: int
     mean: float
@@ -252,6 +239,9 @@ class CandidateResponse(BaseModel):
     id: str = "?"
     sequence: str | None = None  # 'sequence' key - sibling of predictions
     ranking: int | None = None  # 'ranking.rank' key in predictions
+    final_score: float | None = None  # 'ranking.final_score' key in predictions
+    evidence_coverage: float | None = None  # 'ranking.evidence_coverage' key
+    missing_modules: list[str] | None = None  # 'ranking.missing_modules' key
     amp_probability: float | None = None  # 'amp_prob' key in predictions
     hemolytic_activity_phc50: float | None = (
         None  # 'hemolysis_phc50' key in predictions
@@ -309,8 +299,11 @@ class CandidateResponse(BaseModel):
         ],
         float,
     ]
-    engaged_pathways: list[str] | None = (
-        None  # 'mechanism.engaged_pathways' key in predictions
+    activated_pathways: list[str] | None = (
+        None  # 'mechanism.activated_pathways' key in predictions
+    )
+    inhibited_pathways: list[str] | None = (
+        None  # 'mechanism.inhibited_pathways' key in predictions
     )
 
 
@@ -339,6 +332,9 @@ def _candidate_response(candidate: dict) -> CandidateResponse:
         id=candidate.get("id", "?"),
         sequence=candidate.get("sequence"),
         ranking=nested("ranking", "rank"),
+        final_score=nested("ranking", "final_score"),
+        evidence_coverage=nested("ranking", "evidence_coverage"),
+        missing_modules=nested("ranking", "missing_modules"),
         amp_probability=preds.get("amp_probability"),
         hemolytic_activity_phc50=nested("hemolysis", "phc50"),
         molecular_weight=preds.get("molecular_weight"),
@@ -356,24 +352,24 @@ def _candidate_response(candidate: dict) -> CandidateResponse:
         cleavage_stability=nested("cleavage_stability", "score"),
         log_mic_um=nested("mic", "log_mic_um") or {},
         pmbic=nested("mbic", "pmbic") or {},
-        engaged_pathways=nested("mechanism", "engaged_pathways"),
+        activated_pathways=nested("mechanism", "activated_pathways"),
+        inhibited_pathways=nested("mechanism", "inhibited_pathways"),
     )
 
 
 def _component_stats(candidates: list[dict]) -> dict[str, ComponentStats]:
-    """Mean/median/min/max per ranking component, over ranked candidates'
-    normalized_scores only -- missing/insufficient_evidence candidates carry
-    no normalized_scores and are excluded rather than treated as zero."""
-    values_by_component: dict[str, list[float]] = {c: [] for c in RANKING_COMPONENTS}
+    """Mean/median/min/max per ranking module over ranked candidates' module
+    `score` (after flag deductions) -- insufficient_evidence candidates and
+    modules without a score are excluded rather than treated as zero."""
+    values_by_component: dict[str, list[float]] = {}
     for candidate in candidates:
         ranking = candidate.get("predictions", {}).get("ranking")
         if not ranking or ranking.get("status") != "ranked":
             continue
-        normalized = ranking.get("normalized_scores", {})
-        for component in RANKING_COMPONENTS:
-            value = normalized.get(component)
+        for component, module in (ranking.get("modules") or {}).items():
+            value = module.get("score")
             if value is not None:
-                values_by_component[component].append(value)
+                values_by_component.setdefault(component, []).append(value)
 
     return {
         component: ComponentStats(
@@ -384,7 +380,6 @@ def _component_stats(candidates: list[dict]) -> dict[str, ComponentStats]:
             max=max(values),
         )
         for component, values in values_by_component.items()
-        if values
     }
 
 
@@ -437,11 +432,16 @@ def get_job_results(job_id: str):
     )
 
 
+class CancelJobResponse(BaseModel):
+    job_id: str
+    status: Literal["cancelling", "cancelled", "failed"]
+
+
 _ALREADY_CANCELLED_STATES = {"JOB_STATE_CANCELLING", "JOB_STATE_CANCELLED"}
 _TERMINAL_FAILED_STATES = {"JOB_STATE_FAILED", "JOB_STATE_EXPIRED"}
 
 
-@app.post("/api/v1/jobs/{job_id:path}/cancel")
+@app.post("/api/v1/jobs/{job_id:path}/cancel", response_model=CancelJobResponse)
 def cancel_job(job_id: str):
     name = job_name(job_id)
     client = job_client()

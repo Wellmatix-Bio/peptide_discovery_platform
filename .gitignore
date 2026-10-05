@@ -124,6 +124,7 @@ notebooks/scratch/
 *~
 .DS_Store
 Thumbs.db
+graphify-out/
 
 # ---------- Docs build ----------
 docs/_build/
@@ -135,9 +136,8 @@ site/
 # stay tracked via the negation below, as before.
 !docs/**/*.pdf
 **/rationale.md
-# Anchored to the repository root. Unanchored, `scripts/` matches ANY directory of that name
-# at any depth -- it was silently excluding web/scripts/, whose openapi.py CI runs.
-/scripts/
+scripts/
+/scripts/test.py
 
 # --------- Under development / experimental ----------
 backend/api_stage/

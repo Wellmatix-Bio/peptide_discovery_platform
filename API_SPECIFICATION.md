@@ -1,6 +1,6 @@
 # End-to-end Job API Specification
 
-This specification covers **job creation, status checks and result reads**.
+This specification covers **job creation, status checks, result reads and cancellation**.
 Machine-readable contract: `openapi.yaml`, OpenAPI 3.1.
 Implementation: src/backend/api_e2e/api.py.
 Stage and configuration validation: src/schemas/stage_configs.py
@@ -188,7 +188,7 @@ the source of truth. A job that is still running or failed returns `status` and
 | `n_final` | Final candidate count reported by the worker |
 | `ranked_candidates` | Candidates whose ranking status is `ranked` |
 | `insufficient_evidence_candidates` | Candidates in the final file that are not `ranked` |
-| `component_stats` | Mean/median/min/max per ranking component, over ranked candidates' normalized scores only |
+| `component_stats` | Mean/median/min/max per ranking module, over ranked candidates' module `score` (after flag deductions); candidates without a score for a module are excluded |
 | `candidates` | Typed summaries, see below |
 
 Each entry of `candidates` is a flat
@@ -201,6 +201,9 @@ tree is not included; read `candidates_final.json` for it). Scalar fields are
 | `id` | Candidate `id`; `"?"` if the record has none |
 | `sequence` | Top-level candidate `sequence` (not under `predictions`) |
 | `ranking` | `predictions.ranking.rank`, 1-based position among ranked candidates; `null` if not ranked |
+| `final_score` | `predictions.ranking.final_score`; `null` if not ranked |
+| `evidence_coverage` | `predictions.ranking.evidence_coverage` |
+| `missing_modules` | `predictions.ranking.missing_modules` |
 | `amp_probability` | `amp_probability` |
 | `hemolytic_activity_phc50` | `hemolysis.phc50` |
 | `molecular_weight` | `molecular_weight` (Daltons) |
@@ -216,11 +219,34 @@ tree is not included; read `candidates_final.json` for it). Scalar fields are
 | `cleavage_stability` | `cleavage_stability.score` |
 | `log_mic_um` | `mic.log_mic_um`, keyed by `Escherichia coli`, `Staphylococcus aureus`, `Pseudomonas aeruginosa`; `{}` when absent |
 | `pmbic` | `mbic.pmbic`, keyed by 13 pathogens (see `openapi.yaml`); `{}` when absent |
-| `engaged_pathways` | `mechanism.engaged_pathways` |
+| `activated_pathways` | `mechanism.activated_pathways`: pathways whose v2 P(activator) is >= `pathway_engagement_min_probability` |
+| `inhibited_pathways` | `mechanism.inhibited_pathways`: pathways whose v2 P(activator) is <= 1 - `pathway_engagement_min_probability` |
 
 Pathogen keys here use spaces (`Staphylococcus aureus`), unlike the request's
 brief vocabulary, which uses underscores (`Staphylococcus_aureus`). A key
 outside the listed pathogens fails response validation.
+
+## Cancel a job
+
+`POST /api/v1/jobs/{job_id}/cancel`
+
+Uses the same full-resource-name `job_id` as the status endpoint. Requests
+cancellation of the Vertex Custom Job.
+
+### Response: 200 OK
+
+```json
+{"job_id": "projects/123/locations/us-central1/customJobs/456", "status": "cancelling"}
+```
+
+| `status` | Meaning |
+|---|---|
+| `cancelling` | Cancellation was requested; the job may take time to stop |
+| `cancelled` | The job was already cancelling or cancelled |
+| `failed` | The job had already failed or expired |
+
+Errors: `404` job not found, `422` invalid job resource name, `502` Google API
+failure, `503` missing credentials or server settings.
 
 ### Errors
 
@@ -272,5 +298,5 @@ must be GCS URIs. The service-account setting is an email, not a key file.
 `MACHINE_TYPE`/`ACCELERATOR_TYPE`/`ACCELERATOR_COUNT` are set explicitly in
 `.env` to `n1-standard-8`/`NVIDIA_TESLA_T4`/`1`.
 
-The OpenAPI file is a standalone contract for these two operations. It does not
+The OpenAPI file is a standalone contract for these four operations. It does not
 change the service's routes or its automatically generated `/openapi.json`.

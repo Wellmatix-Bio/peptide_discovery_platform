@@ -103,7 +103,7 @@ def _get_anti_inflammatory_model() -> AntiInflammatoryPredictor:
     return _anti_inflammatory_model
 
 
-# Software defaults; override through config.params["stage6_thresholds"].
+# Software defaults; override through config.params["stage6_    thresholds"].
 STAGE6_THRESHOLDS = {
     "min_amp_probability": 0.70,
     "min_proliferation_migration": 0.65,

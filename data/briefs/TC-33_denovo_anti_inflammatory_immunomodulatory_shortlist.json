@@ -1,0 +1,22 @@
+{
+    "case_id": "TC-33_denovo_anti_inflammatory_immunomodulatory_shortlist",
+    "wound_context": [
+        "chronic"
+    ],
+    "desired_functions": [
+        "anti_inflammatory",
+        "immunomodulation"
+    ],
+    "pathogens": [],
+    "min_length": 8,
+    "max_length": 30,
+    "dosing_interval_hours": 24,
+    "manufacturing": {
+        "method": "solid_phase_synthesis"
+    },
+    "stage": "discovery",
+    "target_shortlist_size": "20-30",
+    "novelty_max_identity_to_reference": 0.6,
+    "literature_source": "Pending: client peptide list and supporting literature not yet received.",
+    "notes": "Computational study on the existing platform; no model or pipeline changes. Goal: a novel, diverse, lab-testable shortlist of 20-30 peptides that dampen excessive inflammation and steer the immune response toward repair. Target signals: cytokine suppression (TNF-alpha, IL-6, IL-1beta), M1-to-M2 macrophage polarization, NO suppression, ROS/antioxidant activity, NF-kB inhibition. Guardrail: avoid broad immunosuppression so infection defense is preserved, hence no pathogen targets and no antimicrobial requirement. Length range 8-30 and the <60% identity novelty threshold are proposed defaults, to be agreed. Success criteria: known reference peptides outscore decoys (sanity check); shortlist spans multiple sequence clusters; every candidate passes all hard filters with a stated rationale. Label every output: 'Computational / de novo candidate. Predicted, not experimentally validated.'"
+}

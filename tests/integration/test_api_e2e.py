@@ -110,13 +110,23 @@ def test_create_submits_worker_readable_json(service):
         ("JOB_STATE_CANCELLED", "stopped"),
     ],
 )
-def test_status_queries_vertex(service, state, status):
-    client, sdk, job, *_ = service
+def test_status_reads_worker_results_and_vertex_state(service, state, status):
+    client, sdk, job, objects, *_ = service
     job.state.name = state
+    objects["gs://test/artifacts/runs/456/results.json"] = json.dumps(
+        {"status": status, "stage": "s06_functional_models"}
+    )
     response = client.get(f"/api/v1/jobs/{JOB}/status")
     assert response.status_code == 200
     assert response.json()["status"] == status
+    assert response.json()["stage"] == "s06_functional_models"
     assert response.json()["vertex_state"] == state
+
+
+def test_status_is_pending_before_worker_writes_results(service):
+    client, *_ = service
+    body = client.get(f"/api/v1/jobs/{JOB}/status").json()
+    assert body["status"] == "pending" and body["stage"] == "pending"
 
 
 def test_invalid_input_does_not_submit(service):

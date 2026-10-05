@@ -1,11 +1,13 @@
 # Stage 11: Multi-Objective Ranking.
 #
-# Pure ranking, not filtering: a weighted multi-objective score over Stage
-# 5-9 outputs, with Stage-1-driven weight adjustment and missing-score
-# renormalization. No hard rejection gates -- safety/complexity filtering
-# already happens in Stage 8/9; Stage 11 only ever scores and orders. No ML
-# here either. MVP scope: no formulation/delivery (Stage 10), novelty/IP, or
-# commercial feasibility.
+# Scores and orders candidates; never filters them. Ten modules, each with one
+# model score used as-is (no rescaling against the candidate pool, so a score
+# never changes with the batch). Objective modules are weighted from the brief
+# by counting references and wound-context implications (N_k); always-on
+# modules get the average of the objectives' N_k and are the only ones that carry Stage 5 flags,
+# which are deducted from the module score. A missing score stays missing and
+# is never treated as zero. No ML here. MVP scope: no formulation/delivery
+# (Stage 10), novelty/IP, or commercial feasibility.
 from __future__ import annotations
 
 import math
@@ -15,14 +17,16 @@ from pydantic import BaseModel, ConfigDict, Field, StrictBool, model_validator
 
 from common.logging import get_logger
 from pipeline.base import CandidateStage, RunContext
+from schemas.brief import Brief
 from schemas.candidate import Candidate
 from schemas.run_config import StageConfig
 
 logger = get_logger(__name__)
 
-Component = Literal[
+ModuleName = Literal[
     "wound_closure",
     "antimicrobial",
+    "anti_inflammatory",
     "immunomodulation",
     "angiogenesis",
     "collagen_ecm",
@@ -31,9 +35,10 @@ Component = Literal[
     "synthesis_feasibility",
     "mechanistic_confidence",
 ]
-COMPONENTS: tuple[Component, ...] = (
+MODULE_NAMES: tuple[ModuleName, ...] = (
     "wound_closure",
     "antimicrobial",
+    "anti_inflammatory",
     "immunomodulation",
     "angiogenesis",
     "collagen_ecm",
@@ -42,57 +47,74 @@ COMPONENTS: tuple[Component, ...] = (
     "synthesis_feasibility",
     "mechanistic_confidence",
 )
+# "objective": N_k comes from the brief. "always_on": N_k is the average of the
+# objectives' N_k, and it carries flags.
+ModuleGroup = Literal["objective", "always_on"]
 
 Finite = Annotated[float, Field(strict=True, allow_inf_nan=False)]
 Unit = Annotated[Finite, Field(ge=0, le=1)]
 Nonnegative = Annotated[Finite, Field(ge=0)]
-Positive = Annotated[Finite, Field(gt=0)]
 
 
 class StrictModel(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
 
-class ProductObjective(StrictModel):
-    """Stage 1's product brief, as far as Stage 11 needs it."""
-
-    wound_context: list[str] = Field(default_factory=list)
-    desired_functions: list[str] = Field(default_factory=list)
+# ----------------------------------------------------------------------
+# Input and result models.
+# ----------------------------------------------------------------------
 
 
-class ComponentScores(StrictModel):
-    """The nine ranking components. None means missing -- never coerced to
-    0: missing values are excluded from scoring and renormalized around,
-    not penalized as zero."""
+class ImmuneInputs(StrictModel):
+    """The model outputs the immunomodulation module combines: the NF-kB and
+    cytokine/macrophage pathway probabilities (Stage 7). None means missing."""
 
-    wound_closure: Finite | None = None
-    antimicrobial: Finite | None = None
-    immunomodulation: Finite | None = None
-    angiogenesis: Finite | None = None
-    collagen_ecm: Finite | None = None
-    safety: Finite | None = None
-    stability: Finite | None = None
-    synthesis_feasibility: Finite | None = None
-    mechanistic_confidence: Finite | None = None
+    nfkb: Finite | None = None
+    cytokine: Finite | None = None
 
 
 class RankingInput(StrictModel):
-    """One candidate's Stage 11 input."""
+    """One candidate's Stage 11 input. `measurements` holds each module's raw
+    model score; None or a missing key means missing. `immune_inputs` feeds the
+    immunomodulation module, whose score is computed from several outputs.
+    `flag_values` holds the raw value behind each flag."""
 
     candidate_id: str = Field(min_length=1)
     sequence: str = Field(min_length=1)
-    stage1: ProductObjective = Field(default_factory=ProductObjective)
-    scores: ComponentScores = Field(default_factory=ComponentScores)
+    brief: Brief | None = None
+    measurements: dict[ModuleName, Finite | None] = Field(default_factory=dict)
+    immune_inputs: ImmuneInputs = Field(default_factory=ImmuneInputs)
+    flag_values: dict[str, Any] = Field(default_factory=dict)
 
 
-class WeightAdjustment(StrictModel):
-    component: Component
-    reason: str
-    modifier: Positive
+class FlagDeductionAudit(StrictModel):
+    flag: str
+    raw_value: Any
+    deduction: Unit
 
 
-class ComponentContribution(StrictModel):
+class ModuleResult(StrictModel):
+    """Everything about one module for one candidate.
+
+    score = max(0, normalized_score - total_deduction). nominal_weight is the
+    weight before missing-evidence renormalization (0 for a module the brief
+    does not activate); weight is after it (0 for a missing or inactive
+    module); contribution = weight * score."""
+
+    group: ModuleGroup
+    activated: bool
+    measurement_source: str | None
+    raw_measurement: Finite | None
+    measurement_detail: dict[str, float] | None = None  # parts of a computed measurement
+    normalized_score: Unit | None
+    flags: list[FlagDeductionAudit]
+    total_deduction: Unit
     score: Unit | None
+    n_k: Nonnegative  # always-on modules: the average of the objectives' N_k
+    references: list[str]  # brief entries that name this module (+reference points)
+    implications: list[str]  # wound-context tags that point to it (+implication points each)
+    requested: bool  # the brief named it directly (desired_functions or pathogens)
+    nominal_weight: Unit
     weight: Unit
     contribution: Unit | None
 
@@ -104,19 +126,15 @@ class RankingResult(StrictModel):
 
     candidate_id: str
     sequence: str
-    stage1: ProductObjective
     status: Literal["ranked", "insufficient_evidence"]
     final_score: Unit | None
     rank: int | None = None
-    evidence_coverage: Unit
+    evidence_coverage: Unit  # activated modules with a score / activated modules
     incomplete_evidence: bool
-    original_component_scores: ComponentScores
-    normalized_scores: ComponentScores
-    baseline_weights: dict[Component, Unit]
-    adjusted_weights: dict[Component, Unit]
-    component_contributions: dict[Component, ComponentContribution]
-    missing_components: list[Component]
-    weight_adjustments: list[WeightAdjustment]
+    modules: dict[ModuleName, ModuleResult]
+    missing_modules: list[ModuleName]  # activated modules with no score
+    # Named by the brief but no score available (e.g. placeholder collagen_ecm).
+    requested_modules_without_data: list[ModuleName] = Field(default_factory=list)
 
 
 class BatchResult(StrictModel):
@@ -129,18 +147,15 @@ class BatchResult(StrictModel):
 
 # ----------------------------------------------------------------------
 # Config: biological policy, kept separate from the scoring/weighting logic
-# below so it can be edited (or swapped via config.params) without touching
-# code.
+# below so it can be edited without touching code.
 # ----------------------------------------------------------------------
 
 
 class NormalizerConfig(StrictModel):
     """A ScoreNormalizer's configuration. "probability": the raw value is
-    already [0,1], higher-is-better unless flipped. "linear": maps [lower,
-    upper] -> [0,1] first -- for regression outputs (MIC, migration
-    percentage, stability half-life, synthesis difficulty, ...) that aren't
-    natively [0,1]. No biological thresholds are hardcoded here or anywhere
-    in the scoring engine; every bound comes from config."""
+    already [0,1], higher-is-better unless flipped. "linear": maps fixed
+    [lower, upper] -> [0,1] first -- for outputs that aren't natively [0,1].
+    Bounds are fixed config, never derived from the candidate pool."""
 
     kind: Literal["probability", "linear"] = "probability"
     lower: Finite | None = None
@@ -162,238 +177,380 @@ class NormalizerConfig(StrictModel):
         return self
 
 
-class ModifierRule(StrictModel):
-    """One Stage-1-driven weight adjustment: a condition on desired_functions
-    or wound_context, and the multiplicative modifiers it applies. Multiple
-    matching rules all apply (multiplicatively) -- there is deliberately no
-    independent weight set per wound type; every adjustment starts from
-    baseline_weights and multiplies from there."""
-
-    reason: str = Field(min_length=1)
-    field: Literal["desired_functions", "wound_context"]
-    any_of: list[str] = Field(default_factory=list)
-    all_of: list[str] = Field(default_factory=list)
-    none_of: list[str] = Field(default_factory=list)
-    modifiers: dict[Component, Positive] = Field(min_length=1)
-
-    @model_validator(mode="after")
-    def _require_condition(self):
-        if not self.any_of and not self.all_of:
-            raise ValueError("a modifier rule needs any_of or all_of")
-        return self
-
-    def matches(self, values: list[str]) -> bool:
-        value_set = set(values)
-        if self.any_of and not (value_set & set(self.any_of)):
-            return False
-        if self.all_of and not set(self.all_of) <= value_set:
-            return False
-        if self.none_of and value_set & set(self.none_of):
-            return False
-        return True
+def _validate_source_path(path: str) -> None:
+    if not path or any(not part for part in path.split(".")):
+        raise ValueError(f"source path {path!r} must be nonempty dot-separated keys")
 
 
-# Built-in adjustments derived from the product brief.
-DEFAULT_DESIRED_FUNCTIONS_RULES: list[ModifierRule] = [
-    ModifierRule(
-        reason="antimicrobial_objective",
-        field="desired_functions",
-        any_of=["antimicrobial", "antimicrobial_action", "antimicrobial action"],
-        modifiers={"antimicrobial": 1.25},
-    ),
-    ModifierRule(
-        reason="migration_objective",
-        field="desired_functions",
-        any_of=[
-            "keratinocyte_migration",
-            "fibroblast_migration",
-            "cell proliferation/migration",
-        ],
-        modifiers={"wound_closure": 1.25},
-    ),
-    ModifierRule(
-        reason="angiogenesis_objective",
-        field="desired_functions",
-        any_of=["angiogenesis"],
-        modifiers={"angiogenesis": 1.25},
-    ),
-    ModifierRule(
-        reason="immunomodulation_objective",
-        field="desired_functions",
-        any_of=["anti_inflammatory", "immunomodulation"],
-        modifiers={"immunomodulation": 1.25},
-    ),
-    ModifierRule(
-        reason="collagen_objective",
-        field="desired_functions",
-        any_of=["collagen_remodeling", "collagen_synthesis", "collagen synthesis"],
-        modifiers={"collagen_ecm": 1.25},
-    ),
-]
+class Measurement(StrictModel):
+    """A module's score: a literal dot-path lookup (relative to
+    Candidate.predictions), no implicit composites and no derivation, then
+    normalized to [0, 1] with higher = better."""
 
-
-# Built-in wound-context adjustments, combined with desired-function rules.
-DEFAULT_WOUND_CONTEXT_RULES: list[ModifierRule] = [
-    ModifierRule(
-        reason="infected_wound",
-        field="wound_context",
-        any_of=["infected"],
-        modifiers={"antimicrobial": 1.25, "immunomodulation": 1.15},
-    ),
-    ModifierRule(
-        reason="diabetic_or_chronic_wound",
-        field="wound_context",
-        any_of=["diabetic", "chronic", "high_glucose"],
-        modifiers={
-            "wound_closure": 1.20,
-            "angiogenesis": 1.20,
-            "immunomodulation": 1.15,
-            "stability": 1.20,
-        },
-    ),
-    ModifierRule(
-        reason="clean_surgical_wound",
-        field="wound_context",
-        all_of=["clean", "surgical"],
-        none_of=["infected"],
-        modifiers={
-            "wound_closure": 1.20,
-            "collagen_ecm": 1.25,
-            "angiogenesis": 1.15,
-            "antimicrobial": 0.75,
-        },
-    ),
-    ModifierRule(
-        reason="biofilm_positive_wound",
-        field="wound_context",
-        any_of=["biofilm_positive"],
-        modifiers={"stability": 1.20},
-    ),
-    ModifierRule(
-        reason="acute_wound",
-        field="wound_context",
-        any_of=["acute", "surgical", "traumatic"],
-        modifiers={"wound_closure": 1.20, "collagen_ecm": 1.20, "safety": 1.15},
-    ),
-    ModifierRule(
-        reason="ischemic_or_low_perfusion_wound",
-        field="wound_context",
-        any_of=["ischemic", "low_perfusion"],
-        modifiers={"angiogenesis": 1.35},
-    ),
-    ModifierRule(
-        reason="necrotic_wound",
-        field="wound_context",
-        any_of=["necrotic"],
-        modifiers={"antimicrobial": 1.20, "wound_closure": 0.80},
-    ),
-    ModifierRule(
-        reason="high_exudate_wound",
-        field="wound_context",
-        any_of=["high_exudate"],
-        modifiers={"stability": 1.20},
-    ),
-    ModifierRule(
-        reason="burn_wound",
-        field="wound_context",
-        any_of=["burn"],
-        modifiers={"antimicrobial": 1.20, "immunomodulation": 1.20, "safety": 1.15},
-    ),
-    ModifierRule(
-        reason="radiation_induced_wound",
-        field="wound_context",
-        any_of=["radiation_induced"],
-        modifiers={"angiogenesis": 1.25, "collagen_ecm": 1.15},
-    ),
-]
-
-
-class InputSources(StrictModel):
-    """Dot paths (relative to Candidate.predictions) telling Stage 11 where
-    to read each component score from. No implicit composites and no
-    derivation -- a path is a literal lookup, nothing else. A component left
-    unmapped is always None for every candidate (missing-is-not-zero
-    handling applies)."""
-
-    scores: dict[Component, str] = Field(default_factory=dict)
+    source: str
+    normalizer: NormalizerConfig = Field(default_factory=NormalizerConfig)
 
     @model_validator(mode="after")
-    def _validate_paths(self):
-        for path in self.scores.values():
-            if not path or any(not part for part in path.split(".")):
-                raise ValueError(
-                    f"source path {path!r} must be nonempty dot-separated keys"
-                )
+    def _validate_source(self):
+        _validate_source_path(self.source)
         return self
+
+
+class ImmuneAlignment(StrictModel):
+    """The immunomodulation measurement, computed from the NF-kB and cytokine pathway probabilities:
+
+        d_NFkB = 1 - 2 * p_NFkB, d_cyto = 1 - 2 * p_cytokine   (+1 inhibitor / anti-inflammatory, -1 activator / pro-inflammatory)
+        d      = w * d_NFkB + (1 - w) * d_cyto
+        d*     = minimum of `context_targets` over the brief's wound-context tags (0 if none match)
+        match  = 1 - |d - d*| / (1 + |d*|)
+        agree  = 1 - |d_NFkB - d_cyto| / 2
+        score  = match * (0.5 + 0.5 * agree)
+
+    A missing pathway probability makes the score missing."""
+
+    kind: Literal["immune_alignment"] = "immune_alignment"
+    nfkb_source: str
+    cytokine_source: str
+    nfkb_weight: Unit = 0.5
+    context_targets: dict[str, Finite]
+
+    @model_validator(mode="after")
+    def _validate_sources(self):
+        for path in (self.nfkb_source, self.cytokine_source):
+            _validate_source_path(path)
+        return self
+
+    def target_direction(self, wound_context: list[str]) -> float:
+        targets = [self.context_targets[tag] for tag in set(wound_context) if tag in self.context_targets]
+        return min(targets) if targets else 0.0
+
+    def evaluate(
+        self, inputs: ImmuneInputs, wound_context: list[str]
+    ) -> tuple[float | None, dict[str, float] | None]:
+        if inputs.nfkb is None or inputs.cytokine is None:
+            return None, None
+        d_nfkb = 1.0 - 2.0 * inputs.nfkb
+        d_cyto = 1.0 - 2.0 * inputs.cytokine
+        direction = self.nfkb_weight * d_nfkb + (1.0 - self.nfkb_weight) * d_cyto
+        target = self.target_direction(wound_context)
+        match = 1.0 - abs(direction - target) / (1.0 + abs(target))
+        agreement = 1.0 - abs(d_nfkb - d_cyto) / 2.0
+        score = max(0.0, min(1.0, match * (0.5 + 0.5 * agreement)))
+        return score, {
+            "direction_nfkb": d_nfkb,
+            "direction_cytokine": d_cyto,
+            "direction": direction,
+            "target_direction": target,
+            "match": match,
+            "agreement": agreement,
+        }
+
+    @property
+    def label(self) -> str:
+        return f"immune_alignment({self.nfkb_source}, {self.cytokine_source})"
+
+
+class Bound(StrictModel):
+    """One side of a numeric flag: the deduction starts at `line` and is
+    maximal at `limit`. A limit below the line means lower-is-worse."""
+
+    line: Finite
+    limit: Finite
+
+    @model_validator(mode="after")
+    def _distinct(self):
+        if self.line == self.limit:
+            raise ValueError("flag line and limit must differ")
+        return self
+
+
+class FlagRule(StrictModel):
+    """One Stage 5 flag that deducts from its module's score. Numeric flags
+    use `bounds` (two for a two-sided flag, the nearer boundary counts):
+    deduction = clamp((value - line) / (2 * (limit - line)), 0, max_flag_deduction).
+    Categorical flags use `levels` (str(raw) -> deduction). `center` turns
+    the raw value into |raw - center| first."""
+
+    source: str
+    bounds: list[Bound] = Field(default_factory=list)
+    levels: dict[str, Unit] = Field(default_factory=dict)
+    center: Finite | None = None
+
+    @model_validator(mode="after")
+    def _validate_rule(self):
+        _validate_source_path(self.source)
+        if bool(self.bounds) == bool(self.levels):
+            raise ValueError("a flag rule needs exactly one of bounds or levels")
+        if self.levels and self.center is not None:
+            raise ValueError("center only applies to numeric flags")
+        return self
+
+
+class ModuleSpec(StrictModel):
+    """One ranking module. Weights are not stored here: every module's weight
+    comes from its N_k (see WeightAllocator). `measurement` None marks a
+    placeholder: no data yet, so it is always missing. Only always-on modules
+    carry `flags`."""
+
+    group: ModuleGroup
+    measurement: Measurement | ImmuneAlignment | None = None
+    flags: dict[str, FlagRule] = Field(default_factory=dict)
+
+    @model_validator(mode="after")
+    def _validate_group(self):
+        if self.group == "objective" and self.flags:
+            raise ValueError("an objective module carries no flags")
+        return self
+
+
+class BriefLink(StrictModel):
+    """A brief entry's link to an objective module and the N_k points it adds."""
+
+    module: ModuleName
+    points: Finite
+
+
+class ObjectiveWeightingConfig(StrictModel):
+    """How the brief turns into objective counts N_k.
+
+    - A desired function (`function_links`) adds its link's points to the
+      module, once per module however many of its functions are listed (the
+      largest link counts). Non-empty `pathogens` adds `pathogen_link` the same
+      way (several pathogens are still one reference).
+    - Each wound-context tag (`context_links`) adds its links' points. Tags stack.
+    Every always-on module gets N_k = the average N_k of the objective
+    modules (all of them, zeros included). weight_k = N_k / sum(N) over all
+    modules; an objective with N_k = 0 gets weight 0. An empty brief (or one
+    with no mapped entries) gives every objective N_k = `empty_brief_n_k`."""
+
+    empty_brief_n_k: Finite = 1.0
+    pathogen_link: BriefLink
+    function_links: dict[str, BriefLink]
+    context_links: dict[str, list[BriefLink]]
+
+
+def _links(points: float, *modules: ModuleName) -> list[BriefLink]:
+    return [BriefLink(module=m, points=points) for m in modules]
+
+
+DEFAULT_OBJECTIVE_WEIGHTING = ObjectiveWeightingConfig(
+    pathogen_link=BriefLink(module="antimicrobial", points=1.0),
+    function_links={
+        "angiogenesis": BriefLink(module="angiogenesis", points=1.0),
+        "anti_inflammatory": BriefLink(module="anti_inflammatory", points=1.0),
+        "immunomodulation": BriefLink(module="immunomodulation", points=0.5),
+        "antimicrobial": BriefLink(module="antimicrobial", points=1.0),
+        "cell_proliferation/migration": BriefLink(module="wound_closure", points=1.0),
+        "fibroblast_migration": BriefLink(module="wound_closure", points=1.0),
+        "keratinocyte_migration": BriefLink(module="wound_closure", points=1.0),
+        "collagen_remodeling": BriefLink(module="collagen_ecm", points=1.0),
+        "collagen_synthesis": BriefLink(module="collagen_ecm", points=1.0),
+    },
+    # high_exudate is a formulation/dressing concern and stays unmapped.
+    context_links={
+        "infected": _links(0.5, "antimicrobial", "immunomodulation"),
+        "biofilm_positive": _links(0.5, "antimicrobial", "immunomodulation"),
+        "necrotic": _links(0.5, "antimicrobial", "wound_closure", "immunomodulation"),
+        "chronic": _links(0.5, "anti_inflammatory", "immunomodulation", "wound_closure"),
+        "diabetic": _links(
+            0.5, "anti_inflammatory", "immunomodulation", "angiogenesis", "wound_closure"
+        ),
+        "high_glucose": _links(0.5, "anti_inflammatory"),
+        "ischemic": _links(0.5, "angiogenesis"),
+        "low_perfusion": _links(0.5, "angiogenesis"),
+        "acute": _links(0.5, "wound_closure"),
+        "surgical": _links(0.5, "wound_closure"),
+        "traumatic": _links(0.5, "wound_closure"),
+        "clean": _links(0.5, "wound_closure"),
+        "burn": _links(0.5, "anti_inflammatory"),
+        "radiation_induced": _links(0.5, "anti_inflammatory"),
+    },
+)
 
 
 class RankingConfig(StrictModel):
-    """The full Stage 11 policy: weights, modifiers, normalizers, and input
-    wiring, constructed in code. Validation enforces: baseline weights
-    sum to 1, are non-negative, unknown score names raise."""
+    """The full Stage 11 policy, constructed in code: the modules (measurement,
+    flags), how the brief gives each module its N_k, and the cap on a single
+    numeric flag's deduction. Validation enforces: exactly the ten modules,
+    unique flag names, brief mappings pointing only to objective modules."""
 
-    baseline_weights: dict[Component, Nonnegative]
-    modifier_rules: list[ModifierRule] = Field(
-        default_factory=lambda: [
-            *DEFAULT_DESIRED_FUNCTIONS_RULES,
-            *DEFAULT_WOUND_CONTEXT_RULES,
-        ]
-    )
-    normalizers: dict[Component, NormalizerConfig] = Field(default_factory=dict)
-    input_sources: InputSources = Field(default_factory=InputSources)
+    modules: dict[ModuleName, ModuleSpec]
+    objective_weighting: ObjectiveWeightingConfig = DEFAULT_OBJECTIVE_WEIGHTING
+    max_flag_deduction: Unit = 0.4  # ceiling for one numeric flag
 
     @model_validator(mode="after")
-    def _validate_weights(self):
-        if set(self.baseline_weights) != set(COMPONENTS):
-            raise ValueError(
-                "baseline_weights must contain exactly all nine components"
-            )
-        total = sum(self.baseline_weights.values())
-        if not math.isfinite(total) or not math.isclose(
-            total, 1.0, rel_tol=0, abs_tol=1e-9
-        ):
-            raise ValueError("baseline weights must sum to 1.0")
-        reasons = [rule.reason for rule in self.modifier_rules]
-        if len(reasons) != len(set(reasons)):
-            raise ValueError("modifier rule reasons must be unique")
+    def _validate_policy(self):
+        if set(self.modules) != set(MODULE_NAMES):
+            raise ValueError("modules must contain exactly all ten modules")
+        if not self.objective_modules or not self.always_on_modules:
+            raise ValueError("modules need at least one objective and one always-on module")
+        flag_names = [name for spec in self.modules.values() for name in spec.flags]
+        if len(flag_names) != len(set(flag_names)):
+            raise ValueError("flag names must be unique across modules")
+        cfg = self.objective_weighting
+        targets = {link.module for link in cfg.function_links.values()}
+        targets |= {link.module for links in cfg.context_links.values() for link in links}
+        targets.add(cfg.pathogen_link.module)
+        if any(self.modules[m].group != "objective" for m in targets):
+            raise ValueError("brief mappings may only point to objective modules")
         return self
 
+    @property
+    def objective_modules(self) -> tuple[ModuleName, ...]:
+        return tuple(m for m in MODULE_NAMES if self.modules[m].group == "objective")
+
+    @property
+    def always_on_modules(self) -> tuple[ModuleName, ...]:
+        return tuple(m for m in MODULE_NAMES if self.modules[m].group == "always_on")
+
+    @property
+    def flag_rules(self) -> dict[str, FlagRule]:
+        return {
+            name: rule for spec in self.modules.values() for name, rule in spec.flags.items()
+        }
+
 
 # ----------------------------------------------------------------------
-# ScoreNormalizer: converts a raw value into a [0,1] score, higher = better.
-# Missing values pass through untouched.
+# Built-in policy. Flag lines mirror Stage 5's DEFAULT_THRESHOLDS; limits
+# (where the deduction is maximal) are Stage 11's own.
 # ----------------------------------------------------------------------
-
 
 # Code-owned ranking policy; run configs cannot override it.
-BUILTIN_RANKING_POLICY = RankingConfig.model_validate(
-    {
-        "baseline_weights": {
-            "wound_closure": 0.22,
-            "antimicrobial": 0.18,
-            "immunomodulation": 0.13,
-            "angiogenesis": 0.12,
-            "collagen_ecm": 0.1,
-            "safety": 0.12,
-            "stability": 0.08,
-            "synthesis_feasibility": 0.03,
-            "mechanistic_confidence": 0.02,
-        },
-        "normalizers": {"safety": {"kind": "probability", "higher_is_better": False}},
-        "input_sources": {
-            "scores": {
-                "antimicrobial": "amp_probability",
-                "immunomodulation": "anti_inflammatory_probability",
-                "angiogenesis": "angiogenic_activity.angiogenic",
-                "wound_closure": "proliferation_migration.migration",
-                "safety": "cytotoxicity.score",
-                "stability": "cleavage_stability.score",
-                "synthesis_feasibility": "synthesis_feasibility.ml_feasibility_prior.score",
-                "mechanistic_confidence": "mechanism.structural_confidence",
-            }
-        },
-    }
+BUILTIN_RANKING_POLICY = RankingConfig(
+    modules={
+        # --- Objective modules: the brief weights them ---
+        "wound_closure": ModuleSpec(
+            group="objective",
+            measurement=Measurement(source="proliferation_migration.migration"),
+        ),
+        "antimicrobial": ModuleSpec(
+            group="objective",
+            measurement=Measurement(source="amp_probability"),
+        ),
+        "anti_inflammatory": ModuleSpec(
+            group="objective",
+            measurement=Measurement(source="anti_inflammatory_probability"),
+        ),
+        "immunomodulation": ModuleSpec(
+            group="objective",
+            measurement=ImmuneAlignment(
+                nfkb_source="mechanism.pathway_involvement.NF_KB.probability",
+                cytokine_source="mechanism.pathway_involvement.CYTOKINE_MACROPHAGE.probability",
+                # d* per tag (+ = calmer, - = some immune response is useful); the minimum across tags wins.
+                context_targets={
+                    "diabetic": 0.7,
+                    "high_glucose": 0.7,
+                    "chronic": 0.7,
+                    "ischemic": 0.5,
+                    "burn": 0.4,
+                    "low_perfusion": 0.4,
+                    "surgical": 0.3,
+                    "traumatic": 0.1,
+                    "acute": 0.0,
+                    "biofilm_positive": 0.0,
+                    "necrotic": 0.0,
+                    "infected": -0.1,
+                },
+            ),
+        ),
+        "angiogenesis": ModuleSpec(
+            group="objective",
+            measurement=Measurement(source="angiogenic_activity.angiogenic"),
+        ),
+        # Placeholder: no measurement yet, so always missing.
+        "collagen_ecm": ModuleSpec(group="objective"),
+        # --- Always-on modules: N_k = average of the objectives' N_k, carry the flags ---
+        "safety": ModuleSpec(
+            group="always_on",
+            measurement=Measurement(
+                source="cytotoxicity.score",
+                normalizer=NormalizerConfig(higher_is_better=False),  # 1 - cytotoxicity
+            ),
+            flags={
+                "net_charge": FlagRule(
+                    source="net_charge",
+                    bounds=[
+                        Bound(line=-5.0, limit=-10.0),
+                        Bound(line=9.0, limit=14.0),
+                    ],
+                ),
+                "hydrophobic_moment": FlagRule(
+                    source="hydrophobic_moment",
+                    bounds=[Bound(line=0.5, limit=1.0)],
+                ),
+                "amphipathicity": FlagRule(
+                    source="amphipathicity",
+                    bounds=[Bound(line=0.8, limit=1.0)],
+                ),
+            },
+        ),
+        "stability": ModuleSpec(
+            group="always_on",
+            measurement=Measurement(source="cleavage_stability.score"),
+            flags={
+                "oxidation_risk": FlagRule(
+                    source="oxidation_risk.risk_category",
+                    levels={"medium": 0.2, "high": 0.4},
+                ),
+                "deamidation_risk": FlagRule(
+                    source="deamidation_risk.risk_category",
+                    levels={"medium": 0.2, "high": 0.4},
+                ),
+                "instability_index": FlagRule(
+                    source="instability_index",
+                    bounds=[Bound(line=40.0, limit=100.0)],
+                ),
+                "aggregation_tendency": FlagRule(
+                    source="aggregation_tendency.score",
+                    bounds=[Bound(line=0.6, limit=0.7)],
+                ),
+                "solubility": FlagRule(
+                    source="solubility.score",
+                    bounds=[Bound(line=0.4, limit=0.0)],
+                ),
+                "isoelectric_point": FlagRule(
+                    source="isoelectric_point",
+                    center=7.4,
+                    bounds=[Bound(line=0.5, limit=0.0)],
+                ),
+            },
+        ),
+        "synthesis_feasibility": ModuleSpec(
+            group="always_on",
+            measurement=Measurement(
+                source="synthesis_feasibility.ml_feasibility_prior.score"
+            ),
+            flags={
+                "disulfide_complexity": FlagRule(
+                    source="disulfide_complexity.category",
+                    levels={"flag": 0.2, "high": 0.4},
+                ),
+            },
+        ),
+        "mechanistic_confidence": ModuleSpec(
+            group="always_on",
+            measurement=Measurement(source="mechanism.structural_confidence"),
+            flags={
+                # Stage 5's secondary-structure check: fold does not fit the mechanism.
+                "secondary_structure_mechanism": FlagRule(
+                    source="secondary_structure_consistency.mechanism_consistent",
+                    levels={"False": 0.2},
+                ),
+                # Stage 5's secondary-structure check: low mean s4pred confidence.
+                "secondary_structure_confidence": FlagRule(
+                    source="secondary_structure_consistency.mean_confidence",
+                    bounds=[Bound(line=0.7, limit=0.5)],
+                ),
+            },
+        ),
+    },
 )
+
+
+# ----------------------------------------------------------------------
+# ScoreNormalizer: converts a raw measurement into a [0,1] score, higher =
+# better. Missing values pass through untouched.
+# ----------------------------------------------------------------------
 
 
 class ScoreNormalizer:
@@ -422,107 +579,229 @@ class ScoreNormalizer:
 
 
 # ----------------------------------------------------------------------
-# WeightAdjuster.
+# ApplyFlagDeductions: a module's flags -> its total deduction.
 # ----------------------------------------------------------------------
 
 
-class WeightAdjuster:
-    """baseline_weights * matching modifiers, renormalized to sum to 1.0:
-    adjusted_weight_i = baseline_weight_i * modifier_i, then
-    normalized_weight_i = adjusted_weight_i / sum(all adjusted weights)."""
+class ApplyFlagDeductions:
+    """Deductions on one module add: score = max(0, normalized - sum). Flags
+    are deducted from the score, never from the weight. Nothing is rejected."""
+
+    def __init__(self, max_flag_deduction: float):
+        self.max_flag_deduction = max_flag_deduction
+
+    def _deduction(self, rule: FlagRule, raw: Any) -> float:
+        if rule.levels:
+            return rule.levels.get(str(raw), 0.0)
+        if isinstance(raw, bool) or not isinstance(raw, (int, float)):
+            raise ValueError(f"flag value {raw!r} is not numeric")
+        if not math.isfinite(raw):
+            raise ValueError("flag value must be finite")
+        value = abs(raw - rule.center) if rule.center is not None else raw
+        return max(
+            min(
+                self.max_flag_deduction,
+                max(0.0, (value - b.line) / (2.0 * (b.limit - b.line))),
+            )
+            for b in rule.bounds
+        )
+
+    def evaluate(
+        self, flags: dict[str, FlagRule], flag_values: dict[str, Any]
+    ) -> tuple[list[FlagDeductionAudit], float]:
+        """Returns the flags that deducted and the module's total deduction.
+        Flags with no raw value are skipped."""
+        fired: list[FlagDeductionAudit] = []
+        for name, rule in flags.items():
+            raw = flag_values.get(name)
+            if raw is None:
+                continue
+            deduction = self._deduction(rule, raw)
+            if deduction > 0:
+                fired.append(
+                    FlagDeductionAudit(flag=name, raw_value=raw, deduction=deduction)
+                )
+        total = min(1.0, math.fsum(f.deduction for f in fired))
+        return fired, total
+
+
+# ----------------------------------------------------------------------
+# WeightAllocator: brief -> module weights.
+# ----------------------------------------------------------------------
+
+
+class ModuleWeight(StrictModel):
+    """A module's N_k and its weight before missing-evidence renormalization."""
+
+    activated: bool
+    n_k: float
+    references: list[str]
+    implications: list[str]
+    requested: bool
+    nominal_weight: float
+
+
+class WeightAllocator:
+    """Each objective module accumulates N_k from the brief (see
+    ObjectiveWeightingConfig). Each always-on module gets N_k = the average
+    N_k of the objective modules. weight_k = N_k / sum(N) over all modules;
+    N_k = 0 means weight 0 and the module is not activated. If no objective
+    has any N_k (empty brief), every objective gets N_k = empty_brief_n_k."""
 
     def __init__(self, config: RankingConfig):
         self.config = config
 
-    def adjust(
-        self, stage1: ProductObjective
-    ) -> tuple[dict[Component, float], list[WeightAdjustment]]:
-        weights: dict[Component, float] = dict(self.config.baseline_weights)
-        adjustments: list[WeightAdjustment] = []
+    def _counts(
+        self, brief: Brief | None
+    ) -> tuple[
+        dict[ModuleName, list[str]], dict[ModuleName, float], dict[ModuleName, list[tuple[str, float]]]
+    ]:
+        cfg = self.config.objective_weighting
+        references: dict[ModuleName, list[str]] = {}
+        reference_points: dict[ModuleName, float] = {}
+        implications: dict[ModuleName, list[tuple[str, float]]] = {}
+        if brief is None:
+            return references, reference_points, implications
+        for function in brief.desired_functions:
+            link = cfg.function_links.get(function)
+            if link is not None:
+                references.setdefault(link.module, []).append(function)
+                reference_points[link.module] = max(reference_points.get(link.module, 0.0), link.points)
+        if brief.pathogens:
+            link = cfg.pathogen_link
+            references.setdefault(link.module, []).extend(brief.pathogens)
+            reference_points[link.module] = max(reference_points.get(link.module, 0.0), link.points)
+        for tag in brief.wound_context:
+            for link in cfg.context_links.get(tag, []):
+                implications.setdefault(link.module, []).append((tag, link.points))
+        return references, reference_points, implications
 
-        for rule in self.config.modifier_rules:
-            values = (
-                stage1.desired_functions
-                if rule.field == "desired_functions"
-                else stage1.wound_context
-            )
-            if not rule.matches(values):
-                continue
-            for component, modifier in rule.modifiers.items():
-                weights[component] *= modifier
-                adjustments.append(
-                    WeightAdjustment(
-                        component=component, reason=rule.reason, modifier=modifier
-                    )
-                )
-
-        total = math.fsum(weights.values())
-        if total <= 0:
-            raise ValueError("all adjusted weights collapsed to zero or below")
-        normalized: dict[Component, float] = {
-            component: weights[component] / total for component in COMPONENTS
+    def allocate(self, brief: Brief | None) -> dict[ModuleName, ModuleWeight]:
+        cfg = self.config.objective_weighting
+        references, reference_points, implications = self._counts(brief)
+        objectives = self.config.objective_modules
+        n_k: dict[ModuleName, float] = {
+            m: reference_points.get(m, 0.0) + math.fsum(p for _, p in implications.get(m, []))
+            for m in objectives
         }
-        return normalized, adjustments
+        if math.fsum(n_k.values()) == 0:  # empty brief: objectives count equally
+            n_k = {m: cfg.empty_brief_n_k for m in objectives}
+            references, implications = {}, {}
+        average = math.fsum(n_k.values()) / len(objectives)
+        for module in self.config.always_on_modules:
+            n_k[module] = average
+        total_n = math.fsum(n_k.values())
+
+        return {
+            module: ModuleWeight(
+                activated=n_k[module] > 0,
+                n_k=n_k[module],
+                references=references.get(module, []),
+                implications=[tag for tag, _ in implications.get(module, [])],
+                requested=module in references,
+                nominal_weight=n_k[module] / total_n,
+            )
+            for module in MODULE_NAMES
+        }
 
 
 # ----------------------------------------------------------------------
-# CandidateScorer: missing-value handling, final score. No gating -- every
-# candidate is scored; only zero evidence makes a rank impossible.
+# CandidateScorer: per-module score, missing-value handling, final score. No
+# gating -- every candidate is scored; only zero usable evidence makes a rank
+# impossible.
 # ----------------------------------------------------------------------
 
 
 class CandidateScorer:
     def __init__(self, config: RankingConfig):
         self.config = config
-        self.adjuster = WeightAdjuster(config)
+        self.deductions = ApplyFlagDeductions(config.max_flag_deduction)
+        self.allocator = WeightAllocator(config)
         self.normalizers = {
-            component: ScoreNormalizer(
-                config.normalizers.get(component, NormalizerConfig())
+            name: ScoreNormalizer(
+                spec.measurement.normalizer
+                if isinstance(spec.measurement, Measurement)
+                else NormalizerConfig()
             )
-            for component in COMPONENTS
+            for name, spec in config.modules.items()
         }
 
     def score(self, candidate: RankingInput) -> RankingResult:
-        adjusted_weights, adjustments = self.adjuster.adjust(candidate.stage1)
+        allocation = self.allocator.allocate(candidate.brief)
 
-        normalized: dict[Component, float | None] = {
-            component: self.normalizers[component].normalize(
-                getattr(candidate.scores, component)
-            )
-            for component in COMPONENTS
-        }
-        missing: list[Component] = [
-            component for component in COMPONENTS if normalized[component] is None
-        ]
+        # Per module: normalize the measurement, then deduct its flags.
+        raw: dict[ModuleName, float | None] = {}
+        detail: dict[ModuleName, dict[str, float] | None] = {}
+        normalized: dict[ModuleName, float | None] = {}
+        fired: dict[ModuleName, list[FlagDeductionAudit]] = {}
+        total_deduction: dict[ModuleName, float] = {}
+        score: dict[ModuleName, float | None] = {}
+        for name in MODULE_NAMES:
+            spec = self.config.modules[name]
+            if isinstance(spec.measurement, ImmuneAlignment):
+                raw[name], detail[name] = spec.measurement.evaluate(
+                    candidate.immune_inputs, candidate.brief.wound_context if candidate.brief else []
+                )
+            else:
+                raw[name], detail[name] = candidate.measurements.get(name), None
+            value = self.normalizers[name].normalize(raw[name])
+            normalized[name] = value
+            if value is None:
+                # Flags on a missing module are ignored (see docs/TODO.md).
+                fired[name], total_deduction[name], score[name] = [], 0.0, None
+            else:
+                fired[name], total_deduction[name] = self.deductions.evaluate(
+                    spec.flags, candidate.flag_values
+                )
+                score[name] = max(0.0, value - total_deduction[name])
 
-        # evidence_coverage: fraction of the intended weighted evidence that
-        # was actually available (e.g. 0.90 = 90% present).
-        evidence_coverage = min(
-            1.0,
-            math.fsum(
-                adjusted_weights[c] for c in COMPONENTS if normalized[c] is not None
-            ),
-        )
-        status = "insufficient_evidence" if evidence_coverage == 0 else "ranked"
+        activated = [m for m in MODULE_NAMES if allocation[m].activated]
+        scored = [m for m in activated if score[m] is not None]
+        missing: list[ModuleName] = [m for m in activated if score[m] is None]
 
-        # Renormalize remaining weights around only the available
-        # components, then compute each component's literal contribution so
-        # contributions sum to final_score exactly.
-        contributions: dict[Component, ComponentContribution] = {}
-        for component in COMPONENTS:
-            component_score = normalized[component]
+        # evidence_coverage: activated modules that have a score / activated modules.
+        evidence_coverage = len(scored) / len(activated)
+        status = "insufficient_evidence" if not scored else "ranked"
+
+        # Missing scores are excluded and the remaining weights renormalized,
+        # so each module's contribution is literal and the contributions sum
+        # to final_score exactly.
+        scored_weight = math.fsum(allocation[m].nominal_weight for m in scored)
+        modules: dict[ModuleName, ModuleResult] = {}
+        for name in MODULE_NAMES:
+            spec = self.config.modules[name]
+            alloc = allocation[name]
+            module_score = score[name]
             weight = (
-                adjusted_weights[component] / evidence_coverage
-                if component_score is not None and evidence_coverage
+                min(1.0, alloc.nominal_weight / scored_weight)
+                if name in scored and scored_weight
                 else 0.0
             )
-            weight = min(1.0, weight)
-            contributions[component] = ComponentContribution(
-                score=component_score,
+            modules[name] = ModuleResult(
+                group=spec.group,
+                activated=alloc.activated,
+                measurement_source=(
+                    None
+                    if spec.measurement is None
+                    else spec.measurement.label
+                    if isinstance(spec.measurement, ImmuneAlignment)
+                    else spec.measurement.source
+                ),
+                raw_measurement=raw[name],
+                measurement_detail=detail[name],
+                normalized_score=normalized[name],
+                flags=fired[name],
+                total_deduction=total_deduction[name],
+                score=module_score,
+                n_k=alloc.n_k,
+                references=alloc.references,
+                implications=alloc.implications,
+                requested=alloc.requested,
+                nominal_weight=alloc.nominal_weight,
                 weight=weight,
                 contribution=(
-                    weight * component_score
-                    if component_score is not None and evidence_coverage
+                    weight * module_score
+                    if name in scored and module_score is not None
                     else None
                 ),
             )
@@ -530,24 +809,19 @@ class CandidateScorer:
         final_score = None
         if status == "ranked":
             final_score = min(
-                1.0, math.fsum(c.contribution or 0.0 for c in contributions.values())
+                1.0, math.fsum(m.contribution or 0.0 for m in modules.values())
             )
 
         return RankingResult(
             candidate_id=candidate.candidate_id,
             sequence=candidate.sequence,
-            stage1=candidate.stage1.model_copy(deep=True),
             status=status,
             final_score=final_score,
             evidence_coverage=evidence_coverage,
             incomplete_evidence=bool(missing),
-            original_component_scores=candidate.scores.model_copy(deep=True),
-            normalized_scores=ComponentScores(**normalized),
-            baseline_weights=dict(self.config.baseline_weights),
-            adjusted_weights=adjusted_weights,
-            component_contributions=contributions,
-            missing_components=missing,
-            weight_adjustments=adjustments,
+            modules=modules,
+            missing_modules=missing,
+            requested_modules_without_data=[m for m in missing if allocation[m].requested],
         )
 
 
@@ -557,27 +831,16 @@ class CandidateScorer:
 
 
 class CandidateRanker:
-    """Sorts ranked candidates by final_score descending; ties broken by
-    higher safety, then higher evidence_coverage, then higher stability,
-    then candidate_id ascending."""
+    """Sorts ranked candidates by final_score descending; ties break on higher
+    evidence_coverage, then higher penalized stability, then candidate_id."""
 
     @staticmethod
-    def _tie_break_key(result: RankingResult) -> tuple[float, float, float, float, str]:
-        safety: float = (
-            result.normalized_scores.safety
-            if result.normalized_scores.safety is not None
-            else -1.0
-        )
-        stability: float = (
-            result.normalized_scores.stability
-            if result.normalized_scores.stability is not None
-            else -1.0
-        )
+    def _tie_break_key(result: RankingResult) -> tuple[float, float, float, str]:
+        stability = result.modules["stability"].score
         return (
             -(result.final_score or 0.0),
-            -safety,
             -result.evidence_coverage,
-            -stability,
+            -(stability if stability is not None else -1.0),
             result.candidate_id,
         )
 
@@ -641,11 +904,12 @@ class Stage11(CandidateStage):
                 "Stage 11 ranking policy is built into the code; parameters are not accepted"
             )
         policy = BUILTIN_RANKING_POLICY.model_copy(deep=True)
-        stage1 = ProductObjective(
-            wound_context=ctx.brief.wound_context if ctx.brief else [],
-            desired_functions=ctx.brief.desired_functions if ctx.brief else [],
-        )
 
+        flag_rules = policy.flag_rules
+        immune = next(
+            (s.measurement for s in policy.modules.values() if isinstance(s.measurement, ImmuneAlignment)),
+            None,
+        )
         inputs = []
         for candidate in candidates:
             if not candidate.sequence:
@@ -654,13 +918,22 @@ class Stage11(CandidateStage):
                 RankingInput(
                     candidate_id=candidate.id,
                     sequence=candidate.sequence,
-                    stage1=stage1,
-                    scores=ComponentScores(
-                        **{
-                            component: _read_path(candidate.predictions, path)
-                            for component, path in policy.input_sources.scores.items()
-                        }
-                    ),
+                    brief=ctx.brief,
+                    measurements={
+                        name: _read_path(candidate.predictions, spec.measurement.source)
+                        for name, spec in policy.modules.items()
+                        if isinstance(spec.measurement, Measurement)
+                    },
+                    immune_inputs=ImmuneInputs(
+                        nfkb=_read_path(candidate.predictions, immune.nfkb_source),
+                        cytokine=_read_path(candidate.predictions, immune.cytokine_source),
+                    )
+                    if immune
+                    else ImmuneInputs(),
+                    flag_values={
+                        name: _read_path(candidate.predictions, rule.source)
+                        for name, rule in flag_rules.items()
+                    },
                 )
             )
 
@@ -669,9 +942,6 @@ class Stage11(CandidateStage):
         by_id = {candidate.id: candidate for candidate in candidates}
         ordered = batch.ranked_candidates + batch.insufficient_evidence_candidates
         for result in ordered:
-            result_dict = result.model_dump(mode="json")
-            result_dict.pop("candidate_id", None)
-            result_dict.pop("sequence", None)
             by_id[result.candidate_id].predictions["ranking"] = {
                 **result.model_dump(mode="json"),
                 "configuration": batch.configuration,

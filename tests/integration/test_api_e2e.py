@@ -129,6 +129,31 @@ def test_status_is_pending_before_worker_writes_results(service):
     assert body["status"] == "pending" and body["stage"] == "pending"
 
 
+@pytest.mark.parametrize(
+    "state", ["JOB_STATE_FAILED", "JOB_STATE_CANCELLED", "JOB_STATE_EXPIRED"]
+)
+def test_a_dead_worker_still_reports_pending_and_only_vertex_state_tells_the_truth(
+    service, state
+):
+    """THIS TEST DOCUMENTS A DEFECT, it does not endorse it.
+
+    `status` is derived only from the worker's results.json. A worker that dies without writing
+    one leaves no file, so the API answers "pending" -- indefinitely, for a job Vertex has
+    already given up on. The test above pins the benign case (no results yet, early in a healthy
+    run); this pins the case that actually misleads a reader, so that the day `status` learns
+    about `vertex_state` this test fails and has to be rewritten deliberately.
+
+    Until then, `vertex_state` is the only field that tells the truth. See docs/BASELINE.md.
+    """
+    client, sdk, job, *_ = service
+    job.state.name = state
+    body = client.get(f"/api/v1/jobs/{JOB}/status").json()
+    assert body["vertex_state"] == state
+    assert body["status"] == "pending", (
+        "status now reflects the Vertex state -- good. Update this test and docs/BASELINE.md."
+    )
+
+
 def test_invalid_input_does_not_submit(service):
     client, sdk, job, objects, calls, payload = service
     payload["stages"].pop("s01_therapeutic_product_brief")

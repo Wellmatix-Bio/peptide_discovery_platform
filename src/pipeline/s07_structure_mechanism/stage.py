@@ -305,6 +305,14 @@ class Stage7(CandidateStage):
         self, structure: dict, pathway_involvement: dict, thresholds: dict
     ) -> dict:
         """Combines structure and pathway evidence into the Stage 7 MoA summary (CLAUDE.md's MoA-map output)."""
+        # The v2 model's probability is P(ACTIVATOR), not P(involved): its training set dropped
+        # the label-0 rows, so it cannot express "this peptide does not touch this pathway"
+        # (model_store/pathway_mapping_predictor_v2/README.md). Every label therefore gets a
+        # direction, and the only honest gate on it is confidence.
+        #
+        # A label between the two cutoffs is UNDETERMINED and is reported as such. It used to
+        # fall out of both lists and simply vanish, which reads as "not relevant" when it
+        # actually means "the model could not call it".
         cutoff = thresholds["pathway_engagement_min_probability"]
         activated_pathways = [
             label for label, result in pathway_involvement.items() if result["probability"] >= cutoff
@@ -313,6 +321,11 @@ class Stage7(CandidateStage):
             label
             for label, result in pathway_involvement.items()
             if result["probability"] <= 1.0 - cutoff and label not in activated_pathways
+        ]
+        undetermined_pathways = [
+            label
+            for label in pathway_involvement
+            if label not in activated_pathways and label not in inhibited_pathways
         ]
         functions_supported = sorted(
             {
@@ -326,13 +339,18 @@ class Stage7(CandidateStage):
             "pathway_involvement": pathway_involvement,
             "activated_pathways": activated_pathways,
             "inhibited_pathways": inhibited_pathways,
+            "undetermined_pathways": undetermined_pathways,
             "functions_supported": functions_supported,
             "structural_confidence": structure["confidence"]["mean_plddt"],
             "dominant_secondary_structure": structure["secondary_structure"][
                 "dominant_class"
             ],
             "summary": self._render_summary(
-                structure, activated_pathways, inhibited_pathways, functions_supported
+                structure,
+                activated_pathways,
+                inhibited_pathways,
+                undetermined_pathways,
+                functions_supported,
             ),
         }
 
@@ -341,6 +359,7 @@ class Stage7(CandidateStage):
         structure: dict,
         activated_pathways: list[str],
         inhibited_pathways: list[str],
+        undetermined_pathways: list[str],
         functions_supported: list[str],
     ) -> str:
         confidence = structure["confidence"]["mean_plddt"]
@@ -350,8 +369,12 @@ class Stage7(CandidateStage):
         function_text = (
             ", ".join(functions_supported) if functions_supported else "none"
         )
+        undetermined_text = (
+            ", ".join(undetermined_pathways) if undetermined_pathways else "none"
+        )
         return (
             f"Structure: mean pLDDT {confidence:.2f}, dominant fold {ss_class}. "
             f"Pathways activated: {activated_text}. Pathways inhibited: {inhibited_text}. "
+            f"Pathways the model could not call: {undetermined_text}. "
             f"Target functions supported: {function_text}."
         )

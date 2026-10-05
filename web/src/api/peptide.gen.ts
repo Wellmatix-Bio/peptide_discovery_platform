@@ -226,6 +226,8 @@ export interface components {
             sequence?: string | null;
             /** Solubility */
             solubility?: number | null;
+            /** Undetermined Pathways */
+            undetermined_pathways?: string[] | null;
         };
         /** ComponentStats */
         ComponentStats: {

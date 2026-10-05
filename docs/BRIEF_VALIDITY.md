@@ -71,3 +71,30 @@ biofilm, haemostasis, MRSA. As deployed, the API accepts none of them. Either th
 briefs describe an intended scope the request schema has not caught up with, or
 the schema is correct and the briefs are aspirational. The frontend cannot tell
 which, and has assumed neither.
+
+---
+
+## Re-measured after PR #6 (2026-10-05)
+
+**1 of 33 briefs validates** — `TC-33_denovo_anti_inflammatory_immunomodulatory_shortlist.json`,
+added by that PR. It is the first example brief in the repository that is a usable API request.
+
+The other 32 still fail, and the count of allowed `wound_context` values went **15 → 12**: PR #6
+removed `clean`, `high_exudate` and `radiation_induced` from the vocabulary, deliberately, with
+the reasoning recorded inline in `src/schemas/stage_configs.py` (`high_exudate` affects dressing
+choice rather than any model the pipeline runs; `radiation_induced` had the thinnest mappings).
+
+That makes two more briefs invalid than before — `clean` appears in 5 and `high_exudate` in 5 —
+but it is not the main cause. **26 of 33 briefs use at least one context the API has never
+accepted**, including `contaminated`, `moist`, `inflamed`, `high_protease` and `bleeding`. The
+narrowing made a long-standing mismatch slightly worse; it did not create it.
+
+Reproduce the count:
+
+```bash
+PYTHONPATH=src .venv/bin/python scripts/check_briefs.py
+```
+
+The three example briefs shipped in the web app (`web/src/runs/examples.ts`) **were** affected and
+have been corrected; they are validated by the generated types at compile time, which is how the
+breakage surfaced.

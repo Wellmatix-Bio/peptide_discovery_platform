@@ -302,6 +302,9 @@ class CandidateResponse(BaseModel):
     activated_pathways: list[str] | None = (
         None  # 'mechanism.activated_pathways' key in predictions
     )
+    undetermined_pathways: list[str] | None = (
+        None  # 'mechanism.undetermined_pathways' key in predictions
+    )
     inhibited_pathways: list[str] | None = (
         None  # 'mechanism.inhibited_pathways' key in predictions
     )
@@ -354,6 +357,7 @@ def _candidate_response(candidate: dict) -> CandidateResponse:
         pmbic=nested("mbic", "pmbic") or {},
         activated_pathways=nested("mechanism", "activated_pathways"),
         inhibited_pathways=nested("mechanism", "inhibited_pathways"),
+        undetermined_pathways=nested("mechanism", "undetermined_pathways"),
     )
 
 

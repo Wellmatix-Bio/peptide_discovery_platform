@@ -416,6 +416,20 @@
               }
             ],
             "title": "Solubility"
+          },
+          "undetermined_pathways": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Undetermined Pathways"
           }
         },
         "required": [

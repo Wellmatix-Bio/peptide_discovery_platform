@@ -98,6 +98,13 @@ function Candidate({
       pathway,
       direction: "inhibits" as const,
     })),
+    // Named rather than omitted. The model assigns a direction to every pathway, so a label
+    // missing from both lists means it could not be called with confidence -- not that the
+    // peptide leaves that pathway alone.
+    ...(candidate.undetermined_pathways ?? []).map((pathway) => ({
+      pathway,
+      direction: "unclear" as const,
+    })),
   ];
   return (
     <div className="cand">

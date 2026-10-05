@@ -323,3 +323,46 @@ one still reports `"pending"` forever** while `vertex_state` reads `JOB_STATE_FA
 test pins the benign case — no results yet, early in a healthy run — and there is still no test
 for the dead-worker case, which is the one that misleads a reader. `vertex_state` remains the
 field that tells the truth.
+
+---
+
+# Update: stage 7 pathway honesty, and a test for the dead-worker case
+
+**220 passed / 3 failed / 0 collection errors.** The 9 extra passes are 6 stage-7 tests and 3
+`test_api_e2e` parametrisations added below. The 3 failures are unchanged and still need model
+weights.
+
+## Stage 7 reported a coin flip as a finding
+
+The v2 pathway predictor's probability is **P(activator)**, not P(involved) — its training set
+dropped the label-0 rows, so, as its own README says, *"a low value means 'inhibitor', not 'not
+involved'"*. The model cannot express "this peptide does not touch this pathway". Every one of the
+9 labels is assigned a direction, and confidence is the only honest gate available.
+
+Two consequences, both now addressed or recorded:
+
+1. **A label between the two cutoffs used to vanish from the output entirely**, appearing in
+   neither `activated_pathways` nor `inhibited_pathways`. A reader takes that as "not relevant"
+   when it means "the model could not call it". There is now an `undetermined_pathways` list,
+   surfaced through the API and named in the run view, and the rendered summary says which
+   pathways could not be called. `functions_supported` is still derived from activated pathways
+   only, so an undetermined label never becomes evidence for a desired function.
+
+2. **At the shipped default of `pathway_engagement_min_probability: 0.5`, there is no undetermined
+   band at all.** Activated is `p >= 0.5` and inhibited is `p <= 0.5`, so the two meet and every
+   pathway is called with a direction — a probability of 0.501 is reported as definitely
+   activating. `test_at_the_default_cutoff_nothing_is_undetermined` documents this rather than
+   asserting it is desirable.
+
+   **Raising that default is a modelling decision and has not been made here**, because it changes
+   every run's output. At 0.7 the same nine labels resolve to 2 activated, 2 inhibited and 5
+   undetermined. Someone who knows the model's calibration should choose the number.
+
+## A test for the case that misleads
+
+`test_status_is_pending_before_worker_writes_results` pins the benign case. The case worth pinning
+is the other one: a worker that dies writes no `results.json`, so `status` reads `"pending"`
+forever while `vertex_state` reads `JOB_STATE_FAILED`.
+`test_a_dead_worker_still_reports_pending_and_only_vertex_state_tells_the_truth` now documents
+that for the three terminal states, and fails loudly — with an instruction to update this document
+— on the day `status` learns about `vertex_state`.

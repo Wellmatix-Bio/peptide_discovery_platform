@@ -136,8 +136,11 @@ site/
 # stay tracked via the negation below, as before.
 !docs/**/*.pdf
 **/rationale.md
-scripts/
-/scripts/test.py
+# scripts/ is NOT ignored. It was, unanchored, which matches a directory of that name at ANY
+# depth -- so it silently excluded web/scripts/, whose openapi.py CI runs, and that cost a red
+# build once already. The directory holds two tracked project scripts and no scratch files; if
+# you need somewhere for throwaway work, use a path that is already ignored rather than
+# re-adding a rule that reaches further than it looks.
 
 # --------- Under development / experimental ----------
 backend/api_stage/

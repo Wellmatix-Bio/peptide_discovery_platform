@@ -87,6 +87,18 @@ function Candidate({
   tiedWith: number;
 }) {
   const [open, setOpen] = useState(false);
+  // Flattened from the API's two separate lists, keeping the direction attached to each pathway.
+  // Nothing is computed here that the API did not report: a pathway appears only if it named it.
+  const pathways = [
+    ...(candidate.activated_pathways ?? []).map((pathway) => ({
+      pathway,
+      direction: "activates" as const,
+    })),
+    ...(candidate.inhibited_pathways ?? []).map((pathway) => ({
+      pathway,
+      direction: "inhibits" as const,
+    })),
+  ];
   return (
     <div className="cand">
       <div className="cand-top">
@@ -123,14 +135,18 @@ function Candidate({
               {candidate.id}
             </span>
           </div>
-          {(candidate.engaged_pathways ?? []).length > 0 || tiedWith > 1 ? (
+          {pathways.length > 0 || tiedWith > 1 ? (
             <div className="cand-sub">
               {tiedWith > 1 ? (
                 <Pill tone="warn">tied &mdash; {tiedWith} share this position</Pill>
               ) : null}
-              {(candidate.engaged_pathways ?? []).map((pathway) => (
-                <span className="chip" key={pathway}>
-                  {words(pathway)}
+              {/* The API reports activation and inhibition separately (pathway predictor v2).
+                  They are rendered with their direction rather than as one neutral list: a
+                  pathway the peptide INHIBITS shown identically to one it ACTIVATES would read
+                  as the opposite of what the model said. */}
+              {pathways.map(({ pathway, direction }) => (
+                <span className="chip" key={`${direction}:${pathway}`}>
+                  {direction} {words(pathway)}
                 </span>
               ))}
             </div>

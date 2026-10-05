@@ -287,3 +287,39 @@ failure.
 
 The lesson is the same one `docs/BASELINE.md` already records about CI's environment: a guard
 written around one instance of a mistake does not cover the mistake.
+
+---
+
+# Update: after merging the ranking and pathway-predictor work (PR #6)
+
+**211 passed / 3 failed / 0 collection errors.**
+
+| | Before | After |
+|---|---|---|
+| passed | 105 | 211 |
+| failed | 7 | 3 |
+| collection errors | 0 | 0 |
+
+The 106 extra passes are the stage-11 and stage-7 tests that arrived with PR #6 —
+`test_s11_dynamic_weights.py`, `test_s11_flag_deductions.py`, `test_s11_immunomodulation.py`, a
+rewritten `test_s11_ranking.py`, and additions to `test_s07_structure_mechanism.py`.
+
+**The 4 failures that disappeared are a genuine fix, not a weakened assertion.** They were the
+stale `test_status_queries_vertex` expectations recorded above. PR #6 rewrote them to describe
+what `api.py` actually does: the test now writes a `results.json` and asserts `status` is read
+from it, and a new `test_status_is_pending_before_worker_writes_results` pins the case where the
+worker has not written one yet.
+
+## The 3 remaining failures
+
+All in `tests/unit/pipeline/test_s04_generation.py`, all environmental: they need
+`model_store/model_weights/esm2_t30_150M`, which is gitignored and synced at run time. A clean
+checkout and CI never have it. Unchanged in cause from the baseline recorded above.
+
+## What this does NOT fix
+
+`status` still derives only from the worker's `results.json`. **A worker that dies without writing
+one still reports `"pending"` forever** while `vertex_state` reads `JOB_STATE_FAILED`. The new
+test pins the benign case — no results yet, early in a healthy run — and there is still no test
+for the dead-worker case, which is the one that misleads a reader. `vertex_state` remains the
+field that tells the truth.

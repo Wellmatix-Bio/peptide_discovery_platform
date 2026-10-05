@@ -1,17 +1,37 @@
+# Dependency update policy.
+#
+# THE GOAL IS A SMALL NUMBER OF REVIEWABLE PRs, NOT A LARGE NUMBER OF PRECISE ONES.
+# The first version of this file grouped only the dependencies that obviously move together and
+# left everything else ungrouped -- which means one PR per package. With 29 pip dependencies and
+# 15 npm ones that produced 13 open PRs in a week, and 13 PRs nobody reviews is worse for security
+# than 4 that somebody does.
+#
+# Every ecosystem below therefore ends with a catch-all `rest` group. Dependabot assigns a
+# dependency to the FIRST group whose patterns match, so the named groups above it still win and
+# `rest` collects the remainder into one PR instead of twenty.
+#
+# SECURITY UPDATES ARE NOT AFFECTED by open-pull-requests-limit and are raised separately, so
+# tightening the limits here does not delay a vulnerability fix.
+
 version: 2
 updates:
   - package-ecosystem: pip
     directory: "/"
     schedule:
-      interval: weekly
-    open-pull-requests-limit: 5
+      # Monthly, not weekly. Grouping fixes how MANY PRs arrive; cadence fixes how OFTEN. Security
+      # updates ignore this schedule and are raised as soon as an advisory lands, so a slower
+      # version-update cadence costs nothing in exposure.
+      interval: monthly
+    open-pull-requests-limit: 3
     groups:
-      # One PR per group rather than per package: the ML stack moves together and reviewing
-      # torch, transformers and accelerate separately wastes everyone's time.
+      # The ML stack moves together and a torch bump without the matching transformers bump is
+      # usually not what you want. Reviewing them separately wastes everyone's time.
       ml:
         patterns: ["torch", "transformers", "accelerate", "peft", "bitsandbytes", "fair-esm"]
       google:
         patterns: ["google-*"]
+      rest:
+        patterns: ["*"]
     ignore:
       # Never propose these. They are copyleft and deliberately absent; a Dependabot PR adding
       # one back would fail tests/test_licensing.py, but it should not be proposed at all.
@@ -21,20 +41,32 @@ updates:
   - package-ecosystem: npm
     directory: "/web"
     schedule:
-      interval: weekly
-    open-pull-requests-limit: 5
+      interval: monthly
+    open-pull-requests-limit: 3
     groups:
       react:
         patterns: ["react", "react-dom", "react-router-dom", "@types/react*"]
       tooling:
         patterns: ["vite", "vitest", "typescript", "@vitejs/*", "@testing-library/*"]
+      rest:
+        patterns: ["*"]
 
+  # One PR for all workflow actions. They are independent of each other and of the code, so there
+  # is nothing to be learned from reviewing them one at a time.
   - package-ecosystem: github-actions
     directory: "/"
     schedule:
       interval: monthly
+    open-pull-requests-limit: 1
+    groups:
+      actions:
+        patterns: ["*"]
 
   - package-ecosystem: docker
     directory: "/deploy"
     schedule:
       interval: monthly
+    open-pull-requests-limit: 1
+    groups:
+      images:
+        patterns: ["*"]

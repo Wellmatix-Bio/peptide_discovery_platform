@@ -10,10 +10,29 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
-const SOURCE = "/home/ajit/Documents/wmxccs/web/src/styles.css";
+import manifest from "./design-manifest.json";
+
+// One developer's absolute path is not a location anyone else has. The env var lets a
+// contributor who does have the reference project point at it; without it the comparison skips,
+// which it did on every machine but one.
+const SOURCE =
+  process.env.WMXCCS_STYLES ?? "/home/ajit/Documents/wmxccs/web/src/styles.css";
 const COPY = resolve(dirname(fileURLToPath(import.meta.url)), "../styles.css");
 
-const available = existsSync(SOURCE);
+const sourceOnDisk = existsSync(SOURCE);
+
+/* The committed manifest: the source's selector -> body map, written by
+ * web/scripts/design_manifest.mjs. It exists so these tests run in CI and on every contributor's
+ * machine, instead of only where the reference project happens to be checked out -- 31 of the 36
+ * tests here used to skip everywhere but one laptop.
+ *
+ * The real file wins when it is present, because it cannot go stale. The manifest cannot notice
+ * the SOURCE changing; it does notice the COPY drifting, which is the failure a contributor can
+ * actually cause and the one this guard exists to catch. */
+const sourceRules: Map<string, string> = sourceOnDisk
+  ? rules(readFileSync(SOURCE, "utf8"))
+  : new Map(Object.entries(manifest as Record<string, string>));
+const available = sourceRules.size > 0;
 
 /** Every rule as selector -> body, from the single-line minified block and the added blocks. */
 function rules(css: string): Map<string, string> {
@@ -30,8 +49,8 @@ function rules(css: string): Map<string, string> {
 }
 
 describe.skipIf(!available)("the design system is copied, not reinterpreted", () => {
-  const source = available ? rules(readFileSync(SOURCE, "utf8")) : new Map();
-  const copy = available ? rules(readFileSync(COPY, "utf8")) : new Map();
+  const source = sourceRules;
+  const copy = rules(readFileSync(COPY, "utf8"));
 
   it("found rules in both files, so this cannot pass vacuously", () => {
     expect(source.size).toBeGreaterThan(40);
@@ -88,10 +107,19 @@ describe.skipIf(!available)("the design system is copied, not reinterpreted", ()
   });
 });
 
-describe.skipIf(available)("design source unavailable", () => {
-  it("reports that it could not check", () => {
-    console.warn(`design.test.ts: ${SOURCE} is not present, so the copy was not verified`);
-    expect(available).toBe(false);
+describe("the comparison actually had something to compare against", () => {
+  it("never runs vacuously, whichever source it used", () => {
+    expect(available).toBe(true);
+    expect(sourceRules.size).toBeGreaterThan(40);
+  });
+
+  it("says which source it used", () => {
+    console.info(
+      sourceOnDisk
+        ? `design.test.ts: compared against ${SOURCE}`
+        : "design.test.ts: compared against the committed manifest (reference project not on disk)",
+    );
+    expect(typeof sourceOnDisk).toBe("boolean");
   });
 });
 

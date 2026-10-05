@@ -164,3 +164,10 @@ node_modules/
 web/dist/
 web/*.tsbuildinfo
 deploy/.env
+
+# ---------- Local tool configuration ----------
+# .claude/settings.json was committed in the initial commit carrying one developer's absolute
+# Windows path (C:/Users/<name>/...) as a PreToolUse hook. In a public repository that publishes
+# a username, and the hook would fire for every contributor using the same tool and fail, since
+# the binary exists on exactly one machine. Local tool settings are local.
+.claude/

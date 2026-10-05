@@ -192,11 +192,23 @@ def test_counters_live_in_sqlite_and_no_module_level_structure_holds_them():
 
 def test_expiring_one_limit_does_not_delete_another_limits_running_window(client, monkeypatch):
     """Cleanup is by each row's own expiry. By window start alone, the 60 s login window's cleanup
-    would have deleted a longer window that was still running."""
+    would have deleted a longer window that was still running.
+
+    THE CLOCK IS PINNED, and must be. Windows are absolute -- floor(now / window) -- so this test
+    used to read the real time and step 120 s forward from it. In the last two minutes of any
+    hour that step crosses into the next 3600 s window, the long limit's count resets, and the
+    test fails for a reason that has nothing to do with what it checks. It failed exactly that
+    way at 23:59:47, which is roughly one CI run in thirty.
+
+    `base` is aligned to a window start, so the +120 s step stays inside it whatever the real
+    time is.
+    """
     long_limit = Limit("long", 1, 3600)
+    base = 1_700_000_000.0 - (1_700_000_000.0 % 3600)
+    monkeypatch.setattr(ratelimit.time, "time", lambda: base)
     db = client.app.state.accounts.db
     ratelimit.hit(db, long_limit, "subject")
-    later = ratelimit.time.time() + 120
+    later = base + 120
     monkeypatch.setattr(ratelimit.time, "time", lambda: later)
     login(client, "anyone@example.org")  # counts in a fresh short window, cleaning up on the way
     with pytest.raises(Exception) as limited:

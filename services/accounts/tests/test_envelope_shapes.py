@@ -51,12 +51,29 @@ def test_a_real_results_response_is_recognised(path: Path):
 
 @pytest.mark.parametrize("path", RESULTS, ids=lambda p: p.name)
 def test_a_real_results_response_summarises_without_raising(path: Path):
+    """The counts are the API's own fields, reported as given rather than recounted from the list.
+
+    A results response for a run still in progress carries NULL counts -- results-2046288866976989184
+    is a real one, captured from a run whose results.json was overwritten mid-flight. The summary
+    must say it does not know, not invent a number and not print the word "None".
+    """
     body = load(path)
     summary = _results_summary(body)
-    # The counts are the API's own fields, reported as given rather than recounted from the list.
-    assert str(body["ranked_candidates"]) in summary
-    assert str(body["n_final"]) in summary
     assert "final candidate(s)" in summary
+    for field in ("n_final", "ranked_candidates"):
+        value = body[field]
+        if value is None:
+            assert "None" not in summary, f"a null {field} leaked Python's None into the summary"
+        else:
+            assert str(value) in summary, f"the API's own {field} is not reported"
+
+
+def test_a_null_count_is_shown_as_unknown_rather_than_guessed():
+    """Belt and braces for the above, independent of which fixtures happen to exist."""
+    summary = _results_summary({"run_id": "r", "candidates": [], "n_final": None,
+                                "ranked_candidates": None})
+    assert "?" in summary
+    assert "None" not in summary and "0" not in summary
 
 
 @pytest.mark.parametrize("path", STATUSES, ids=lambda p: p.name)

@@ -107,6 +107,12 @@ def test_unknown_email_costs_the_same_as_a_wrong_password(client):
     Without the equal-work call the unknown-email path returns in well under a millisecond and a
     real scrypt takes tens, so the ratio collapses to about 0.01. The threshold is loose on
     purpose: it is testing for the absence of a whole scrypt, not for a microsecond.
+
+    IT IS STILL LOAD-SENSITIVE. It measures wall-clock time, so running it beside another full
+    test suite on the same machine can fail it -- observed once here, passing immediately on an
+    idle machine. If it fails, re-run it alone before believing it. The tolerance is deliberately
+    NOT widened further: this guards a timing side channel, and a threshold loose enough to
+    survive any load would no longer notice a missing scrypt.
     """
     register(client)
 

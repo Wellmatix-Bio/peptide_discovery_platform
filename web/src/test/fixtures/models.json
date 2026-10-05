@@ -519,6 +519,13 @@
       "version": "v1"
     },
     {
+      "model_card": null,
+      "model_card_present": false,
+      "name": "pathway_mapping_predictor_v2",
+      "predictor_sha256": "5a28f017f0f4da008c8a8a205520d0107ba894e4f49f4bf1a4e470aae438e295",
+      "version": "v2"
+    },
+    {
       "model_card": {
         "deployment_object_provenance": "FULL-DATA REFIT for deployment. Notebook (pipeline.ipynb) never persists a fitted model: build_ensemble() is built fresh inside every Leave-One-Out CV fold, fit on that fold only, used once, then discarded; no joblib.dump/pickle exists in the notebook. The two .joblib artifacts shipped here were fit once each on the FULL 103-row dataset (no LOO holdout) using the exact same feature code and hyperparameters as the notebook, by a standalone script outside the source project, per explicit user authorization. This is a deliberate deviation from the notebook's own protocol (training-set size only: full data vs n-1 rows per LOO fold).",
         "ensemble_architecture": "VotingClassifier(voting='soft') over RandomForestClassifier + XGBClassifier + Pipeline(StandardScaler -> LogisticRegression), one independent ensemble instance per target",

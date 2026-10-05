@@ -747,7 +747,7 @@ class CandidateScorer:
             value = self.normalizers[name].normalize(raw[name])
             normalized[name] = value
             if value is None:
-                # Flags on a missing module are ignored (see docs/TODO.md).
+                # Flags on a missing module are ignored: there is no score to deduct from.
                 fired[name], total_deduction[name], score[name] = [], 0.0, None
             else:
                 fired[name], total_deduction[name] = self.deductions.evaluate(

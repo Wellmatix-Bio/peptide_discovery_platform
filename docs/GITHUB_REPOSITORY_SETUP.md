@@ -27,6 +27,17 @@ Check for: credentials and tokens, cloud project ids and account numbers, bucket
 names, internal hostnames, customer or patient data, employee names and emails you have not
 cleared, and licence keys.
 
+**Also scan for developer machine paths**, which leak usernames and are easy to miss because they
+are not secrets and no scanner flags them:
+
+```bash
+git grep -nIE 'C:[\\/]Users[\\/][A-Za-z0-9_.-]+|/home/[a-z][a-z0-9_-]+/|/Users/[A-Za-z0-9_.-]+/'
+```
+
+Editor and agent configuration is where these collect — a committed `.vscode/`, `.idea/` or
+`.claude/` often carries an absolute path from whichever machine created it. Beyond the username,
+a tool hook pointing at a binary that exists on one machine runs, and fails, for everyone else.
+
 If you find something, **rotate the secret first**, then decide whether to rewrite history. Treat
 anything that was ever committed as compromised regardless of what you do next.
 

@@ -97,10 +97,10 @@ WOUND_PROTEASE_ACCESSIONS = {
 # costs a moderate stability penalty, and sites compound geometrically.
 CLEAVAGE_DECAY_RATE = 0.5
 
-# Interim substitute for Stage 7 structural exposure/distance data, which
-# does not exist yet. TODO(stage-7): once Stage 7 populates
-# candidate.predictions["structure"] with real Ca coordinates and per-residue
-# exposure, delete this stub and read that instead.
+# Fallback for when Stage 7 did not run. Stage 7 IS implemented and populates
+# candidate.predictions["structure"] with real Ca coordinates, a distance matrix and
+# per-residue exposure; both accessors below prefer it and fall back only when the key is
+# absent, which happens when Stage 7 is disabled in the run config.
 IDEALIZED_CA_STEP_ANGSTROM = 3.8  # extended-chain Ca-Ca spacing along backbone
 
 
@@ -399,12 +399,12 @@ class Stage8(CandidateStage):
 
     def _get_distance_matrix(self, candidate: Candidate) -> np.ndarray:
         """Ca-Ca distance matrix for the candidate, from Stage 7's structure
-        prediction. TODO(stage-7): Stage 7 is not yet implemented, so this
-        falls back to an idealized extended-chain placeholder (Ca spacing
-        IDEALIZED_CA_STEP_ANGSTROM along a straight line) -- structurally
-        wrong (real peptides fold), but keeps this stage runnable end-to-end
-        until Stage 7 lands. Replace with candidate.predictions["structure"]'s
-        real coordinates once available.
+        prediction, when Stage 7 ran.
+
+        WHEN IT DID NOT, this falls back to an idealized extended chain (Ca spacing
+        IDEALIZED_CA_STEP_ANGSTROM along a straight line), which is structurally wrong because
+        real peptides fold. That keeps the stage runnable with Stage 7 disabled, but any
+        distance-dependent number computed from it describes a straight line, not this peptide.
         """
         structure = candidate.predictions.get("structure")
         if structure and "ca_distance_matrix" in structure:
@@ -419,9 +419,10 @@ class Stage8(CandidateStage):
     ) -> list[float]:
         """Per-residue exposure/flexibility weight in [0, 1] (1.0 = fully
         exposed, sites here count fully; 0.0 = fully buried, sites here are
-        ignored), from Stage 7. TODO(stage-7): Stage 7 is not yet
-        implemented, so this defaults every position to neutral weight 1.0
-        (no up/down-weighting) until real exposure data is available.
+        ignored), from Stage 7 when it ran.
+
+        WHEN IT DID NOT, every position defaults to neutral weight 1.0, so no site is
+        up- or down-weighted by burial.
         """
         structure = candidate.predictions.get("structure")
         if structure and "exposure_by_position" in structure:

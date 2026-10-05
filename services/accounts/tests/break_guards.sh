@@ -2,7 +2,10 @@
 # §12: break each guard deliberately, confirm a test fails, restore.
 # Exits non-zero if any sabotage goes UNDETECTED.
 set -u
-cd /home/ajit/Documents/peptide_discovery_platform
+# The repository root, derived from this script's own location. It was hardcoded to one
+# developer's absolute path, so the harness ran nowhere else -- a guard-checking script that
+# only works on one machine checks nothing on any other.
+cd "$(dirname "${BASH_SOURCE[0]}")/../../.." || exit 1
 A=services/accounts/accounts
 T=services/accounts/tests
 PY=.venv/bin/python

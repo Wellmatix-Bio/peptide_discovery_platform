@@ -26,7 +26,8 @@ endpoints.
 | File | What |
 |---|---|
 | `results-156676979574177792.json` | A succeeded run, 11 candidates |
-| `results-2046288866976989184.json` | A succeeded run, 11 candidates |
+| `results-2046117909033719520.json` | A succeeded run, 16 candidates, **the current stage-11 shape** — real `evidence_coverage`, `final_score` and `missing_modules` |
+| `results-2046288866976989184.json` | Vertex says `JOB_STATE_SUCCEEDED`; the API says `running` at `s05_physchem_screening`, with no candidates |
 | `results-9223232270029029376.json` | A succeeded run, 33 candidates |
 | `status-*.json` | The matching status responses |
 | `models.json` | 15 predictors, 8 with model cards |
@@ -61,3 +62,37 @@ mistakes one for evidence of what the API does.
 
 If a real run ever produces an unranked candidate or a withheld score, capture it and delete the
 corresponding derived file.
+
+
+## Re-captured 2026-10-05, after the pathway-predictor v2 API change
+
+The committed fixtures had gone stale: they carried `engaged_pathways`, a candidate field the API
+**no longer emits**. Re-captured through the current API from the same runs, plus one new one.
+
+**No run in the bucket carries the v2 pathway shape.** All 22 have `engaged_pathways` in their
+stored artifacts, including the newest (2 October) and one named `local-test-worker-v2`, which
+turns out to be worker v2 rather than pathway v2. So `activated_pathways`, `inhibited_pathways`
+and `undetermined_pathways` read `null` in every fixture here — which is **correct** for a run
+produced before that predictor shipped, and is what a user reading their own historical run will
+see.
+
+Covering the new pathway fields needs a **new pipeline run through a rebuilt worker image**.
+Nothing here can substitute for it, and hand-writing one is exactly what this file forbids.
+
+`results-2046117909033719520.json` was added because it does carry the current **ranking** shape.
+Without it nothing exercised `evidence_coverage`, `final_score` or `missing_modules` — and the run
+view ignored all three, so a rank computed from part of its intended evidence was displayed
+exactly like one computed from all of it.
+
+### One capture changed meaning, and it is worth knowing why
+
+`results-2046288866976989184.json` used to be a succeeded run with 11 candidates. Re-capturing it
+now returns **`status: running`, `stage: s05_physchem_screening`, no candidates** — while
+`vertex_state` is still `JOB_STATE_SUCCEEDED` and `candidates_final.json` in the bucket still
+holds all 11.
+
+Its `results.json` was overwritten by a later partial write. **That is worth someone's attention
+beyond the fixtures**: a finished run's results can be replaced by a subsequent write to the same
+run directory, and the API then reports the run as unfinished forever. It is kept as a fixture
+because it is a real instance of the `status` defect in `docs/BASELINE.md`, observed rather than
+constructed.

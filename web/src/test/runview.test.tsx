@@ -6,7 +6,7 @@
  *
  * What is actually being guarded here is §7: that the page does not overstate what the API said.
  */
-import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -16,6 +16,7 @@ import { saveSession } from "../api/client";
 import realResults from "./fixtures/results-9223232270029029376.json";
 import realStatus from "./fixtures/status-9223232270029029376.json";
 import smallResults from "./fixtures/results-156676979574177792.json";
+import ranking from "./fixtures/results-2046117909033719520.json";
 import withheld from "./fixtures/derived/results-with-withheld-and-unranked.json";
 import tied from "./fixtures/derived/results-with-a-tie.json";
 import workerDied from "./fixtures/derived/status-worker-died.json";
@@ -271,5 +272,79 @@ describe("a run that is not yours, or does not exist", () => {
     expect(screen.queryByText(/Accepted by Vertex AI/i)).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /cancel this run/i })).not.toBeInTheDocument();
     expect(screen.queryByText(/Checking again every/i)).not.toBeInTheDocument();
+  });
+});
+
+/* Ranking evidence, against the captured run that carries it.
+ *
+ * results-2046117909033719520.json is a real response from a run whose stage-11 output has the
+ * current shape: evidence_coverage, final_score and missing_modules. The older captured runs
+ * predate that work and report all three as null, so nothing exercised them -- and the run view
+ * ignored them entirely, which is how a rank computed from part of its intended evidence was
+ * shown exactly like one computed from all of it.
+ *
+ * These are also the first tests here to open a candidate's detail panel at all. */
+describe("ranking evidence", () => {
+  function openFirstCandidate() {
+    const more = screen.getAllByRole("button", { name: /^More$/ })[0]!;
+    fireEvent.click(more);
+  }
+
+  async function showExpanded(results: unknown) {
+    serve(realStatus, results);
+    show();
+    await waitFor(() => expect(screen.getAllByRole("button", { name: /^More$/ }).length)
+      .toBeGreaterThan(0));
+    openFirstCandidate();
+  }
+
+  it("the fixture really carries the fields, so these cannot pass vacuously", () => {
+    const first = ranking.candidates[0]!;
+    expect(typeof first.evidence_coverage).toBe("number");
+    expect(typeof first.final_score).toBe("number");
+    expect(Array.isArray(first.missing_modules)).toBe(true);
+  });
+
+  it("shows the final score and the coverage behind it", async () => {
+    await showExpanded(ranking);
+    expect(screen.getByText("Evidence coverage")).toBeInTheDocument();
+    expect(screen.getByText("Final score")).toBeInTheDocument();
+  });
+
+  it("says plainly when every activated module scored", async () => {
+    await showExpanded(ranking);
+    expect(screen.getByText(/every activated module scored/i)).toBeInTheDocument();
+  });
+
+  /* Scoped to the row, not searched for across the page: module names also appear as score
+     labels elsewhere in the panel, so a bare getByText matches the wrong node and a test that
+     passes on the wrong element is not evidence. */
+  function missingModulesRow(): HTMLElement {
+    return screen.getByText("Modules with no score").closest(".kv") as HTMLElement;
+  }
+
+  it("names the modules that produced no score", async () => {
+    const withMissing = structuredClone(ranking) as typeof ranking;
+    // The fixture's missing_modules is [], so TypeScript infers never[] from the JSON import.
+    // The field is string[] in the API schema; the cast says so rather than widening the import.
+    (withMissing.candidates[0]! as Record<string, unknown>).missing_modules = [
+      "antimicrobial",
+      "angiogenesis",
+    ];
+    await showExpanded(withMissing);
+    const row = within(missingModulesRow());
+    expect(row.getByText("antimicrobial")).toBeInTheDocument();
+    expect(row.getByText("angiogenesis")).toBeInTheDocument();
+  });
+
+  it("does not claim coverage the API did not report", async () => {
+    const withoutField = structuredClone(ranking) as typeof ranking;
+    (withoutField.candidates[0]! as Record<string, unknown>).missing_modules = null;
+    await showExpanded(withoutField);
+    // NoValue renders the words "No value" and carries the reason in title=, so both are
+    // checked: the reader sees that nothing was reported, and can find out why.
+    const shown = within(missingModulesRow()).getByText("No value");
+    expect(shown).toBeInTheDocument();
+    expect(shown).toHaveAttribute("title", expect.stringMatching(/no missing_modules field/i));
   });
 });

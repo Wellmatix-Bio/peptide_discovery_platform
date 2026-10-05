@@ -1,6 +1,7 @@
 {
   "candidates": [
     {
+      "activated_pathways": null,
       "aggregation_tendency": 0.22116491198539734,
       "amp_probability": 0.7047438107349484,
       "angiogenic_activity": 0.5860369278187756,
@@ -8,14 +9,11 @@
       "cleavage_stability": 1.0,
       "cytotoxicity_probability": 0.26395656913518906,
       "deamidation_risk": "low",
-      "engaged_pathways": [
-        "MAPK",
-        "ERK",
-        "NF_KB",
-        "CYTOKINE_MACROPHAGE"
-      ],
+      "evidence_coverage": 0.8872773728113023,
+      "final_score": 0.7170905080978547,
       "hemolytic_activity_phc50": 3.6855511620659756,
       "id": "d2880199a410b6df",
+      "inhibited_pathways": null,
       "instability_index": 56.06666666666667,
       "log_mic_um": {
         "Escherichia coli": 1.0803663821337957,
@@ -23,6 +21,7 @@
         "Staphylococcus aureus": 1.2105695832521668
       },
       "migration_probability": 0.6935218953042256,
+      "missing_modules": null,
       "molecular_weight": 1623.95,
       "net_charge": 4.957,
       "oxidation_risk": "medium",
@@ -44,9 +43,11 @@
       "proliferation_probability": 0.4432870169558952,
       "ranking": 1,
       "sequence": "MKRCYKHKHQKH",
-      "solubility": 0.981061577796936
+      "solubility": 0.981061577796936,
+      "undetermined_pathways": null
     },
     {
+      "activated_pathways": null,
       "aggregation_tendency": 0.19924211502075195,
       "amp_probability": 0.8240893775705743,
       "angiogenic_activity": 0.154373945617109,
@@ -54,16 +55,11 @@
       "cleavage_stability": 1.0,
       "cytotoxicity_probability": 0.20372998074162751,
       "deamidation_risk": "low",
-      "engaged_pathways": [
-        "MAPK",
-        "ERK",
-        "PI3K_AKT_MTOR",
-        "NF_KB",
-        "VEGF_ANGIOGENESIS",
-        "CYTOKINE_MACROPHAGE"
-      ],
+      "evidence_coverage": 0.8872773728113023,
+      "final_score": 0.7141052491239688,
       "hemolytic_activity_phc50": 3.888910102997263,
       "id": "dc0991e89d5d90a8",
+      "inhibited_pathways": null,
       "instability_index": 108.81904761904761,
       "log_mic_um": {
         "Escherichia coli": 1.1459734532691022,
@@ -71,6 +67,7 @@
         "Staphylococcus aureus": 1.2115230098986765
       },
       "migration_probability": 0.6992992040731574,
+      "missing_modules": null,
       "molecular_weight": 2526.73,
       "net_charge": 5.068,
       "oxidation_risk": "medium",
@@ -92,9 +89,11 @@
       "proliferation_probability": 0.39892272741761436,
       "ranking": 2,
       "sequence": "FHYSKGRSTRWKSTQSGHYGR",
-      "solubility": 0.9050040245056152
+      "solubility": 0.9050040245056152,
+      "undetermined_pathways": null
     },
     {
+      "activated_pathways": null,
       "aggregation_tendency": 0.34597042202949524,
       "amp_probability": 0.8836543909396247,
       "angiogenic_activity": 0.628779221667901,
@@ -102,16 +101,11 @@
       "cleavage_stability": 1.0,
       "cytotoxicity_probability": 0.30329369381070137,
       "deamidation_risk": "low",
-      "engaged_pathways": [
-        "MAPK",
-        "ERK",
-        "PI3K_AKT_MTOR",
-        "NF_KB",
-        "FGFR_JAK2_STAT3",
-        "CYTOKINE_MACROPHAGE"
-      ],
+      "evidence_coverage": 0.8872773728113023,
+      "final_score": 0.7095257757085376,
       "hemolytic_activity_phc50": 3.7398273073301826,
       "id": "69e7381dad086590",
+      "inhibited_pathways": null,
       "instability_index": 52.5,
       "log_mic_um": {
         "Escherichia coli": 1.2048377074889214,
@@ -119,6 +113,7 @@
         "Staphylococcus aureus": 1.3184843454124886
       },
       "migration_probability": 0.6018084874811465,
+      "missing_modules": null,
       "molecular_weight": 1522.8,
       "net_charge": 3.03,
       "oxidation_risk": "low",
@@ -140,9 +135,11 @@
       "proliferation_probability": 0.7035545686717132,
       "ranking": 3,
       "sequence": "KTIIKNIQHSNKV",
-      "solubility": 0.8768911957740784
+      "solubility": 0.8768911957740784,
+      "undetermined_pathways": null
     },
     {
+      "activated_pathways": null,
       "aggregation_tendency": 0.5390523672103882,
       "amp_probability": 0.7979970193018068,
       "angiogenic_activity": 0.14448300232724826,
@@ -150,15 +147,11 @@
       "cleavage_stability": 1.0,
       "cytotoxicity_probability": 0.25555338128469884,
       "deamidation_risk": "low",
-      "engaged_pathways": [
-        "MAPK",
-        "ERK",
-        "PI3K_AKT_MTOR",
-        "NF_KB",
-        "CYTOKINE_MACROPHAGE"
-      ],
+      "evidence_coverage": 0.8872773728113023,
+      "final_score": 0.694802712708403,
       "hemolytic_activity_phc50": 3.8332078765217856,
       "id": "4325bb2a06171df9",
+      "inhibited_pathways": null,
       "instability_index": 12.864285714285716,
       "log_mic_um": {
         "Escherichia coli": 0.8644305096223454,
@@ -166,6 +159,7 @@
         "Staphylococcus aureus": 1.029217857617579
       },
       "migration_probability": 0.7289353340852921,
+      "missing_modules": null,
       "molecular_weight": 1797.22,
       "net_charge": 4.028,
       "oxidation_risk": "medium",
@@ -187,9 +181,11 @@
       "proliferation_probability": 0.5814750792966662,
       "ranking": 4,
       "sequence": "RKLMTIIYIPKHRQ",
-      "solubility": 0.6729206442832947
+      "solubility": 0.6729206442832947,
+      "undetermined_pathways": null
     },
     {
+      "activated_pathways": null,
       "aggregation_tendency": 0.15402865409851074,
       "amp_probability": 0.8300436498318261,
       "angiogenic_activity": 0.04431758964500643,
@@ -197,16 +193,11 @@
       "cleavage_stability": 1.0,
       "cytotoxicity_probability": 0.2704284079372883,
       "deamidation_risk": "low",
-      "engaged_pathways": [
-        "MAPK",
-        "ERK",
-        "PI3K_AKT_MTOR",
-        "NF_KB",
-        "FGFR_JAK2_STAT3",
-        "CYTOKINE_MACROPHAGE"
-      ],
+      "evidence_coverage": 0.8872773728113023,
+      "final_score": 0.6933604021955813,
       "hemolytic_activity_phc50": 3.711188413062767,
       "id": "0eda0c01a3b67e54",
+      "inhibited_pathways": null,
       "instability_index": 33.7375,
       "log_mic_um": {
         "Escherichia coli": 1.0510029712766265,
@@ -214,6 +205,7 @@
         "Staphylococcus aureus": 1.106310936303127
       },
       "migration_probability": 0.6690649626275142,
+      "missing_modules": null,
       "molecular_weight": 985.23,
       "net_charge": 2.072,
       "oxidation_risk": "low",
@@ -235,9 +227,11 @@
       "proliferation_probability": 0.7093483028170158,
       "ranking": 5,
       "sequence": "HKPKLIHL",
-      "solubility": 0.9897986650466919
+      "solubility": 0.9897986650466919,
+      "undetermined_pathways": null
     },
     {
+      "activated_pathways": null,
       "aggregation_tendency": 0.20999710261821747,
       "amp_probability": 0.8743025320070906,
       "angiogenic_activity": 0.5848202288646697,
@@ -245,15 +239,11 @@
       "cleavage_stability": 1.0,
       "cytotoxicity_probability": 0.33471835032105446,
       "deamidation_risk": "low",
-      "engaged_pathways": [
-        "MAPK",
-        "ERK",
-        "PI3K_AKT_MTOR",
-        "NF_KB",
-        "CYTOKINE_MACROPHAGE"
-      ],
+      "evidence_coverage": 0.8872773728113023,
+      "final_score": 0.6870686307508704,
       "hemolytic_activity_phc50": 3.7210640210686834,
       "id": "9bf1aa5a755ec3b5",
+      "inhibited_pathways": null,
       "instability_index": 86.35,
       "log_mic_um": {
         "Escherichia coli": 1.4972322903801205,
@@ -261,6 +251,7 @@
         "Staphylococcus aureus": 1.4941457607264217
       },
       "migration_probability": 0.5579796715521487,
+      "missing_modules": null,
       "molecular_weight": 1001.21,
       "net_charge": 1.99,
       "oxidation_risk": "medium",
@@ -282,9 +273,11 @@
       "proliferation_probability": 0.7933549017420396,
       "ranking": 6,
       "sequence": "IIRRNMQA",
-      "solubility": 0.7714359164237976
+      "solubility": 0.7714359164237976,
+      "undetermined_pathways": null
     },
     {
+      "activated_pathways": null,
       "aggregation_tendency": 0.2467842698097229,
       "amp_probability": 0.8223785165553165,
       "angiogenic_activity": 0.6375873728315243,
@@ -292,15 +285,11 @@
       "cleavage_stability": 1.0,
       "cytotoxicity_probability": 0.266665521543473,
       "deamidation_risk": "low",
-      "engaged_pathways": [
-        "MAPK",
-        "ERK",
-        "PI3K_AKT_MTOR",
-        "VEGF_ANGIOGENESIS",
-        "CYTOKINE_MACROPHAGE"
-      ],
+      "evidence_coverage": 0.8872773728113023,
+      "final_score": 0.6851130474098127,
       "hemolytic_activity_phc50": 3.5342603266712724,
       "id": "5d56311f5eedcada",
+      "inhibited_pathways": null,
       "instability_index": 8.75,
       "log_mic_um": {
         "Escherichia coli": 1.2204556814610943,
@@ -308,6 +297,7 @@
         "Staphylococcus aureus": 1.242476518865524
       },
       "migration_probability": 0.5346837789426809,
+      "missing_modules": null,
       "molecular_weight": 1138.35,
       "net_charge": 3.029,
       "oxidation_risk": "medium",
@@ -329,9 +319,11 @@
       "proliferation_probability": 0.6664533325965378,
       "ranking": 7,
       "sequence": "YKTRMFHR",
-      "solubility": 0.969711422920227
+      "solubility": 0.969711422920227,
+      "undetermined_pathways": null
     },
     {
+      "activated_pathways": null,
       "aggregation_tendency": 0.24961139261722565,
       "amp_probability": 0.8866740136040987,
       "angiogenic_activity": 0.06639288916957015,
@@ -339,14 +331,11 @@
       "cleavage_stability": 1.0,
       "cytotoxicity_probability": 0.41118728928267956,
       "deamidation_risk": "low",
-      "engaged_pathways": [
-        "MAPK",
-        "ERK",
-        "NF_KB",
-        "CYTOKINE_MACROPHAGE"
-      ],
+      "evidence_coverage": 0.8872773728113023,
+      "final_score": 0.6802141496485924,
       "hemolytic_activity_phc50": 3.7913750777237536,
       "id": "5f56bfb038734765",
+      "inhibited_pathways": null,
       "instability_index": 4.657142857142857,
       "log_mic_um": {
         "Escherichia coli": 1.046613369573219,
@@ -354,6 +343,7 @@
         "Staphylococcus aureus": 1.0616789353739102
       },
       "migration_probability": 0.7261767326617744,
+      "missing_modules": null,
       "molecular_weight": 1858.25,
       "net_charge": 7.068,
       "oxidation_risk": "medium",
@@ -375,9 +365,11 @@
       "proliferation_probability": 0.33556822504133904,
       "ranking": 8,
       "sequence": "WKPKPKYKHKPRKH",
-      "solubility": 0.9755287766456604
+      "solubility": 0.9755287766456604,
+      "undetermined_pathways": null
     },
     {
+      "activated_pathways": null,
       "aggregation_tendency": 0.2546626031398773,
       "amp_probability": 0.7468418064257555,
       "angiogenic_activity": 0.3882814532243282,
@@ -385,16 +377,11 @@
       "cleavage_stability": 1.0,
       "cytotoxicity_probability": 0.3101125583052635,
       "deamidation_risk": "low",
-      "engaged_pathways": [
-        "MAPK",
-        "ERK",
-        "PI3K_AKT_MTOR",
-        "NF_KB",
-        "VEGF_ANGIOGENESIS",
-        "CYTOKINE_MACROPHAGE"
-      ],
+      "evidence_coverage": 0.8872773728113023,
+      "final_score": 0.6797397861069628,
       "hemolytic_activity_phc50": 3.7294626484629916,
       "id": "37f2362ed4e5e5bf",
+      "inhibited_pathways": null,
       "instability_index": 69.44166666666666,
       "log_mic_um": {
         "Escherichia coli": 1.0105129606686705,
@@ -402,6 +389,7 @@
         "Staphylococcus aureus": 1.1491461353531616
       },
       "migration_probability": 0.6674099757199938,
+      "missing_modules": null,
       "molecular_weight": 1418.73,
       "net_charge": 2.835,
       "oxidation_risk": "medium",
@@ -423,9 +411,11 @@
       "proliferation_probability": 0.7678845875817136,
       "ranking": 9,
       "sequence": "QKRGKRLGICME",
-      "solubility": 0.8976553678512573
+      "solubility": 0.8976553678512573,
+      "undetermined_pathways": null
     },
     {
+      "activated_pathways": null,
       "aggregation_tendency": 0.3996610939502716,
       "amp_probability": 0.7475419084034022,
       "angiogenic_activity": 0.06610967581073471,
@@ -433,15 +423,11 @@
       "cleavage_stability": 1.0,
       "cytotoxicity_probability": 0.13997148582711816,
       "deamidation_risk": "low",
-      "engaged_pathways": [
-        "MAPK",
-        "NF_KB",
-        "WNT_BCATENIN",
-        "VEGF_ANGIOGENESIS",
-        "CYTOKINE_MACROPHAGE"
-      ],
+      "evidence_coverage": 0.8872773728113023,
+      "final_score": 0.6775916246336348,
       "hemolytic_activity_phc50": 3.8318120065552987,
       "id": "e91c57d6a9b86694",
+      "inhibited_pathways": null,
       "instability_index": 82.6594117647059,
       "log_mic_um": {
         "Escherichia coli": 1.0701794598611996,
@@ -449,6 +435,7 @@
         "Staphylococcus aureus": 1.14138625239592
       },
       "migration_probability": 0.6952050523564757,
+      "missing_modules": null,
       "molecular_weight": 2268.46,
       "net_charge": 2.154,
       "oxidation_risk": "high",
@@ -470,9 +457,11 @@
       "proliferation_probability": 0.534729936197655,
       "ranking": 10,
       "sequence": "LSSWSHSKRHHWHSWFY",
-      "solubility": 0.8247146606445312
+      "solubility": 0.8247146606445312,
+      "undetermined_pathways": null
     },
     {
+      "activated_pathways": null,
       "aggregation_tendency": 0.41675665974617004,
       "amp_probability": 0.8944509809323339,
       "angiogenic_activity": 0.0502187219101147,
@@ -480,13 +469,11 @@
       "cleavage_stability": 1.0,
       "cytotoxicity_probability": 0.41691518435254693,
       "deamidation_risk": "low",
-      "engaged_pathways": [
-        "MAPK",
-        "NF_KB",
-        "CYTOKINE_MACROPHAGE"
-      ],
+      "evidence_coverage": 0.8872773728113023,
+      "final_score": 0.6766778354808399,
       "hemolytic_activity_phc50": 3.652532056015309,
       "id": "fd6f412786959c51",
+      "inhibited_pathways": null,
       "instability_index": 85.67272727272727,
       "log_mic_um": {
         "Escherichia coli": 1.2140464241455151,
@@ -494,6 +481,7 @@
         "Staphylococcus aureus": 1.325102463592475
       },
       "migration_probability": 0.7300770009436022,
+      "missing_modules": null,
       "molecular_weight": 1437.61,
       "net_charge": 4.026,
       "oxidation_risk": "medium",
@@ -515,9 +503,11 @@
       "proliferation_probability": 0.4224439058364468,
       "ranking": 11,
       "sequence": "KHYSKGRWYGR",
-      "solubility": 0.9329102635383606
+      "solubility": 0.9329102635383606,
+      "undetermined_pathways": null
     },
     {
+      "activated_pathways": null,
       "aggregation_tendency": 0.09094248712062836,
       "amp_probability": 0.7699325476684582,
       "angiogenic_activity": 0.14722838237913077,
@@ -525,16 +515,11 @@
       "cleavage_stability": 1.0,
       "cytotoxicity_probability": 0.3896924704313278,
       "deamidation_risk": "low",
-      "engaged_pathways": [
-        "MAPK",
-        "ERK",
-        "PI3K_AKT_MTOR",
-        "NF_KB",
-        "FGFR_JAK2_STAT3",
-        "CYTOKINE_MACROPHAGE"
-      ],
+      "evidence_coverage": 0.8872773728113023,
+      "final_score": 0.6759144456968504,
       "hemolytic_activity_phc50": 3.9008448188882205,
       "id": "0398431eb07de940",
+      "inhibited_pathways": null,
       "instability_index": 36.12631578947368,
       "log_mic_um": {
         "Escherichia coli": 1.1398607379551537,
@@ -542,6 +527,7 @@
         "Staphylococcus aureus": 1.2182659025804077
       },
       "migration_probability": 0.6668713351885353,
+      "missing_modules": null,
       "molecular_weight": 1992.29,
       "net_charge": 2.073,
       "oxidation_risk": "low",
@@ -563,9 +549,11 @@
       "proliferation_probability": 0.5880944488173837,
       "ranking": 12,
       "sequence": "LSTLGKIFGHAVRSALHNA",
-      "solubility": 0.7292728424072266
+      "solubility": 0.7292728424072266,
+      "undetermined_pathways": null
     },
     {
+      "activated_pathways": null,
       "aggregation_tendency": 0.234860360622406,
       "amp_probability": 0.7920862696324935,
       "angiogenic_activity": 0.2038240890896676,
@@ -573,15 +561,11 @@
       "cleavage_stability": 1.0,
       "cytotoxicity_probability": 0.328945092856884,
       "deamidation_risk": "low",
-      "engaged_pathways": [
-        "MAPK",
-        "ERK",
-        "FGFR_JAK2_STAT3",
-        "VEGF_ANGIOGENESIS",
-        "CYTOKINE_MACROPHAGE"
-      ],
+      "evidence_coverage": 0.8872773728113023,
+      "final_score": 0.6731225211280544,
       "hemolytic_activity_phc50": 3.845027140075804,
       "id": "9818073f725f233a",
+      "inhibited_pathways": null,
       "instability_index": 5.9846153846153864,
       "log_mic_um": {
         "Escherichia coli": 1.086109639219397,
@@ -589,6 +573,7 @@
         "Staphylococcus aureus": 1.1851597692707563
       },
       "migration_probability": 0.6758977326782349,
+      "missing_modules": null,
       "molecular_weight": 1798.16,
       "net_charge": 3.985,
       "oxidation_risk": "medium",
@@ -610,9 +595,11 @@
       "proliferation_probability": 0.7186903068672192,
       "ranking": 13,
       "sequence": "VKQQWYRYRLMVK",
-      "solubility": 0.4227798283100128
+      "solubility": 0.4227798283100128,
+      "undetermined_pathways": null
     },
     {
+      "activated_pathways": null,
       "aggregation_tendency": 0.2739856541156769,
       "amp_probability": 0.857769499426683,
       "angiogenic_activity": 0.06591617665354468,
@@ -620,12 +607,11 @@
       "cleavage_stability": 1.0,
       "cytotoxicity_probability": 0.25359603576362133,
       "deamidation_risk": "low",
-      "engaged_pathways": [
-        "TGFB_SMAD",
-        "FGFR_JAK2_STAT3"
-      ],
+      "evidence_coverage": 0.8872773728113023,
+      "final_score": 0.6682848584562294,
       "hemolytic_activity_phc50": 3.824402293411287,
       "id": "bcd56a9c04aeaa2a",
+      "inhibited_pathways": null,
       "instability_index": 50.82727272727273,
       "log_mic_um": {
         "Escherichia coli": 1.2575017466862082,
@@ -633,6 +619,7 @@
         "Staphylococcus aureus": 1.1967770287191628
       },
       "migration_probability": 0.640818414367891,
+      "missing_modules": null,
       "molecular_weight": 1548.75,
       "net_charge": 0.074,
       "oxidation_risk": "high",
@@ -654,9 +641,11 @@
       "proliferation_probability": 0.8822872767043064,
       "ranking": 14,
       "sequence": "LHWWETVRWVH",
-      "solubility": 0.6266632080078125
+      "solubility": 0.6266632080078125,
+      "undetermined_pathways": null
     },
     {
+      "activated_pathways": null,
       "aggregation_tendency": 0.23397323489189148,
       "amp_probability": 0.9035002680687017,
       "angiogenic_activity": 0.13653628206123364,
@@ -664,15 +653,11 @@
       "cleavage_stability": 1.0,
       "cytotoxicity_probability": 0.4129105657339096,
       "deamidation_risk": "low",
-      "engaged_pathways": [
-        "MAPK",
-        "ERK",
-        "PI3K_AKT_MTOR",
-        "NF_KB",
-        "CYTOKINE_MACROPHAGE"
-      ],
+      "evidence_coverage": 0.8872773728113023,
+      "final_score": 0.6668335074068609,
       "hemolytic_activity_phc50": 3.7019940032643026,
       "id": "0d1bb15bda2cc8d0",
+      "inhibited_pathways": null,
       "instability_index": 9.976923076923077,
       "log_mic_um": {
         "Escherichia coli": 1.254738211446446,
@@ -680,6 +665,7 @@
         "Staphylococcus aureus": 1.3763812182065476
       },
       "migration_probability": 0.7579523722543158,
+      "missing_modules": null,
       "molecular_weight": 1587.96,
       "net_charge": 5.071,
       "oxidation_risk": "low",
@@ -701,9 +687,11 @@
       "proliferation_probability": 0.4878211221998416,
       "ranking": 15,
       "sequence": "KTIIRKIHHSKKV",
-      "solubility": 0.9543154239654541
+      "solubility": 0.9543154239654541,
+      "undetermined_pathways": null
     },
     {
+      "activated_pathways": null,
       "aggregation_tendency": 0.48216214776039124,
       "amp_probability": 0.8830199459780238,
       "angiogenic_activity": 0.07721388477795195,
@@ -711,15 +699,11 @@
       "cleavage_stability": 1.0,
       "cytotoxicity_probability": 0.4321846775710583,
       "deamidation_risk": "low",
-      "engaged_pathways": [
-        "MAPK",
-        "ERK",
-        "PI3K_AKT_MTOR",
-        "NF_KB",
-        "CYTOKINE_MACROPHAGE"
-      ],
+      "evidence_coverage": 0.8872773728113023,
+      "final_score": 0.6639312092978699,
       "hemolytic_activity_phc50": 3.6694690910037995,
       "id": "a5d7c72a73a488c5",
+      "inhibited_pathways": null,
       "instability_index": 47.22,
       "log_mic_um": {
         "Escherichia coli": 1.0312632766366783,
@@ -727,6 +711,7 @@
         "Staphylococcus aureus": 1.205121626766765
       },
       "migration_probability": 0.665082456044091,
+      "missing_modules": null,
       "molecular_weight": 1322.6,
       "net_charge": 3.987,
       "oxidation_risk": "low",
@@ -748,9 +733,11 @@
       "proliferation_probability": 0.7142985217905918,
       "ranking": 16,
       "sequence": "RRVKVKVQYF",
-      "solubility": 0.7160304188728333
+      "solubility": 0.7160304188728333,
+      "undetermined_pathways": null
     },
     {
+      "activated_pathways": null,
       "aggregation_tendency": 0.308927059173584,
       "amp_probability": 0.8936835156087044,
       "angiogenic_activity": 0.3314462808372735,
@@ -758,15 +745,11 @@
       "cleavage_stability": 1.0,
       "cytotoxicity_probability": 0.3481152574531734,
       "deamidation_risk": "low",
-      "engaged_pathways": [
-        "MAPK",
-        "ERK",
-        "PI3K_AKT_MTOR",
-        "NF_KB",
-        "CYTOKINE_MACROPHAGE"
-      ],
+      "evidence_coverage": 0.8872773728113023,
+      "final_score": 0.6614703704050146,
       "hemolytic_activity_phc50": 3.5317867479573213,
       "id": "439a2b9cecd2ae1e",
+      "inhibited_pathways": null,
       "instability_index": 36.733333333333334,
       "log_mic_um": {
         "Escherichia coli": 1.0455152681456266,
@@ -774,6 +757,7 @@
         "Staphylococcus aureus": 1.181097327307404
       },
       "migration_probability": 0.5510117681101308,
+      "missing_modules": null,
       "molecular_weight": 1208.48,
       "net_charge": 2.987,
       "oxidation_risk": "medium",
@@ -795,9 +779,11 @@
       "proliferation_probability": 0.7635483278829702,
       "ranking": 17,
       "sequence": "RKMRTIIYQ",
-      "solubility": 0.6969423294067383
+      "solubility": 0.6969423294067383,
+      "undetermined_pathways": null
     },
     {
+      "activated_pathways": null,
       "aggregation_tendency": 0.5413229465484619,
       "amp_probability": 0.8995084863033436,
       "angiogenic_activity": 0.07319236704503941,
@@ -805,15 +791,11 @@
       "cleavage_stability": 1.0,
       "cytotoxicity_probability": 0.38159012980759144,
       "deamidation_risk": "low",
-      "engaged_pathways": [
-        "ERK",
-        "PI3K_AKT_MTOR",
-        "TGFB_SMAD",
-        "NF_KB",
-        "CYTOKINE_MACROPHAGE"
-      ],
+      "evidence_coverage": 0.8872773728113023,
+      "final_score": 0.6597195813527245,
       "hemolytic_activity_phc50": 3.6345018546427816,
       "id": "2f3f4978318f94da",
+      "inhibited_pathways": null,
       "instability_index": -22.16,
       "log_mic_um": {
         "Escherichia coli": 1.1122419738917102,
@@ -821,6 +803,7 @@
         "Staphylococcus aureus": 1.196349612110609
       },
       "migration_probability": 0.5646650353310275,
+      "missing_modules": null,
       "molecular_weight": 1250.6,
       "net_charge": 2.987,
       "oxidation_risk": "medium",
@@ -842,9 +825,11 @@
       "proliferation_probability": 0.7454939129787155,
       "ranking": 18,
       "sequence": "VKITYRLMVK",
-      "solubility": 0.24763749539852142
+      "solubility": 0.24763749539852142,
+      "undetermined_pathways": null
     },
     {
+      "activated_pathways": null,
       "aggregation_tendency": 0.548032820224762,
       "amp_probability": 0.8959194463657983,
       "angiogenic_activity": 0.04770095075168184,
@@ -852,14 +837,11 @@
       "cleavage_stability": 1.0,
       "cytotoxicity_probability": 0.2652701158076525,
       "deamidation_risk": "low",
-      "engaged_pathways": [
-        "ERK",
-        "PI3K_AKT_MTOR",
-        "NF_KB",
-        "CYTOKINE_MACROPHAGE"
-      ],
+      "evidence_coverage": 0.8872773728113023,
+      "final_score": 0.6596626976407898,
       "hemolytic_activity_phc50": 3.8049844234742087,
       "id": "ec5d7bb61abd3dae",
+      "inhibited_pathways": null,
       "instability_index": 35.959999999999994,
       "log_mic_um": {
         "Escherichia coli": 1.195831651187437,
@@ -867,6 +849,7 @@
         "Staphylococcus aureus": 1.1997590288526128
       },
       "migration_probability": 0.6469870731789259,
+      "missing_modules": null,
       "molecular_weight": 1127.34,
       "net_charge": 2.031,
       "oxidation_risk": "low",
@@ -888,9 +871,11 @@
       "proliferation_probability": 0.7540968642802387,
       "ranking": 19,
       "sequence": "AVHISLKGFR",
-      "solubility": 0.7555693984031677
+      "solubility": 0.7555693984031677,
+      "undetermined_pathways": null
     },
     {
+      "activated_pathways": null,
       "aggregation_tendency": 0.17553360760211945,
       "amp_probability": 0.8660776860596094,
       "angiogenic_activity": 0.23737463315258842,
@@ -898,14 +883,11 @@
       "cleavage_stability": 1.0,
       "cytotoxicity_probability": 0.2948902789503336,
       "deamidation_risk": "low",
-      "engaged_pathways": [
-        "MAPK",
-        "TGFB_SMAD",
-        "FGFR_JAK2_STAT3",
-        "VEGF_ANGIOGENESIS"
-      ],
+      "evidence_coverage": 0.8872773728113023,
+      "final_score": 0.6589476277757257,
       "hemolytic_activity_phc50": 3.6808153178228404,
       "id": "54fe69249574e8db",
+      "inhibited_pathways": null,
       "instability_index": 56.23727272727273,
       "log_mic_um": {
         "Escherichia coli": 1.2848595615192366,
@@ -913,6 +895,7 @@
         "Staphylococcus aureus": 1.3902047959182513
       },
       "migration_probability": 0.5130619165631048,
+      "missing_modules": null,
       "molecular_weight": 1445.69,
       "net_charge": 1.985,
       "oxidation_risk": "medium",
@@ -934,9 +917,11 @@
       "proliferation_probability": 0.843003243597806,
       "ranking": 20,
       "sequence": "QMKKYLPNNFY",
-      "solubility": 0.6970381736755371
+      "solubility": 0.6970381736755371,
+      "undetermined_pathways": null
     },
     {
+      "activated_pathways": null,
       "aggregation_tendency": 0.4812503755092621,
       "amp_probability": 0.8143681588030445,
       "angiogenic_activity": 0.2730365807903997,
@@ -944,14 +929,11 @@
       "cleavage_stability": 1.0,
       "cytotoxicity_probability": 0.31935730285476893,
       "deamidation_risk": "low",
-      "engaged_pathways": [
-        "PI3K_AKT_MTOR",
-        "TGFB_SMAD",
-        "FGFR_JAK2_STAT3",
-        "CYTOKINE_MACROPHAGE"
-      ],
+      "evidence_coverage": 0.8872773728113023,
+      "final_score": 0.6584291060869102,
       "hemolytic_activity_phc50": 3.811401926922226,
       "id": "418267a9ca261882",
+      "inhibited_pathways": null,
       "instability_index": 12.850000000000001,
       "log_mic_um": {
         "Escherichia coli": 1.1185239726655363,
@@ -959,6 +941,7 @@
         "Staphylococcus aureus": 1.236702831503625
       },
       "migration_probability": 0.5990384628819089,
+      "missing_modules": null,
       "molecular_weight": 1236.53,
       "net_charge": 1.987,
       "oxidation_risk": "medium",
@@ -980,9 +963,11 @@
       "proliferation_probability": 0.8122682797672818,
       "ranking": 21,
       "sequence": "VKQTYRVMVI",
-      "solubility": 0.26639068126678467
+      "solubility": 0.26639068126678467,
+      "undetermined_pathways": null
     },
     {
+      "activated_pathways": null,
       "aggregation_tendency": 0.24961139261722565,
       "amp_probability": 0.8866740136040987,
       "angiogenic_activity": 0.06639288916957015,
@@ -990,14 +975,11 @@
       "cleavage_stability": 1.0,
       "cytotoxicity_probability": 0.41118728928267956,
       "deamidation_risk": "low",
-      "engaged_pathways": [
-        "MAPK",
-        "ERK",
-        "NF_KB",
-        "CYTOKINE_MACROPHAGE"
-      ],
+      "evidence_coverage": 0.8872773728113023,
+      "final_score": 0.6574867313978164,
       "hemolytic_activity_phc50": 3.7913750777237536,
       "id": "cfd53f12449e142c",
+      "inhibited_pathways": null,
       "instability_index": 4.657142857142857,
       "log_mic_um": {
         "Escherichia coli": 1.046613369573219,
@@ -1005,6 +987,7 @@
         "Staphylococcus aureus": 1.0616789353739102
       },
       "migration_probability": 0.7261767326617744,
+      "missing_modules": null,
       "molecular_weight": 1858.25,
       "net_charge": 7.068,
       "oxidation_risk": "medium",
@@ -1026,9 +1009,11 @@
       "proliferation_probability": 0.33556822504133904,
       "ranking": 22,
       "sequence": "WKPKPKYKHKPRKH",
-      "solubility": 0.9755287766456604
+      "solubility": 0.9755287766456604,
+      "undetermined_pathways": null
     },
     {
+      "activated_pathways": null,
       "aggregation_tendency": 0.33281269669532776,
       "amp_probability": 0.901355911872571,
       "angiogenic_activity": 0.14810389705183816,
@@ -1036,15 +1021,11 @@
       "cleavage_stability": 1.0,
       "cytotoxicity_probability": 0.40039537101984024,
       "deamidation_risk": "low",
-      "engaged_pathways": [
-        "MAPK",
-        "ERK",
-        "PI3K_AKT_MTOR",
-        "NF_KB",
-        "CYTOKINE_MACROPHAGE"
-      ],
+      "evidence_coverage": 0.8872773728113023,
+      "final_score": 0.657120769254468,
       "hemolytic_activity_phc50": 3.557057877745208,
       "id": "1f6c70c150230f99",
+      "inhibited_pathways": null,
       "instability_index": 19.770000000000003,
       "log_mic_um": {
         "Escherichia coli": 0.9524077148690381,
@@ -1052,6 +1033,7 @@
         "Staphylococcus aureus": 1.0593711828751253
       },
       "migration_probability": 0.5829435379787419,
+      "missing_modules": null,
       "molecular_weight": 1262.55,
       "net_charge": 2.987,
       "oxidation_risk": "low",
@@ -1073,9 +1055,11 @@
       "proliferation_probability": 0.7343878382596976,
       "ranking": 23,
       "sequence": "RKLRTIIYIS",
-      "solubility": 0.4014105200767517
+      "solubility": 0.4014105200767517,
+      "undetermined_pathways": null
     },
     {
+      "activated_pathways": null,
       "aggregation_tendency": 0.34391018748283386,
       "amp_probability": 0.8474620080043577,
       "angiogenic_activity": 0.3272538392880008,
@@ -1083,14 +1067,11 @@
       "cleavage_stability": 1.0,
       "cytotoxicity_probability": 0.4420633986592293,
       "deamidation_risk": "low",
-      "engaged_pathways": [
-        "MAPK",
-        "NF_KB",
-        "VEGF_ANGIOGENESIS",
-        "CYTOKINE_MACROPHAGE"
-      ],
+      "evidence_coverage": 0.8872773728113023,
+      "final_score": 0.6563807635999953,
       "hemolytic_activity_phc50": 3.7853835282644863,
       "id": "fb84f4319b2d0cab",
+      "inhibited_pathways": null,
       "instability_index": 84.05454545454546,
       "log_mic_um": {
         "Escherichia coli": 1.2783263605489152,
@@ -1098,6 +1079,7 @@
         "Staphylococcus aureus": 1.350850379606516
       },
       "migration_probability": 0.6694308818950164,
+      "missing_modules": null,
       "molecular_weight": 1516.77,
       "net_charge": 2.835,
       "oxidation_risk": "high",
@@ -1119,9 +1101,11 @@
       "proliferation_probability": 0.7331617149671041,
       "ranking": 24,
       "sequence": "ACKWRKWQPQW",
-      "solubility": 0.8433647155761719
+      "solubility": 0.8433647155761719,
+      "undetermined_pathways": null
     },
     {
+      "activated_pathways": null,
       "aggregation_tendency": 0.21665851771831512,
       "amp_probability": 0.8437064466367961,
       "angiogenic_activity": 0.08169814007303326,
@@ -1129,15 +1113,11 @@
       "cleavage_stability": 1.0,
       "cytotoxicity_probability": 0.4353608712553978,
       "deamidation_risk": "low",
-      "engaged_pathways": [
-        "MAPK",
-        "ERK",
-        "PI3K_AKT_MTOR",
-        "NF_KB",
-        "CYTOKINE_MACROPHAGE"
-      ],
+      "evidence_coverage": 0.8872773728113023,
+      "final_score": 0.6449581347746978,
       "hemolytic_activity_phc50": 3.7834703165504173,
       "id": "12fa8db0d44229f9",
+      "inhibited_pathways": null,
       "instability_index": 48.27777777777778,
       "log_mic_um": {
         "Escherichia coli": 1.2023050066535876,
@@ -1145,6 +1125,7 @@
         "Staphylococcus aureus": 1.242986773213376
       },
       "migration_probability": 0.5812408904183025,
+      "missing_modules": null,
       "molecular_weight": 1031.28,
       "net_charge": 1.989,
       "oxidation_risk": "medium",
@@ -1166,9 +1147,11 @@
       "proliferation_probability": 0.7709523432881277,
       "ranking": 25,
       "sequence": "SLKNIARMV",
-      "solubility": 0.6233314871788025
+      "solubility": 0.6233314871788025,
+      "undetermined_pathways": null
     },
     {
+      "activated_pathways": null,
       "aggregation_tendency": 0.2495531141757965,
       "amp_probability": 0.8343493296610146,
       "angiogenic_activity": 0.23995564896340688,
@@ -1176,16 +1159,11 @@
       "cleavage_stability": 1.0,
       "cytotoxicity_probability": 0.3649304201826453,
       "deamidation_risk": "low",
-      "engaged_pathways": [
-        "MAPK",
-        "ERK",
-        "PI3K_AKT_MTOR",
-        "NF_KB",
-        "VEGF_ANGIOGENESIS",
-        "CYTOKINE_MACROPHAGE"
-      ],
+      "evidence_coverage": 0.8872773728113023,
+      "final_score": 0.6387902762125837,
       "hemolytic_activity_phc50": 3.6033452076867594,
       "id": "18098d45899100bc",
+      "inhibited_pathways": null,
       "instability_index": 76.75,
       "log_mic_um": {
         "Escherichia coli": 1.0129920650363664,
@@ -1193,6 +1171,7 @@
         "Staphylococcus aureus": 1.1166137529001514
       },
       "migration_probability": 0.6000577898393026,
+      "missing_modules": null,
       "molecular_weight": 1068.27,
       "net_charge": 2.987,
       "oxidation_risk": "low",
@@ -1214,9 +1193,11 @@
       "proliferation_probability": 0.7170062153747776,
       "ranking": 26,
       "sequence": "RRVKYFTV",
-      "solubility": 0.8671180009841919
+      "solubility": 0.8671180009841919,
+      "undetermined_pathways": null
     },
     {
+      "activated_pathways": null,
       "aggregation_tendency": 0.2557086646556854,
       "amp_probability": 0.7702745973865779,
       "angiogenic_activity": 0.054670347714651533,
@@ -1224,15 +1205,11 @@
       "cleavage_stability": 1.0,
       "cytotoxicity_probability": 0.29087325488217175,
       "deamidation_risk": "low",
-      "engaged_pathways": [
-        "MAPK",
-        "TGFB_SMAD",
-        "NF_KB",
-        "VEGF_ANGIOGENESIS",
-        "CYTOKINE_MACROPHAGE"
-      ],
+      "evidence_coverage": 0.8872773728113023,
+      "final_score": 0.6309835901301272,
       "hemolytic_activity_phc50": 3.770750402727906,
       "id": "058379cb386daaef",
+      "inhibited_pathways": null,
       "instability_index": 63.2,
       "log_mic_um": {
         "Escherichia coli": 1.0943636199111906,
@@ -1240,6 +1217,7 @@
         "Staphylococcus aureus": 1.2477008423874754
       },
       "migration_probability": 0.5094963078347142,
+      "missing_modules": null,
       "molecular_weight": 1503.69,
       "net_charge": 2.914,
       "oxidation_risk": "medium",
@@ -1261,9 +1239,11 @@
       "proliferation_probability": 0.42089388509987363,
       "ranking": 27,
       "sequence": "GHYSKQYPRCKH",
-      "solubility": 0.9680174589157104
+      "solubility": 0.9680174589157104,
+      "undetermined_pathways": null
     },
     {
+      "activated_pathways": null,
       "aggregation_tendency": 0.081362284719944,
       "amp_probability": 0.7053015592445296,
       "angiogenic_activity": 0.47204452722494245,
@@ -1271,11 +1251,11 @@
       "cleavage_stability": 1.0,
       "cytotoxicity_probability": 0.24631920084357262,
       "deamidation_risk": "low",
-      "engaged_pathways": [
-        "TGFB_SMAD"
-      ],
+      "evidence_coverage": 0.8872773728113023,
+      "final_score": 0.6284020822209269,
       "hemolytic_activity_phc50": 3.7056340604730336,
       "id": "19795b0946755109",
+      "inhibited_pathways": null,
       "instability_index": 18.3125,
       "log_mic_um": {
         "Escherichia coli": 1.2719133147425024,
@@ -1283,6 +1263,7 @@
         "Staphylococcus aureus": 1.310624867401879
       },
       "migration_probability": 0.5084570006586538,
+      "missing_modules": null,
       "molecular_weight": 980.19,
       "net_charge": 1.877,
       "oxidation_risk": "medium",
@@ -1304,9 +1285,11 @@
       "proliferation_probability": 0.7232273531708566,
       "ranking": 28,
       "sequence": "HNRLKPIC",
-      "solubility": 0.9797311425209045
+      "solubility": 0.9797311425209045,
+      "undetermined_pathways": null
     },
     {
+      "activated_pathways": null,
       "aggregation_tendency": 0.6316115856170654,
       "amp_probability": 0.917788179118421,
       "angiogenic_activity": 0.09517320855235958,
@@ -1314,15 +1297,11 @@
       "cleavage_stability": 1.0,
       "cytotoxicity_probability": 0.45127447694540024,
       "deamidation_risk": "low",
-      "engaged_pathways": [
-        "MAPK",
-        "ERK",
-        "PI3K_AKT_MTOR",
-        "NF_KB",
-        "CYTOKINE_MACROPHAGE"
-      ],
+      "evidence_coverage": 0.8872773728113023,
+      "final_score": 0.6282217763424416,
       "hemolytic_activity_phc50": 3.6980670109401306,
       "id": "1430b6942c9c6bfd",
+      "inhibited_pathways": null,
       "instability_index": 35.67777777777778,
       "log_mic_um": {
         "Escherichia coli": 1.189619905504497,
@@ -1330,6 +1309,7 @@
         "Staphylococcus aureus": 1.1467279214225792
       },
       "migration_probability": 0.5643987581158139,
+      "missing_modules": null,
       "molecular_weight": 1229.54,
       "net_charge": 2.989,
       "oxidation_risk": "medium",
@@ -1351,9 +1331,11 @@
       "proliferation_probability": 0.7028657555833301,
       "ranking": 29,
       "sequence": "RIVWQLMKR",
-      "solubility": 0.7362636923789978
+      "solubility": 0.7362636923789978,
+      "undetermined_pathways": null
     },
     {
+      "activated_pathways": null,
       "aggregation_tendency": 0.5572369694709778,
       "amp_probability": 0.8667974940521308,
       "angiogenic_activity": 0.04327779591945822,
@@ -1361,16 +1343,11 @@
       "cleavage_stability": 1.0,
       "cytotoxicity_probability": 0.4879897013306618,
       "deamidation_risk": "low",
-      "engaged_pathways": [
-        "ERK",
-        "PI3K_AKT_MTOR",
-        "TGFB_SMAD",
-        "NF_KB",
-        "FGFR_JAK2_STAT3",
-        "CYTOKINE_MACROPHAGE"
-      ],
+      "evidence_coverage": 0.8872773728113023,
+      "final_score": 0.6271939410424852,
       "hemolytic_activity_phc50": 3.772803233979298,
       "id": "c2e40814e0422143",
+      "inhibited_pathways": null,
       "instability_index": 15.220000000000002,
       "log_mic_um": {
         "Escherichia coli": 1.171423453251042,
@@ -1378,6 +1355,7 @@
         "Staphylococcus aureus": 1.2088879029483983
       },
       "migration_probability": 0.6054784972655434,
+      "missing_modules": null,
       "molecular_weight": 1212.49,
       "net_charge": 1.989,
       "oxidation_risk": "medium",
@@ -1399,9 +1377,11 @@
       "proliferation_probability": 0.8275348206950679,
       "ranking": 30,
       "sequence": "VKLKINWLQA",
-      "solubility": 0.35615769028663635
+      "solubility": 0.35615769028663635,
+      "undetermined_pathways": null
     },
     {
+      "activated_pathways": null,
       "aggregation_tendency": 0.07072894275188446,
       "amp_probability": 0.8466484721037401,
       "angiogenic_activity": 0.10691005432549044,
@@ -1409,16 +1389,11 @@
       "cleavage_stability": 1.0,
       "cytotoxicity_probability": 0.38488946482539177,
       "deamidation_risk": "low",
-      "engaged_pathways": [
-        "MAPK",
-        "ERK",
-        "PI3K_AKT_MTOR",
-        "NF_KB",
-        "FGFR_JAK2_STAT3",
-        "CYTOKINE_MACROPHAGE"
-      ],
+      "evidence_coverage": 0.8872773728113023,
+      "final_score": 0.6169474224408544,
       "hemolytic_activity_phc50": 3.6261435970678417,
       "id": "d0f7e3e6d3ecfa5d",
+      "inhibited_pathways": null,
       "instability_index": 45.9,
       "log_mic_um": {
         "Escherichia coli": 1.296631947246962,
@@ -1426,6 +1401,7 @@
         "Staphylococcus aureus": 1.3506931544923937
       },
       "migration_probability": 0.5347360995849696,
+      "missing_modules": null,
       "molecular_weight": 940.18,
       "net_charge": 1.989,
       "oxidation_risk": "low",
@@ -1447,9 +1423,11 @@
       "proliferation_probability": 0.8243281147729729,
       "ranking": 31,
       "sequence": "IPKKTLQI",
-      "solubility": 0.9487593173980713
+      "solubility": 0.9487593173980713,
+      "undetermined_pathways": null
     },
     {
+      "activated_pathways": null,
       "aggregation_tendency": 0.4345473349094391,
       "amp_probability": 0.7669084910655002,
       "angiogenic_activity": 0.6156472677268845,
@@ -1457,14 +1435,11 @@
       "cleavage_stability": 0.3798731958298987,
       "cytotoxicity_probability": 0.43912090361118317,
       "deamidation_risk": "low",
-      "engaged_pathways": [
-        "MAPK",
-        "ERK",
-        "VEGF_ANGIOGENESIS",
-        "CYTOKINE_MACROPHAGE"
-      ],
+      "evidence_coverage": 0.8872773728113023,
+      "final_score": 0.6137614616070078,
       "hemolytic_activity_phc50": 3.8024194332859462,
       "id": "9e0a85bc5e71a7bd",
+      "inhibited_pathways": null,
       "instability_index": 64.17692307692307,
       "log_mic_um": {
         "Escherichia coli": 1.1214278693463278,
@@ -1472,6 +1447,7 @@
         "Staphylococcus aureus": 1.2330537324424993
       },
       "migration_probability": 0.5617699410554892,
+      "missing_modules": null,
       "molecular_weight": 1677.97,
       "net_charge": 2.834,
       "oxidation_risk": "high",
@@ -1493,9 +1469,11 @@
       "proliferation_probability": 0.7038739940776692,
       "ranking": 32,
       "sequence": "RKWSKQSLDWLKC",
-      "solubility": 0.9127008318901062
+      "solubility": 0.9127008318901062,
+      "undetermined_pathways": null
     },
     {
+      "activated_pathways": null,
       "aggregation_tendency": 0.11933210492134094,
       "amp_probability": 0.7949921195717186,
       "angiogenic_activity": 0.05926471424782916,
@@ -1503,12 +1481,11 @@
       "cleavage_stability": 1.0,
       "cytotoxicity_probability": 0.4139329120516777,
       "deamidation_risk": "low",
-      "engaged_pathways": [
-        "MAPK",
-        "CYTOKINE_MACROPHAGE"
-      ],
+      "evidence_coverage": 0.8872773728113023,
+      "final_score": 0.5917328278110094,
       "hemolytic_activity_phc50": 3.678676337555595,
       "id": "5241af9fc2c86b9f",
+      "inhibited_pathways": null,
       "instability_index": -10.739999999999998,
       "log_mic_um": {
         "Escherichia coli": 1.3572181374443784,
@@ -1516,6 +1493,7 @@
         "Staphylococcus aureus": 1.4871698635101647
       },
       "migration_probability": 0.595905732460858,
+      "missing_modules": null,
       "molecular_weight": 1410.63,
       "net_charge": 4.029,
       "oxidation_risk": "low",
@@ -1537,67 +1515,11 @@
       "proliferation_probability": 0.545482512267553,
       "ranking": 33,
       "sequence": "SIGSKGKHVGGKAGK",
-      "solubility": 0.9689034223556519
+      "solubility": 0.9689034223556519,
+      "undetermined_pathways": null
     }
   ],
-  "component_stats": {
-    "angiogenesis": {
-      "count": 33,
-      "max": 0.6375873728315243,
-      "mean": 0.21985645414190783,
-      "median": 0.14448300232724826,
-      "min": 0.04327779591945822
-    },
-    "antimicrobial": {
-      "count": 33,
-      "max": 0.917788179118421,
-      "mean": 0.8354800743194877,
-      "median": 0.8466484721037401,
-      "min": 0.7047438107349484
-    },
-    "immunomodulation": {
-      "count": 33,
-      "max": 0.7903415560722351,
-      "mean": 0.5820572773615519,
-      "median": 0.5820976495742798,
-      "min": 0.33587703108787537
-    },
-    "mechanistic_confidence": {
-      "count": 33,
-      "max": 0.8675190210342407,
-      "mean": 0.7310634562463472,
-      "median": 0.7268006801605225,
-      "min": 0.5460828542709351
-    },
-    "safety": {
-      "count": 33,
-      "max": 0.8600285141728818,
-      "mean": 0.6554114662223693,
-      "median": 0.6518847425468266,
-      "min": 0.5120102986693382
-    },
-    "stability": {
-      "count": 33,
-      "max": 1.0,
-      "mean": 0.9812082786615122,
-      "median": 1.0,
-      "min": 0.3798731958298987
-    },
-    "synthesis_feasibility": {
-      "count": 33,
-      "max": 0.8879905124437966,
-      "mean": 0.6681331851861368,
-      "median": 0.6539404620223466,
-      "min": 0.3111367650297252
-    },
-    "wound_closure": {
-      "count": 33,
-      "max": 0.7579523722543158,
-      "mean": 0.6250194191550109,
-      "median": 0.6054784972655434,
-      "min": 0.5084570006586538
-    }
-  },
+  "component_stats": {},
   "insufficient_evidence_candidates": 0,
   "job_id": "projects/example-project/locations/us-central1/customJobs/9223232270029029376",
   "n_final": 33,

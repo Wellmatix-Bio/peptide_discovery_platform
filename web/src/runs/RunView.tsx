@@ -206,6 +206,41 @@ function Candidate({
             </div>
 
             <div className="cand-col">
+              <h4>Ranking evidence</h4>
+              {/* The API reports how much of the evidence behind a rank actually existed.
+                  Showing a score without it invites the reader to treat a rank computed from
+                  half the modules as one computed from all of them. */}
+              <Scored
+                label="Final score"
+                value={candidate.final_score}
+                meaning="The weighted multi-objective score from s11_ranking, after flag deductions."
+                scale={[0, 1]}
+              />
+              <Scored
+                label="Evidence coverage"
+                value={candidate.evidence_coverage}
+                meaning="Activated modules that produced a score, over activated modules. Below 1 means the rank was computed from part of the intended evidence, with the remaining weights renormalised."
+                scale={[0, 1]}
+              />
+              <div className="kv">
+                <span>Modules with no score</span>
+                <span>
+                  {candidate.missing_modules == null ? (
+                    <NoValue why="The API reported no missing_modules field for this candidate." />
+                  ) : candidate.missing_modules.length === 0 ? (
+                    "None — every activated module scored"
+                  ) : (
+                    candidate.missing_modules.map((module) => (
+                      <span className="chip" key={module}>
+                        {words(module)}
+                      </span>
+                    ))
+                  )}
+                </span>
+              </div>
+            </div>
+
+            <div className="cand-col">
               <h4>Safety &amp; developability</h4>
               <Scored
                 label="Cytotoxicity score"

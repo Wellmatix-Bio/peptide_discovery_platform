@@ -1,7 +1,7 @@
 {
   "error": null,
   "job_id": "projects/example-project/locations/us-central1/customJobs/2046288866976989184",
-  "stage": "pending",
-  "status": "success",
+  "stage": "s05_physchem_screening",
+  "status": "running",
   "vertex_state": "JOB_STATE_SUCCEEDED"
 }

@@ -483,21 +483,25 @@ class Stage8(CandidateStage):
         else:
             properties["aggregation_tendency"] = "pass"
 
+        # Same rule as aggregation_tendency above, and it was missed here when that one was
+        # fixed: a null score meant the model did not run, and `is not None and ...` read it as a
+        # pass. cleavage_stability is the worse of the two, since a REJECT threshold that never
+        # ran cleared the candidate on a check nothing performed.
         solubility_score = predictions["solubility"]["score"]
-        properties["solubility"] = (
-            "flag"
-            if solubility_score is not None
-            and solubility_score < t["solubility_flag_min"]
-            else "pass"
-        )
+        if solubility_score is None:
+            properties["solubility"] = "not_screened"
+        elif solubility_score < t["solubility_flag_min"]:
+            properties["solubility"] = "flag"
+        else:
+            properties["solubility"] = "pass"
 
         cleavage_score = predictions["cleavage_stability"]["score"]
-        properties["cleavage_stability"] = (
-            "reject"
-            if cleavage_score is not None
-            and cleavage_score < t["cleavage_stability_reject_min"]
-            else "pass"
-        )
+        if cleavage_score is None:
+            properties["cleavage_stability"] = "not_screened"
+        elif cleavage_score < t["cleavage_stability_reject_min"]:
+            properties["cleavage_stability"] = "reject"
+        else:
+            properties["cleavage_stability"] = "pass"
 
         if "reject" in properties.values():
             overall = "reject"

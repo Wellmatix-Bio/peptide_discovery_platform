@@ -242,3 +242,48 @@ the recorded baseline assumes"* rather than 1 with *"a regression was introduced
 The cost is honest: ~2.4 GB installed and a slower cold CI run, cached between runs. The
 alternative — a second baseline for a slim environment — means two numbers to keep in step and two
 permanent collection errors in CI, which is how a real import regression would hide.
+
+
+---
+
+# Update: after fixing stage 5's unavailable-screen handling
+
+**105 passed / 7 failed / 0 collection errors.** The 7 failures are unchanged — the same 4 stale
+`test_api_e2e` expectations and 3 tests needing model weights. The 23 extra passes are the new
+`tests/unit/pipeline/test_s05_physchem_screening.py` (13) and
+`test_s08_safety_developability.py` (10), which were 1-line placeholders with no tests in them.
+
+## What they cover, and why it was missed
+
+Raised in review: **stage 5 raised `KeyError('flag')` when `s4pred` was unavailable.** Correct, and
+worse than a wrong verdict — `compute_screening_verdict` read
+`predictions["secondary_structure_consistency"]["flag"]` unconditionally, and the unavailable
+return carries no `"flag"` key. Since `s4pred` does not resolve from a fresh clone, **stage 5 took
+the pipeline down on every candidate in the default configuration.**
+
+Documentation said the screen "reports itself unavailable" and that "nothing else in stage 5
+changes". The first was true of the screen and the second was false of the stage. Both corrected.
+
+Looking for siblings of the bug found four more, all the same rule broken the same way — a null
+score read as a pass via `score is not None and <threshold>` with `else "pass"`:
+
+| Stage | Field | Was | Now |
+|---|---|---|---|
+| 5 | `secondary_structure` | `KeyError('flag')` | `not_screened` |
+| 5 | `solubility` | `pass` | `not_screened` |
+| 5 | `aggregation_tendency` | `pass` | `not_screened` |
+| 8 | `solubility` | `pass` | `not_screened` |
+| 8 | `cleavage_stability` | `pass` | `not_screened` |
+
+`cleavage_stability` is the worst of them: its threshold is a hard **reject**, so a candidate that
+could not be screened was cleared on a check nothing performed.
+
+Stage 8's `aggregation_tendency` had already been fixed for exactly this reason — and the two
+fields immediately below it were left as they were. The guard that should have caught that,
+`test_licensing.py::test_an_unavailable_screen_is_never_reported_as_a_pass`, asserts against
+**source text** for the one line that was fixed, so it passed throughout. The new tests call the
+code instead, and each of the five fixes was verified by re-introducing the bug and confirming a
+failure.
+
+The lesson is the same one `docs/BASELINE.md` already records about CI's environment: a guard
+written around one instance of a mistake does not cover the mistake.

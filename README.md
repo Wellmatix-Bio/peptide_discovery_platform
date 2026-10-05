@@ -65,7 +65,7 @@ an addition, and each announces itself when missing rather than failing obscurel
 |---|---|---|
 | Google Cloud | `pip install -e '.[gcp]'` | Local paths work normally; a `gs://` path raises an error naming the fix |
 | `propy3` (GPL-2.0-only) | `pip install -e '.[aggregation]'` | The aggregation screen reports `not_screened` — never a silent pass |
-| `s4pred` (GPL-3.0) | vendor it yourself | The secondary-structure screen reports itself unavailable |
+| `s4pred` (GPL-3.0) | [set it up yourself](CONTRIBUTING.md#setting-up-s4pred-optional-gpl-30) | The secondary-structure screen reports itself unavailable |
 | A GPU | — | Runs on CPU, slowly. ESMFold in stage 7 dominates |
 
 Both copyleft packages are optional on purpose. See [docs/LICENSING.md](docs/LICENSING.md).

@@ -67,11 +67,13 @@ complain about your environment, it is telling you the truth.
 
 ## Things that will trip you up
 
-**`s4pred` does not resolve.** It is committed as a git submodule pointer with no `.gitmodules`
-entry, so `git submodule update --init` cannot fetch it. It is optional — stage 5's
-secondary-structure screen reports itself unavailable — and the pipeline imports fine without it.
-If you need that screen, obtain s4pred from upstream and place it in
-`src/pipeline/s05_physchem_screening/s4pred/`, accepting its GPL-3.0 terms.
+**`s4pred` does not resolve.** It is committed as a git submodule pointer (a gitlink) with no
+`.gitmodules` entry, so `git submodule update --init` cannot fetch it — `git submodule status`
+answers `no submodule mapping found in .gitmodules`. A fresh clone gets an empty directory.
+
+It is optional. Stage 5's secondary-structure screen reports itself unavailable, the pipeline
+imports fine, and nothing else in stage 5 changes. **Set it up only if you need that screen** —
+see [Setting up s4pred](#setting-up-s4pred-optional-gpl-30) below.
 
 **Two dependencies are copyleft and deliberately absent.** `propy3` (GPL-2.0-only) and `s4pred`
 (GPL-3.0). Do not add either to `requirements.txt` or to `pyproject.toml`'s core dependencies —
@@ -82,6 +84,61 @@ combined work under that licence. [docs/LICENSING.md](docs/LICENSING.md) has the
 
 **Port 8080 is the job API's default** and is a popular port. Check what is listening before you
 blame the code; a proxy pointed at the wrong service fails in confusing ways.
+
+---
+
+## Setting up s4pred (optional, GPL-3.0)
+
+Needed only for stage 5's secondary-structure screen. **Doing this makes your installation a
+combined work with GPL-3.0 code**, which constrains what you may redistribute — that is your
+decision to make, and `docs/LICENSING.md` explains the consequence.
+
+Upstream is [psipred/s4pred](https://github.com/psipred/s4pred). The code must land at
+`src/pipeline/s05_physchem_screening/s4pred/`, because `stage.py` puts that exact directory on
+`sys.path` and imports `network.S4PRED` and `utilities.aas2int` from it.
+
+**Download it as a plain directory, not a `git clone`.** That path is already a gitlink in this
+repository's index, and a clone puts a nested `.git` there, which makes `git status` report
+`M src/pipeline/s05_physchem_screening/s4pred` forever — one careless `git add -A` then commits a
+new gitlink SHA. Extracting a tarball leaves the tree clean. (Both behaviours were checked, not
+assumed.) If you clone anyway, delete the nested `.git` afterwards.
+
+```bash
+cd src/pipeline/s05_physchem_screening && curl -sL https://github.com/psipred/s4pred/archive/refs/heads/main.tar.gz | tar -xz && mv s4pred-main s4pred
+```
+
+Then the weights — five ensembled files, ~430 MB unpacked, which the loader expects as
+`s4pred/weights/weights_1.pt` … `weights_5.pt`:
+
+```bash
+cd src/pipeline/s05_physchem_screening/s4pred && curl -O http://bioinfadmin.cs.ucl.ac.uk/downloads/s4pred/weights.tar.gz && tar -xvzf weights.tar.gz
+```
+
+That URL is **plain HTTP**, so verify what you got before loading it. Upstream publishes the
+archive's MD5 as `e04ad7d10b61551f7e07a86b65bb88dc`:
+
+```bash
+md5sum src/pipeline/s05_physchem_screening/s4pred/weights.tar.gz
+```
+
+**Confirm it worked** — the flag is the one the code actually branches on, so this is the check
+that matters rather than the files being present:
+
+```bash
+PYTHONPATH=src .venv/bin/python -c "from pipeline.s05_physchem_screening.stage import S4PRED_AVAILABLE as a, S4PRED_UNAVAILABLE_REASON as r; print(a); print(r or 'the screen will run')"
+```
+
+`True` means stage 5 will run the screen and report `available: true`. `False` prints the reason,
+which names what failed to import.
+
+Two things to expect afterwards:
+
+- **The backend baseline moves.** The recorded 82/7/0 assumes s4pred is *absent* (`docs/BASELINE.md`).
+  A richer environment is not a regression, and `.github/check_baseline.py` says so rather than
+  reporting one.
+- **Do not add it to `requirements.txt` or `pyproject.toml`'s core dependencies.**
+  `tests/test_licensing.py` fails if you do, because that would make every built image a combined
+  work under GPL-3.0.
 
 ---
 

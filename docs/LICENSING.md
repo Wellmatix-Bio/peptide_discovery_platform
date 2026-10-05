@@ -70,7 +70,7 @@ make, and the terms of the GPL dependency govern what you may then distribute.
 ## Model weights are not covered by this licence
 
 **No weights are in this repository.** `model_store/<predictor>/` holds code — `predictor.py`, a
-`README.md`, and a `model_card.json` for 8 of the 15. The weights live in
+`README.md`, and a `model_card.json` for 8 of the 16. The weights live in
 `model_store/model_weights/`, which is gitignored and populated at run time from whatever
 `VERTEX_MODEL_STORE` points at.
 
@@ -118,5 +118,5 @@ Re-run the audit after any dependency change:
 - [x] No secrets, project ids or bucket names in the repository **or its git history** — verified
       with `git log --all -S`, not just the working tree
 - [x] Copyleft dependencies optional and documented
-- [ ] Per-predictor weight licences stated — **7 of 15 have no model card**
+- [ ] Per-predictor weight licences stated — **8 of 16 have no model card** (amp_classifier_v1, anti_inflammatory_predictor_v1, cytotoxicity_predictor_v1, esmfold_v1, hemolysis_predictor_v1, pathway_mapping_predictor_v1, pathway_mapping_predictor_v2, routeb_protgpt2_lora_v1)
 - [ ] A lawyer has reviewed the above

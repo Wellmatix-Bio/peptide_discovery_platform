@@ -366,3 +366,58 @@ forever while `vertex_state` reads `JOB_STATE_FAILED`.
 `test_a_dead_worker_still_reports_pending_and_only_vertex_state_tells_the_truth` now documents
 that for the three terminal states, and fails loudly — with an instruction to update this document
 — on the day `status` learns about `vertex_state`.
+
+---
+
+# Investigation: a completed run that reports itself unfinished
+
+`2046288866976989184` is a run the API describes as `status: running` at `s05_physchem_screening`,
+progress 0.25, while `vertex_state` reads `JOB_STATE_SUCCEEDED`. Its 11 final candidates exist in
+the bucket and **cannot be read through the API**, because `/results` returns early with an empty
+candidate list whenever `status != "success"`.
+
+## What the artifacts say
+
+| When | What was written |
+|---|---|
+| 30 Sep 08:38 → 09:11 | The real run. `config.json`, stages s05–s11, `candidates_final.json` (530 KB, 11 candidates), feature caches |
+| **2 Oct 01:03 → 01:08** | `config_snapshot.yaml`, `audit_log.jsonl`, `candidates/s04_candidate_generation.jsonl`, and a 107-byte `results.json` reading `running` |
+
+The second write stopped after stage 4 and never resumed. The run directory now holds **two
+different executions**: September's completed outputs beside October's abandoned ones, with the
+October `results.json` on top.
+
+## It did not come from Vertex
+
+Vertex's record of that job: created `2026-09-30 08:38:18`, started `08:41:08`, **ended
+`09:11:20`, `JOB_STATE_SUCCEEDED`**. One execution, finished in 30 minutes, nothing on 2 October.
+
+So the October writes came from a worker started **outside Vertex** against that run's config —
+which carries both `run_id` and `artifacts_dir`, so anything replaying it writes into the live
+run's directory. Re-running a worker from an existing config is enough to destroy a finished run's
+results.
+
+Corroborating: `2046117909033719520`, written seven minutes later the same night, **does not exist
+as a Vertex custom job at all** (404) yet has a complete artifacts directory with 16 candidates.
+Two runs were being driven by hand that night; one landed on an occupied directory.
+
+## Scope
+
+**One run of 22.** Every other run's `results.json` was written within seconds of its
+`candidates_final.json`. This is an incident, not a pattern.
+
+## What is and is not a problem
+
+- **Not a privacy hole.** `/results` never contacts Vertex — it validates the id's shape and reads
+  the bucket — so it will serve any run id whose artifacts exist, including one Vertex has never
+  heard of. That is safe only because the accounts proxy is the single route to this API and
+  refuses any job id the caller does not already own, with ownership claimed solely from a create
+  response. Checked, because "serves results for a job that does not exist" sounds worse than it
+  is.
+- **The data is not lost**, only unreachable: `candidates_final.json` still holds the 11
+  candidates. Restoring the September `results.json` would make them readable again.
+- **The real defect is that nothing protects a run directory from a second writer.** The worker
+  takes `run_id` from its config and writes wherever that points, with no check that the directory
+  already holds a completed run. A guard at worker start — refuse to run when
+  `candidates_final.json` exists unless explicitly told to overwrite — would have turned this into
+  an error message instead of a destroyed result.

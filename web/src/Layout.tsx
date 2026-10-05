@@ -7,7 +7,7 @@ import { lastRun } from "./workspace";
 /* The source project's shell: top bar, dark side navigation, main column.
  *
  * The top bar shows what is serving, from GET /api/peptide/api/v1/models. Note what it does NOT
- * show: a single "model fingerprint". This platform runs 15 predictors, not one, and the API can
+ * show: a single "model fingerprint". This platform runs many predictors, not one, and the API can
  * only digest their code and not their weights (docs/BASELINE.md), so one reassuring hash in the
  * corner would be a claim the backend cannot support. The count links to the model page, where
  * the caveat is stated in full. */
@@ -53,7 +53,7 @@ export function Layout() {
           to="/models"
           className="tag"
           style={{ marginLeft: "auto", background: "#f2f6f8", color: "#5c7382" }}
-          title="What is serving. No single fingerprint: 15 predictors, and weights are not digested."
+          title="What is serving. No single fingerprint: the API reports one entry per predictor, and weights are not digested."
         >
           {serving}
         </Link>

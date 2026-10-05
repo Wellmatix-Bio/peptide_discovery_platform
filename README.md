@@ -45,7 +45,7 @@ Running the web app and the full service stack is in [docs/DEPLOYMENT.md](docs/D
 | | |
 |---|---|
 | **Pipeline** | 14 stage directories under `src/pipeline/`, 8 implemented |
-| **Models** | 15 predictors in `model_store/` — ESM-2 embeddings with XGBoost/sklearn heads, a BiLSTM+CNN MIC ensemble, ESMFold for structure, ProtGPT2+LoRA for de novo generation |
+| **Models** | 16 predictors in `model_store/` — ESM-2 embeddings with XGBoost/sklearn heads, a BiLSTM+CNN MIC ensemble, ESMFold for structure, ProtGPT2+LoRA for de novo generation |
 | **Job API** | `src/backend/api_e2e/` — submits Vertex AI Custom Jobs, reads their artifacts |
 | **Accounts** | `services/accounts/` — email/password accounts and the authenticating proxy |
 | **Web app** | `web/` — React, TypeScript, one origin, no CORS |
@@ -79,7 +79,7 @@ Both copyleft packages are optional on purpose. See [docs/LICENSING.md](docs/LIC
 `VERTEX_MODEL_STORE` points.
 
 How outside users obtain them is **not yet settled**. Weights carry their own terms, including
-those of the upstream models they derive from (ESM-2, ESMFold, ProtGPT2), and **7 of the 15
+those of the upstream models they derive from (ESM-2, ESMFold, ProtGPT2), and **8 of the 16
 predictors ship no model card**, so their training data and applicability domain are undocumented.
 Tracked in [docs/LICENSING.md](docs/LICENSING.md).
 

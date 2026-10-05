@@ -541,7 +541,7 @@ def model_manifest():
       them, which a status endpoint has no business doing.
     - `version` is the suffix of the directory name, which is how this project versions a
       predictor. It is not derived from the weights either.
-    - `model_card` is whatever the predictor ships. 7 of the 15 predictors ship none, and
+    - `model_card` is whatever the predictor ships. half the predictors ship none, and
       `model_card_present` says which, rather than an empty object implying there is nothing
       to know.
     """

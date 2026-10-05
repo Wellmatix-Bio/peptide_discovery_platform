@@ -5,7 +5,7 @@ import { ErrorBox, Hero, Kv, Loading, Pill } from "../components/ui";
 /* What is serving, and what it will not answer.
  *
  * This page is as honest as the API allows, and no more. It says plainly that the digests cover
- * predictor code rather than weights, that 7 of 15 predictors ship no model card, and that no
+ * predictor code rather than weights, that half the predictors ship no model card, and that no
  * model identity is attached to a run -- because a model page that implies reproducibility the
  * backend cannot deliver is worse than no model page. The caveat text is the API's own; this
  * renders it rather than rewording it. */

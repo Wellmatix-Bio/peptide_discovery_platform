@@ -1,0 +1,771 @@
+{
+  "caveat": "Digests cover predictor code, not model weights: the weights are synced to the worker from weights_source at run time and are not present in this process. A matching digest therefore means the same scoring code, not provably the same weights.",
+  "models": [
+    {
+      "model_card": {
+        "aaindex1_accessions_used": {
+          "accessible_surface_area": "JANJ780101",
+          "alpha_helix_propensity": "CHOP780201",
+          "beta_sheet_propensity": "CHOP780202",
+          "bulkiness_zimmerman": "ZIMJ680102",
+          "coil_propensity": "TANS770103",
+          "compressibility": "NAKH900106",
+          "flexibility_vihinen": "VINM940101",
+          "free_energy_solubility": "GUYH850101",
+          "hydrophobicity_fauchere": "FAUJ830101",
+          "hydrophobicity_hw": "HOPT810101",
+          "hydrophobicity_kd": "KYTJ820101",
+          "net_charge": "KLEP840101",
+          "polarity_grantham": "GRAR740102",
+          "polarity_zimmerman": "ZIMJ680103",
+          "recognition_factor": "FAUJ880111",
+          "refractivity_mcmeekin": "MCMT640101",
+          "transmembrane_tendency": "ZHOH040102",
+          "turn_propensity": "CHOP780203",
+          "volume_zamyatnin": "ZIMJ680104"
+        },
+        "data_source": "data/adt5111_data_files_s1_to_s7.xlsx (sheet SD_2)",
+        "feature_cols": "see feature_columns.json (300 features, top-300 of ~1490 raw descriptors selected by XGBoost gain importance)",
+        "feature_selection": {
+          "method": "XGBoost gain importance ranking",
+          "n_selected": 300,
+          "selector_params": {
+            "eval_metric": "auc",
+            "n_estimators": 300,
+            "random_state": 42,
+            "scale_pos_weight": "(y_train==0).sum() / (y_train==1).sum()",
+            "tree_method": "hist"
+          }
+        },
+        "feature_sources": {
+          "aaindex1_protscale": "19 curated AAindex1 accessions (mean/std/min/max per sequence, 76 dims) standing in for classic ExPASy ProtScale tables; values bundled in aaindex1_scales.json, extracted from the source project's aaindex1 database file",
+          "biopython": "Bio.SeqUtils.ProtParam.ProteinAnalysis global descriptors (19 dims: MW, aromaticity, instability index, GRAVY, pI, charge at pH7, secondary-structure fractions, molar extinction, compositional fractions)",
+          "propy3_pybiomed": "propy.PyPro.GetProDes: amino-acid composition, dipeptide composition, CTD, Moran/Geary/Moreau-Broto autocorrelation, QSO, SOCN, PAAC, APAAC (~1275 dims; QSO/SOCN/PAAC/APAAC lag=4)"
+        },
+        "min_sequence_length": 5,
+        "model_name": "aggregation_predictor_v1",
+        "n_features": 300,
+        "n_raw_features_before_selection": 1490,
+        "paac_lambda": 4,
+        "socn_qso_lag": 4,
+        "target": "seed_bh",
+        "target_description": "Aggregation propensity label (seed_bh) from adt5111_data_files_s1_to_s7.xlsx, sheet SD_2.",
+        "task": "binary_classification",
+        "test_metrics": {
+          "accuracy": 0.7527653793906462,
+          "balanced_accuracy": 0.6419972957655973,
+          "f1": 0.43777581641659313,
+          "mcc": 0.27952878766640576,
+          "pr_auc": 0.44594237824063654,
+          "roc_auc": 0.6996802108945839
+        },
+        "test_set_size": 10306,
+        "train_set_size": 93141,
+        "xgb_hyperparameter_search": {
+          "cv": "StratifiedKFold(n_splits=5, shuffle=True, random_state=42)",
+          "method": "RandomizedSearchCV",
+          "n_iter": 40,
+          "param_distributions": {
+            "colsample_bytree": [
+              0.5,
+              0.6,
+              0.7,
+              0.8,
+              1.0
+            ],
+            "gamma": [
+              0,
+              0.1,
+              0.5,
+              1.0
+            ],
+            "learning_rate": [
+              0.01,
+              0.03,
+              0.05,
+              0.1,
+              0.2
+            ],
+            "max_depth": [
+              3,
+              4,
+              5,
+              6,
+              8
+            ],
+            "min_child_weight": [
+              1,
+              3,
+              5,
+              10
+            ],
+            "n_estimators": [
+              200,
+              300,
+              500,
+              800
+            ],
+            "reg_alpha": [
+              0,
+              0.01,
+              0.1,
+              1.0
+            ],
+            "reg_lambda": [
+              0.1,
+              1.0,
+              5.0,
+              10.0
+            ],
+            "subsample": [
+              0.6,
+              0.7,
+              0.8,
+              0.9,
+              1.0
+            ]
+          },
+          "scoring": "roc_auc"
+        },
+        "xgb_params": {
+          "colsample_bytree": 0.6,
+          "eval_metric": "auc",
+          "gamma": 1.0,
+          "learning_rate": 0.03,
+          "max_depth": 8,
+          "min_child_weight": 1,
+          "n_estimators": 800,
+          "objective": "binary:logistic",
+          "random_state": 42,
+          "reg_alpha": 0.01,
+          "reg_lambda": 10.0,
+          "scale_pos_weight": 3.635494948489524,
+          "subsample": 0.7,
+          "tree_method": "hist"
+        }
+      },
+      "model_card_present": true,
+      "name": "aggregation_predictor_v1",
+      "predictor_sha256": "a12749e68c0a80cf386321bb8e660ab8eb45fc40c948df0bde377201c917699c",
+      "version": "v1"
+    },
+    {
+      "model_card": null,
+      "model_card_present": false,
+      "name": "amp_classifier_v1",
+      "predictor_sha256": "c77b45885a6f300b79732d3cc08f7d57fc87dd7590732800240b9f8dd4922d1a",
+      "version": "v1"
+    },
+    {
+      "model_card": {
+        "caveat": "Severe class imbalance (23/206 positive) and small n drive low MCC/Recall for both deployed models despite class-weighting. Treat angiogenic_dominant as a soft screening signal, not a high-confidence classifier.",
+        "deployment_object_provenance": "Each of the 2 deployed models (SVM, MLP) was fit ONCE on the FULL 206-row dataset (fit_production_model in pipeline_35M_embedder.ipynb, no held-out fold) -- the notebook's own designated deployable object, distinct from the per-fold models fit during LOOCV which exist only to produce honest out-of-sample metrics. A RandomForestClassifier was also fit but is not part of the deployed ensemble. Exported from 'Models/Angiogenic activity prediction/pipeline_35M_embedder.ipynb' (despite the filename, this run embeds with facebook/esm2_t30_150M_UR50D).",
+        "ensemble_architecture": "2 independently trained models (a 3rd, RandomForestClassifier, was trained in the source notebook but excluded from the deployed ensemble), each a Pipeline wrapping a ColumnTransformer([passthrough 16 physchem descriptors, StandardScaler->PCA(0.95 variance) over 640-dim ESM2 block]): SVC(probability=True) and a custom TorchMLPClassifier (3-layer MLP). Deployed prediction is the unweighted mean of the two models' P(angiogenic_dominant).",
+        "esm_embed_dim": 640,
+        "esm_model_name": "facebook/esm2_t30_150M_UR50D",
+        "esm_pooling": "mean-pool per-residue hidden states, excluding BOS/EOS",
+        "evaluation_metrics_source": "notebook's own per-fold Leave-One-Out CV (206 folds), NOT a direct evaluation of the deployed full-data-refit objects -- reported as the best available generalization estimate since the deployed objects have no held-out evaluation of their own",
+        "feature_cols": [
+          "length",
+          "net_charge",
+          "hydrophobicity_mean",
+          "hydrophobic_moment",
+          "boman_index",
+          "aromatic_fraction",
+          "cationic_fraction",
+          "anionic_fraction",
+          "polar_fraction",
+          "aliphatic_fraction",
+          "proline_fraction",
+          "glycine_fraction",
+          "cysteine_fraction",
+          "charge_density",
+          "isoelectric_proxy",
+          "hydrophobic_fraction"
+        ],
+        "feature_computation": {
+          "aliphatic_fraction": "fraction of residues in {A,V,L,I,M,G}",
+          "anionic_fraction": "fraction of residues in {D,E}",
+          "aromatic_fraction": "fraction of residues in {F,W,Y}",
+          "boman_index": "negated mean Boman (1995) side-chain transfer free energy; higher = more protein-binding potential",
+          "cationic_fraction": "fraction of residues in {K,R,H}",
+          "charge_density": "net_charge / length",
+          "cysteine_fraction": "fraction of residues equal to C",
+          "glycine_fraction": "fraction of residues equal to G",
+          "hydrophobic_fraction": "fraction of residues with positive Kyte-Doolittle value",
+          "hydrophobic_moment": "Eisenberg hydrophobic moment assuming alpha-helix, 100 deg/residue, normalized by sequence length",
+          "hydrophobicity_mean": "mean Kyte-Doolittle hydrophobicity over residues",
+          "isoelectric_proxy": "cationic_fraction - anionic_fraction",
+          "length": "len(sequence)",
+          "net_charge": "Henderson-Hasselbalch net charge at pH 7.0 using side-chain pKa (K 10.5, R 12.5, H 6.0, D 3.9, E 4.1, C 8.3, Y 10.1) plus N-term pKa 9.0 and C-term pKa 2.0",
+          "polar_fraction": "fraction of residues in {S,T,N,Q,C,Y}",
+          "proline_fraction": "fraction of residues equal to P"
+        },
+        "hyperparameters": {
+          "mlp": {
+            "epochs": 300,
+            "hidden1": 32,
+            "hidden2": 16,
+            "loss": "NLLLoss over log(softmax) output, class weights [1, 5]",
+            "lr": 0.001,
+            "pos_class_weight": 5,
+            "seed": 0,
+            "weight_decay": 0.001
+          },
+          "note": "class_weight/pos_class_weight of 5 reflects heavy class imbalance (23 positive / 183 negative in training data)",
+          "pca_variance_target": 0.95,
+          "svm": {
+            "C": 1.0,
+            "class_weight": {
+              "0": 1,
+              "1": 5
+            },
+            "gamma": "scale",
+            "kernel": "rbf",
+            "random_state": 0
+          }
+        },
+        "loo_cv_metrics": {
+          "mlp": {
+            "ACC": 0.859223,
+            "AUC": 0.588976,
+            "F1": 0.25641,
+            "MCC": 0.185068,
+            "Precision": 0.3125,
+            "Recall": 0.217391,
+            "n_folds": 206
+          },
+          "rf_not_deployed": {
+            "ACC": 0.88835,
+            "AUC": 0.717273,
+            "F1": 0.0,
+            "MCC": 0.0,
+            "Precision": 0.0,
+            "Recall": 0.0,
+            "n_folds": 206
+          },
+          "svm": {
+            "ACC": 0.893204,
+            "AUC": 0.732953,
+            "F1": 0.266667,
+            "MCC": 0.273809,
+            "Precision": 0.571429,
+            "Recall": 0.173913,
+            "n_folds": 206
+          }
+        },
+        "model_name": "angiogenic_activity_predictor_v1",
+        "n_physchem_features": 16,
+        "n_total_features_before_pca": 656,
+        "target": "angiogenic_dominant",
+        "training_data": {
+          "cleaning_filter": "Sequences non-null, fullmatch [ACDEFGHIKLMNPQRSTVWY]+, deduplicated by sequence; label = 'Angiogenesis ' column cast to int",
+          "n_negative": 183,
+          "n_positive": 23,
+          "n_rows_after_cleaning": 206,
+          "source_file": "datasets/ijms-2544295-supplementary.xlsx (Sheet1, header row 1)"
+        }
+      },
+      "model_card_present": true,
+      "name": "angiogenic_activity_predictor_v1",
+      "predictor_sha256": "a7b4bde77c1b65eaf198b00d29f877015242e5be4ea826bd4a93d1357c2d5405",
+      "version": "v1"
+    },
+    {
+      "model_card": null,
+      "model_card_present": false,
+      "name": "anti_inflammatory_predictor_v1",
+      "predictor_sha256": "9d6cf98c4bcc619f5d85c105fdc6bf58424be92d1f474f5c0ae466352f0ca8eb",
+      "version": "v1"
+    },
+    {
+      "model_card": {
+        "architecture": "UniZyme joint model (UniZyme\\SE structure-only ablation): shared EnzymeEncoder + ActiveSiteHead produce a pooled enzyme representation h^e; SubstrateEncoder produces per-residue substrate hidden states H^s; CleavageSiteHead gathers a +/-15-residue window of H^s around each candidate position, concatenates with h^e, and scores a per-residue logit via MLP. See architecture.py and README.md.",
+        "caveat": "The cleavage task's training set is small (52 enzymes) relative to the active-site task's; the joint loss (loss_c + 10*loss_a) leans on the active-site task to shape the shared enzyme encoder. Treat cleavage-site probabilities as a screening signal for protease susceptibility, not a validated high-confidence prediction -- especially for enzyme accessions far from the training distribution (non-human orthologs, unusual families).",
+        "checkpoint_provenance": "unizyme model/joint_model/best_model.pt from the source project, retrained end-to-end on facebook/esm2_t30_150M_UR50D embeddings (enzyme PCA refit to 640-dim input; supersedes the earlier 35M-embedder epoch-13 checkpoint). Selected during training by lowest val_combined_loss, epoch 8. Model_state_dict, epoch, and best_score are as saved by the source checkpoint.",
+        "checkpoint_val_metrics_epoch8": {
+          "note": "From the source checkpoint's own training-time history (epochs 0-8); this 150M-embedder retrain's best epoch differs from the prior 35M-embedder export's epoch-13 checkpoint (val_pr_auc_cleavage 0.8298) -- the two are not directly comparable runs. No independent held-out evaluation was re-run for this update -- these are the source project's own validation-split metrics, not a fresh test-set score.",
+          "val_aupr_active_site": 0.9808,
+          "val_combined_loss": 0.1519,
+          "val_combined_pr_auc": 5.6097,
+          "val_pr_auc_cleavage": 0.7057
+        },
+        "cleavage_window_radius": 15,
+        "encoder_num_heads": 4,
+        "encoder_num_layers": 5,
+        "enzyme_panel_selection": "Curated from the source project's aligned+verified enzyme manifest (8,921 of 9,807 candidate UniProt EC 3.4 entries) by matching protein_name/enzyme_id against wound-healing-relevant protease families: matrix metalloproteinases (MMPs)/collagenases/gelatinases/stromelysins, cathepsins, elastases, plasminogen activators. Not the full manifest -- the full manifest is genome-wide EC 3.4 proteases (~1.1GB embeddings alone) and mostly irrelevant to wound biology.",
+        "enzyme_panel_size": 118,
+        "enzyme_side_backbone": "facebook/esm2_t30_150M_UR50D, PCA-reduced to 128 dims by enzymes/pca_model.joblib (IncrementalPCA fit on the source project's enzyme train split -- reused unmodified, not refit here)",
+        "esm_raw_embed_dim": 640,
+        "inference_inputs_required": {
+          "distance_matrix": "(len(sequence), len(sequence)) float array, pairwise C-alpha Euclidean distance in Angstroms, from a resolved or predicted 3D structure of the candidate peptide -- NOT computed by this predictor, must be supplied by the caller",
+          "enzyme_accession": "UniProt accession of a bundled enzyme (see enzymes/enzyme_catalog.csv), or omit to score against the full 118-enzyme panel via predict()",
+          "sequence": "candidate peptide amino-acid sequence, standard 20 AAs"
+        },
+        "known_coverage_gap": "Human MMP-1 (P03956), MMP-2 (P08253), MMP-3 (P08254), MMP-8 (P22894), MMP-9 (P14780), MMP-12 (P39900), and human neutrophil elastase (P08246) are NOT in the bundled panel -- their structures failed the source pipeline's aligned+verified check (structure length did not match sequence length) and were dropped upstream, before this migration. The panel does include their non-human orthologs (rat/mouse/rabbit MMPs, mouse neutrophil elastase Q3UP87) and a handful of human family members (MMP-11, MMP-19, MMP-24, MMP-26, ELA1_HUMAN, EL2A_HUMAN). Treat cleavage-site predictions against non-human orthologs as directional evidence of protease-family susceptibility, not a substitute for the specific human enzyme.",
+        "local_attention_span": 128,
+        "model_name": "cleavage_site_predictor_v1",
+        "pca_target_dim": 128,
+        "substrate_side_backbone": "facebook/esm2_t30_150M_UR50D, same pca_model.joblib transform applied (pca_model.transform(...), not a separately fit model)",
+        "task": "Per-residue P1 protease cleavage-site probability for a candidate peptide (substrate), against a bundled panel of enzymes (proteases).",
+        "training_data_scale": "~7,844 UniProt-labeled enzymes (active-site task), ~52 aligned enzymes with MEROPS cleavage data (cleavage task) -- see source MODEL_ARCHITECTURE.md section 3.4 for why only 52 enzymes have usable cleavage training data despite the much larger active-site set."
+      },
+      "model_card_present": true,
+      "name": "cleavage_site_predictor_v1",
+      "predictor_sha256": "429b16d4b37de626a7c87f7ed9b94fec6dac907ac3bf6a9600aba2d83f1e5a95",
+      "version": "v1"
+    },
+    {
+      "model_card": null,
+      "model_card_present": false,
+      "name": "cytotoxicity_predictor_v1",
+      "predictor_sha256": "daf29e2b104b218c63ed759c378b5ac5b9e3319aa3070c63d0aa958706e02c7d",
+      "version": "v1"
+    },
+    {
+      "model_card": null,
+      "model_card_present": false,
+      "name": "esmfold_v1",
+      "predictor_sha256": "817562ff92413399cc7d2af0ad03cfb01d645d1698b5586fbf86b7f162ea16d7",
+      "version": "v1"
+    },
+    {
+      "model_card": null,
+      "model_card_present": false,
+      "name": "hemolysis_predictor_v1",
+      "predictor_sha256": "e9008a7a97427813ca5d946377c6051b30d13ad196fa6200c9f1330606e200a3",
+      "version": "v1"
+    },
+    {
+      "model_card": {
+        "cv_metrics_random_forest": {
+          "mae": "0.385 +/- 0.078",
+          "pearson": "0.671 +/- 0.194",
+          "r2": "0.415 +/- 0.288",
+          "rmse": "0.525 +/- 0.125",
+          "spearman": "0.653 +/- 0.175"
+        },
+        "cv_metrics_svr": {
+          "mae": "0.382 +/- 0.078",
+          "pearson": "0.677 +/- 0.194",
+          "r2": "0.418 +/- 0.257",
+          "rmse": "0.525 +/- 0.112",
+          "spearman": "0.646 +/- 0.157"
+        },
+        "cv_protocol": "10-fold KFold(shuffle=True, random_state=42) over the full 147-row dataset; species_ohe, both StandardScalers, and PCA refit inside each fold on that fold's training rows only",
+        "data_sources": [
+          "BAAMP (Formation 3-24h, method_activity > 90%)",
+          "DBAASP (antibiofilm_activities, Activity Measure == MBIC)"
+        ],
+        "esm2_pca_explained_variance_actual": 0.9511,
+        "esm2_pca_explained_variance_target": 0.95,
+        "esm2_pca_n_components": 27,
+        "esm_embedding": "mean-pooled last_hidden_state, excludes BOS token and final valid (EOS) token, sequence uppercased before tokenization",
+        "esm_model_name": "facebook/esm2_t30_150M_UR50D",
+        "feature_order": [
+          "species_onehot (13)",
+          "physchem_scaled (14)",
+          "esm2_pca (27)"
+        ],
+        "final_fit": "both physchem/esm2 preprocessing, the SVR, and the RandomForestRegressor are refit on all 147 rows (not just the 115-row train split) before saving",
+        "model_selection_note": "RF and SVR are statistically indistinguishable under 10-fold CV. Both are deployed as an unweighted-mean ensemble to combine their independent error profiles, rather than picking one.",
+        "model_type": "ensemble: SVR (kernel=rbf, C=10.0, epsilon=0.1, gamma=scale) + RandomForestRegressor (n_estimators=300, max_depth=None, min_samples_leaf=2, random_state=42), unweighted mean of the two predictions",
+        "n_features_total": 54,
+        "physchem_cols": [
+          "charge",
+          "charge_density",
+          "gravy",
+          "hydrophobic_moment",
+          "amphipathicity",
+          "helical_propensity",
+          "aliphatic_index",
+          "aromaticity",
+          "boman_index",
+          "instability_index",
+          "isoelectric_point",
+          "hydrophobic_ratio",
+          "length",
+          "d_residue_fraction"
+        ],
+        "physchem_notes": {
+          "amphipathicity": "custom, not native modlAMP: hydrophobic_moment / mean(abs(eisenberg per-residue H))",
+          "charge_ph": 7.4,
+          "charge_pka_set": "Bjellqvist (modlAMP default)",
+          "d_residue_fraction": "fraction of lowercase residues in raw sequence (D-amino acid marker), sequences folded to uppercase for all other descriptors",
+          "helical_propensity": "levitt_alpha scale, calculate_global(modality=mean)",
+          "hydrophobic_moment": "Eisenberg scale, calculate_moment(window=18, angle=100, modality=max)"
+        },
+        "preprocessing_order": [
+          "1. compute 14 modlAMP physchem descriptors on the raw sequence",
+          "2. physchem_scaler.transform (StandardScaler fit on training rows)",
+          "3. compute ESM2-150M mean-pooled embedding (640-dim) on the uppercased sequence",
+          "4. esm2_scaler.transform (StandardScaler fit on training rows)",
+          "5. esm2_pca.transform (PCA fit on scaled training embeddings, n_components=0.95 -> 27 PCs)",
+          "6. species_ohe.transform on target_species",
+          "7. concatenate [species_onehot, physchem_scaled, esm2_pcs] -> 54-dim vector -> SVR.predict and RandomForestRegressor.predict, averaged"
+        ],
+        "species_ohe_handle_unknown": "ignore (out-of-vocabulary species map to an all-zero one-hot vector, not an error)",
+        "species_vocabulary": [
+          "Acinetobacter baumannii",
+          "Candida albicans",
+          "Candida tropicalis",
+          "Cutibacterium acnes",
+          "Enterococcus faecium",
+          "Escherichia coli",
+          "Klebsiella pneumoniae",
+          "Pseudomonas aeruginosa",
+          "Salmonella enterica",
+          "Staphylococcus aureus",
+          "Staphylococcus epidermidis",
+          "Streptococcus mutans",
+          "Streptococcus sanguinis"
+        ],
+        "target": "pMBIC = 6 - log10(activity_uM); activity_uM = 10 ** (6 - pMBIC)",
+        "train_test_split_for_cv_reference": "115 train / 32 test, stratified by species with a floor of 1 per split (final models are refit on all 147 rows)",
+        "training_rows": 147
+      },
+      "model_card_present": true,
+      "name": "mbic_predictor_v1",
+      "predictor_sha256": "dc9f759d4c54385f98a74ecbf854617aef7103bc8e7a87e4bb381db01be303e9",
+      "version": "v1"
+    },
+    {
+      "model_card": {
+        "ensemble_method": "simple unweighted mean of BiLSTM, CNN, and Random Forest predictions (not computed by the source notebook; combined here per export instructions)",
+        "esm_embedding_dim": 640,
+        "esm_embedding_type": "per-residue (last_hidden_state), BOS/EOS dropped, left-aligned into a fixed MAX_SEQ_LEN=50 slot with zero padding",
+        "esm_model_name": "facebook/esm2_t30_150M_UR50D",
+        "genome_feature_scheme": {
+          "components": {
+            "DNC": "dinucleotide composition, 16 dims (all AA..TT pairs, normalized frequency)",
+            "NAC": "mononucleotide composition, 4 dims (A, C, G, T frequency)",
+            "TNC": "trinucleotide composition, 64 dims (all AAA..TTT triplets, normalized frequency)"
+          },
+          "dims": 84,
+          "genome_lengths_bp": {
+            "Escherichia coli": 5130767,
+            "Pseudomonas aeruginosa": 6827737,
+            "Staphylococcus aureus": 2778854
+          },
+          "name": "NAC + DNC + TNC genomic nucleotide composition",
+          "source": "precomputed once per organism from genome FASTA files in the source project's genomes/ directory; stored as genome_vectors.json in this package (no FASTA files shipped)"
+        },
+        "loss_function": "weighted MSE loss used to train BiLSTM and CNN; censored rows (MIC reported as '<' or '>' a bound) down-weighted to 0.5x vs 1.0x for uncensored rows -- NOT bound-aware (does not enforce the prediction stay on the correct side of the bound), simply reduces the influence of uncertain targets",
+        "max_sequence_length": 50,
+        "models": {
+          "bilstm": {
+            "architecture": "BiLSTM(esm_dim=640, hidden=128, bidirectional) over per-residue ESM2 embeddings (packed by true residue length) concatenated with a GenomicANN(84->64->32) branch over the genome vector, BatchNorm, then a 2-layer MLP regressor (288->64->1)",
+            "file": "bilstm_model.pt",
+            "test_r2": 0.4889,
+            "training": "AdamW lr=1e-3 wd=1e-4, batch=64, up to 150 epochs, early stopping patience=20 on val weighted-MSE loss (censored rows downweighted 0.5x), best checkpoint restored"
+          },
+          "cnn": {
+            "architecture": "Conv1D(640->128,k=5)+ReLU+MaxPool2, Conv1D(128->64,k=5)+ReLU+MaxPool2 over per-residue ESM2 embeddings (padded positions zeroed pre-conv), flattened, concatenated with the same GenomicANN(84->64->32) branch, BatchNorm, then a 2-layer MLP regressor (800->64->1)",
+            "file": "cnn_model.pt",
+            "test_r2": 0.4728,
+            "training": "AdamW lr=1e-3 wd=1e-4, batch=64, up to 100 epochs, early stopping patience=10 on val weighted-MSE loss (censored rows downweighted 0.5x), best checkpoint restored"
+          },
+          "random_forest": {
+            "architecture": "sklearn RandomForestRegressor, n_estimators=400, random_state=42",
+            "feature_composition": "319 iFeature protein descriptors + 84 genome NAC/DNC/TNC features",
+            "file": "rf_model.joblib",
+            "ifeature_descriptor_set": {
+              "AAC": "20 dims, amino acid composition (order ACDEFGHIKLMNPQRSTVWY)",
+              "CTDC": "39 dims, composition/transition/distribution - composition (13 physicochemical properties x 3 groups)",
+              "CTDD": "195 dims, CTD - distribution (13 properties x 3 groups x 5 percentile cutoffs)",
+              "CTDT": "39 dims, CTD - transition (13 properties x 3 transitions)",
+              "GAAC": "5 dims, grouped amino acid composition (alphatic/aromatic/postivecharge/negativecharge/uncharge)",
+              "PAAC": "20 dims (Xc1, amino acid composition term) + 1 dim (Xc2, lambda=1 sequence-order term), pseudo amino acid composition with lambda=1 (source project peptides too short for the PAAC default lambda=30)",
+              "vendored_from": "iFeature (Chen et al., https://github.com/Superzchen/iFeature), reimplemented in predictor.py so no external iFeature install is needed at inference time; numerically validated against the original iFeature codebase output on multiple test sequences (exact match)"
+            },
+            "n_input_features": 403,
+            "test_r2": 0.4306,
+            "training": "fit directly on point-estimate log10_mic_um target (no censored-loss variant for RF; all rows, including censored ones, trained on their point estimate)"
+          }
+        },
+        "organism_source_strains": {
+          "Escherichia coli": "ATCC 25922",
+          "Pseudomonas aeruginosa": "ATCC 27853",
+          "Staphylococcus aureus": "ATCC 25923"
+        },
+        "source_artifact_dir": "saved_models/",
+        "source_notebook": "mic_prediction_pipelineC_35M_embedding.ipynb",
+        "supported_organisms": [
+          "Escherichia coli",
+          "Staphylococcus aureus",
+          "Pseudomonas aeruginosa"
+        ],
+        "target_transform": "log10(MIC_uM). Inverse: MIC_uM = 10 ** prediction",
+        "task": "regression: log10(MIC, uM) for a peptide against one of 3 ATCC reference organisms",
+        "training_data": {
+          "n_rows": 6518,
+          "n_unique_sequences": 2812,
+          "restricted_to": "3 ATCC reference organisms only (Escherichia coli, Staphylococcus aureus, Pseudomonas aeruginosa)",
+          "sequence_length_filter": "<=50 aa, standard amino acids only",
+          "sources": "CAMP + DRAMP + DBAASP, combined and deduplicated with CAMP > DBAASP > DRAMP priority",
+          "split": "75/12.5/12.5 train/val/test by CD-HIT 90%-identity cluster (whole clusters assigned to one split, greedy balance of split size + per-split species mix)"
+        }
+      },
+      "model_card_present": true,
+      "name": "mic_predictor_v1",
+      "predictor_sha256": "6dcd5c046322bb61475568702c0a6e9b09867ca2cb7772027bf1e752c65da7a1",
+      "version": "v1"
+    },
+    {
+      "model_card": null,
+      "model_card_present": false,
+      "name": "pathway_mapping_predictor_v1",
+      "predictor_sha256": "95d7f7169e7a7061652ab0963aee124814817f8cd829c1db115b609445b20d43",
+      "version": "v1"
+    },
+    {
+      "model_card": {
+        "deployment_object_provenance": "FULL-DATA REFIT for deployment. Notebook (pipeline.ipynb) never persists a fitted model: build_ensemble() is built fresh inside every Leave-One-Out CV fold, fit on that fold only, used once, then discarded; no joblib.dump/pickle exists in the notebook. The two .joblib artifacts shipped here were fit once each on the FULL 103-row dataset (no LOO holdout) using the exact same feature code and hyperparameters as the notebook, by a standalone script outside the source project, per explicit user authorization. This is a deliberate deviation from the notebook's own protocol (training-set size only: full data vs n-1 rows per LOO fold).",
+        "ensemble_architecture": "VotingClassifier(voting='soft') over RandomForestClassifier + XGBClassifier + Pipeline(StandardScaler -> LogisticRegression), one independent ensemble instance per target",
+        "evaluation_metrics_source": "notebook's own per-fold Leave-One-Out CV (103 folds per target), NOT a direct evaluation of this deployed full-data-refit object -- reported as the best available generalization estimate since the deployed object has no held-out evaluation of its own",
+        "feature_cols": [
+          "length",
+          "net_charge",
+          "hydrophobicity_mean",
+          "hydrophobic_moment",
+          "aromatic_fraction",
+          "cationic_fraction",
+          "anionic_fraction",
+          "polar_fraction",
+          "aliphatic_fraction",
+          "proline_fraction",
+          "glycine_fraction",
+          "cysteine_fraction",
+          "charge_density",
+          "isoelectric_proxy",
+          "hydrophobic_fraction"
+        ],
+        "feature_computation": {
+          "aliphatic_fraction": "fraction of residues in {A,V,L,I,M,G}",
+          "anionic_fraction": "fraction of residues in {D,E}",
+          "aromatic_fraction": "fraction of residues in {F,W,Y}",
+          "cationic_fraction": "fraction of residues in {K,R,H}",
+          "charge_density": "net_charge / length",
+          "cysteine_fraction": "fraction of residues equal to C",
+          "glycine_fraction": "fraction of residues equal to G",
+          "hydrophobic_fraction": "fraction of residues with positive Kyte-Doolittle value",
+          "hydrophobic_moment": "Eisenberg hydrophobic moment assuming alpha-helix, 100 deg/residue, normalized by sequence length",
+          "hydrophobicity_mean": "mean Kyte-Doolittle hydrophobicity over residues",
+          "isoelectric_proxy": "cationic_fraction - anionic_fraction",
+          "length": "len(sequence)",
+          "net_charge": "Henderson-Hasselbalch net charge at pH 7.0 using side-chain pKa (K 10.5, R 12.5, H 6.0, D 3.9, E 4.1, C 8.3, Y 10.1) plus N-term pKa 9.0 and C-term pKa 2.0",
+          "polar_fraction": "fraction of residues in {S,T,N,Q,C,Y}",
+          "proline_fraction": "fraction of residues equal to P"
+        },
+        "hyperparameters": {
+          "logistic_regression": {
+            "C": 1.0,
+            "max_iter": 1000,
+            "preprocessing": "StandardScaler",
+            "random_state": 0
+          },
+          "random_forest": {
+            "max_depth": 4,
+            "min_samples_leaf": 2,
+            "n_estimators": 300,
+            "random_state": 0
+          },
+          "voting_classifier": {
+            "estimators": [
+              "rf",
+              "xgb",
+              "logreg"
+            ],
+            "voting": "soft"
+          },
+          "xgboost": {
+            "colsample_bytree": 0.8,
+            "eval_metric": "logloss",
+            "learning_rate": 0.05,
+            "max_depth": 3,
+            "n_estimators": 200,
+            "random_state": 0,
+            "subsample": 0.8
+          }
+        },
+        "loo_cv_metrics": {
+          "migration_dominant": {
+            "ACC": 0.650485,
+            "AUC": 0.679711,
+            "F1": 0.608696,
+            "MCC": 0.293402,
+            "n_folds": 103
+          },
+          "proliferation_dominant": {
+            "ACC": 0.708738,
+            "AUC": 0.732835,
+            "F1": 0.802632,
+            "MCC": 0.264395,
+            "n_folds": 103
+          }
+        },
+        "model_name": "proliferation_migration_predictor_v1",
+        "n_features": 15,
+        "targets": [
+          "migration_dominant",
+          "proliferation_dominant"
+        ],
+        "training_data": {
+          "cleaning_filter": "sequence non-null and fullmatch [ACDEFGHIKLMNPQRSTVWY]+; labels derived from 'T'/other flag columns migration_dominant and proliferation_dominant",
+          "n_rows_after_cleaning": 103,
+          "source_csv": "Models/Proliferation + Migration prediction/data/peptide_activity_unique_clean.csv"
+        }
+      },
+      "model_card_present": true,
+      "name": "proliferation_migration_predictor_v1",
+      "predictor_sha256": "3b5bea7249f8fa9043102a4420ab7e8df6ae1e52f23f34656dcd4fe450d51414",
+      "version": "v1"
+    },
+    {
+      "model_card": null,
+      "model_card_present": false,
+      "name": "routeb_protgpt2_lora_v1",
+      "predictor_sha256": "7d33f4fdd467a33e4d797bee6a7a751d44dbdf95dbc594c962368cc2d98826e2",
+      "version": "v1"
+    },
+    {
+      "model_card": {
+        "deployment_artifact": {
+          "best_iteration": 141,
+          "file": "pair_stratified_87a389cf6ee76d08.joblib",
+          "n_features_in": 1286,
+          "source_path": "Models/Solubility/model_cache/B_raw/pair_stratified_87a389cf6ee76d08.joblib",
+          "split_strategy": "pair_stratified: random 64/16/20 train/val/test split stratified on y (peptide-solvent pairs can appear across both train and test)",
+          "variant": "Pipeline B raw (ESM2 embedding + solvent descriptors, no PCA)",
+          "why_chosen": "pipelineB.ipynb was read in full and contains no full-data refit step after the evaluation loop (the notebook ends at the LOSO summary in the final cell). All 6 cached B_raw artifacts are evaluation-fold models: pair_stratified and seq_disjoint each hold out a test partition, and the 4 loso_* files each hold out one entire solvent. There is no cached or in-notebook model trained on 100% of long_peptide_solvent.csv. Per the documented fallback rule, pair_stratified was selected as the most defensible deployment choice: it uses the largest train portion, is a standard random split (not group-held-out), and is closest in spirit to a general-purpose model. This is a FALLBACK, not an ideal full-data-refit deployment model \u2014 see README.md Provenance section."
+        },
+        "esm_feature_prefix": "esm_",
+        "esm_model_name": "facebook/esm2_t33_650M_UR50D",
+        "esm_pooling": "mean-pool per-residue last_hidden_state, BOS and EOS tokens excluded from the mean",
+        "evaluation_summary_from_prior_investigation": {
+          "loso_macro_accuracy": 0.775,
+          "loso_macro_auc": 0.773,
+          "note_coverage_gap": "3 of 7 solvents (0.2 M acetic acid, 3% ammonia water (v/v), HCOOH) are 100% single-class (all-soluble) in this dataset and were skipped in LOSO evaluation entirely -> zero held-out validation coverage for those solvents",
+          "note_dmso": "DMSO LOSO AUC ~0.56 (near chance-level) even in this best-performing (raw) variant"
+        },
+        "n_esm_features": 1280,
+        "n_solvent_features": 6,
+        "n_total_features": 1286,
+        "not_used": [
+          "model_cache/A (hand-crafted descriptor variant, pipeline A)",
+          "model_cache/B_pca (PCA-reduced embedding variant; PCA transform was never persisted, unresolved reproducibility gap)"
+        ],
+        "solvent_feature_cols": [
+          "pH_value",
+          "pH_missing_flag",
+          "ionic_strength",
+          "dielectric_constant",
+          "protic_aprotic",
+          "polarity_index"
+        ],
+        "solvent_join_key": "solvent_key = normalize_solvent_name(solvent_name), joined against bundled solvent_descriptors.json",
+        "solvent_vocabulary": [
+          "Ultrapure water",
+          "DMSO",
+          "0.1 M PBS",
+          "1X DPBS",
+          "3% ammonia water (v/v)",
+          "HCOOH",
+          "0.2 M acetic acid"
+        ],
+        "target_column": "y (0=Insoluble, 1=Soluble) from long_peptide_solvent.csv",
+        "task": "binary classification: P(soluble) for a peptide in a given solvent",
+        "xgb_params": {
+          "colsample_bytree": 0.8,
+          "early_stopping_rounds": 30,
+          "eval_metric": "auc",
+          "learning_rate": 0.05,
+          "max_depth": 5,
+          "min_child_weight": 4,
+          "n_estimators": 400,
+          "objective": "binary:logistic",
+          "random_state": 42,
+          "subsample": 0.8,
+          "tree_method": "hist"
+        }
+      },
+      "model_card_present": true,
+      "name": "solubility_predictor_v1",
+      "predictor_sha256": "0a2c5598d8bc781bf7c67e24d79ca3c703d26aed4f0b1c14c2cc5cd46781cf24",
+      "version": "v1"
+    },
+    {
+      "model_card": {
+        "cv_metrics": {
+          "logistic_regression": {
+            "accuracy": 0.7107,
+            "f1": 0.734,
+            "mcc": 0.4171,
+            "roc_auc": 0.7761
+          },
+          "random_forest": {
+            "accuracy": 0.6652,
+            "f1": 0.7079,
+            "mcc": 0.3221,
+            "roc_auc": 0.7351
+          },
+          "svm": {
+            "accuracy": 0.6927,
+            "f1": 0.7273,
+            "mcc": 0.3788,
+            "roc_auc": 0.7597
+          }
+        },
+        "data_variant": "combined (pipeline_combined_35M_embedding.ipynb, PepSySco.csv + MS2-labeled peptides merged, 3560 peptides)",
+        "ensemble_method": "unweighted mean of predict_proba positive-class probability across the 3 models (soft voting); notebook itself does not define a cross-model ensembling scheme, this is a downstream choice",
+        "esm_model_name": "facebook/esm2_t30_150M_UR50D",
+        "esm_pooling": "mean-pooled last_hidden_state, CLS/EOS special tokens masked out before pooling, no L2 normalization",
+        "models": {
+          "logistic_regression": {
+            "hyperparameters": {
+              "max_iter": 2000,
+              "random_state": 42
+            },
+            "scaler_baked_in": true,
+            "sklearn_class": "sklearn.pipeline.Pipeline",
+            "steps": [
+              "StandardScaler",
+              "LogisticRegression"
+            ]
+          },
+          "random_forest": {
+            "hyperparameters": {
+              "n_estimators": 300,
+              "random_state": 42
+            },
+            "scaler_baked_in": false,
+            "sklearn_class": "sklearn.ensemble.RandomForestClassifier"
+          },
+          "svm": {
+            "hyperparameters": {
+              "kernel": "rbf",
+              "probability": true,
+              "random_state": 42
+            },
+            "probability_calibration_check": "confirmed probability=True at load time; predict_proba is valid (uses Platt scaling internally)",
+            "scaler_baked_in": true,
+            "sklearn_class": "sklearn.pipeline.Pipeline",
+            "steps": [
+              "StandardScaler",
+              "SVC"
+            ]
+          }
+        },
+        "n_esm2_features": 640,
+        "source_notebook": "pipeline_combined_35M_embedding.ipynb",
+        "task": "binary classification: synthesis feasible (label=1) vs not (label=0)",
+        "train_val_split": "5-fold StratifiedKFold, shuffle=True, random_state=42, refit on full dataset for the cached artifacts"
+      },
+      "model_card_present": true,
+      "name": "synthesis_feasibility_predictor_v1",
+      "predictor_sha256": "02c27317109b672ea46b03953a1550e7e7acae101aa574c6e241340897ed0fca",
+      "version": "v1"
+    }
+  ],
+  "weights_source": "gs://example-bucket/artifacts"
+}

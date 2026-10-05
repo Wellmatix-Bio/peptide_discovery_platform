@@ -474,35 +474,55 @@ class Stage8(CandidateStage):
             else "pass"
         )
 
-        aggregation_score = predictions["aggregation_tendency"]["score"]
-        properties["aggregation_tendency"] = (
-            "reject"
-            if aggregation_score is not None
-            and aggregation_score > t["aggregation_reject_max"]
-            else "pass"
-        )
+        # A screen that did not run is NOT a pass. This previously read `else "pass"`, which
+        # meant a null score -- a peptide too short for the model's features, or propy3 absent so
+        # the model could not run at all -- was recorded as having passed the aggregation check.
+        # "not_screened" rolls up as a flag below: the candidate is not silently cleared, and not
+        # killed either, because nothing was actually measured against it.
+        aggregation = predictions["aggregation_tendency"]
+        aggregation_score = aggregation["score"]
+        if aggregation_score is None:
+            properties["aggregation_tendency"] = "not_screened"
+        elif aggregation_score > t["aggregation_reject_max"]:
+            properties["aggregation_tendency"] = "reject"
+        else:
+            properties["aggregation_tendency"] = "pass"
 
+        # Same rule as aggregation_tendency above, and it was missed here when that one was
+        # fixed: a null score meant the model did not run, and `is not None and ...` read it as a
+        # pass. cleavage_stability is the worse of the two, since a REJECT threshold that never
+        # ran cleared the candidate on a check nothing performed.
         solubility_score = predictions["solubility"]["score"]
-        properties["solubility"] = (
-            "flag"
-            if solubility_score is not None
-            and solubility_score < t["solubility_flag_min"]
-            else "pass"
-        )
+        if solubility_score is None:
+            properties["solubility"] = "not_screened"
+        elif solubility_score < t["solubility_flag_min"]:
+            properties["solubility"] = "flag"
+        else:
+            properties["solubility"] = "pass"
 
         cleavage_score = predictions["cleavage_stability"]["score"]
-        properties["cleavage_stability"] = (
-            "reject"
-            if cleavage_score is not None
-            and cleavage_score < t["cleavage_stability_reject_min"]
-            else "pass"
-        )
+        if cleavage_score is None:
+            properties["cleavage_stability"] = "not_screened"
+        elif cleavage_score < t["cleavage_stability_reject_min"]:
+            properties["cleavage_stability"] = "reject"
+        else:
+            properties["cleavage_stability"] = "pass"
 
         if "reject" in properties.values():
             overall = "reject"
-        elif "flag" in properties.values():
+        elif "flag" in properties.values() or "not_screened" in properties.values():
+            # An unrun screen makes the whole verdict a flag, never a pass. It does not reject:
+            # nothing was measured against this candidate, so there is no finding to reject it on.
             overall = "flag"
         else:
             overall = "pass"
 
-        return {"properties": properties, "overall": overall}
+        unscreened = sorted(k for k, v in properties.items() if v == "not_screened")
+        verdict = {"properties": properties, "overall": overall}
+        if unscreened:
+            verdict["not_screened"] = unscreened
+            verdict["not_screened_note"] = (
+                "These checks did not run, so this candidate was not cleared by them. Not checked"
+                " is not the same as passed."
+            )
+        return verdict

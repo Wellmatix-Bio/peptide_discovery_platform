@@ -26,3 +26,14 @@ configs/test_run.yaml
 .env.example
 README.md
 docs/
+
+# The web build runs `npm ci` from the lockfile INSIDE the image (deploy/web.Dockerfile), so a
+# host node_modules is 125MB of build context that is copied and then thrown away -- and if it
+# were copied over the installed tree it would defeat the point of installing from the lockfile.
+node_modules/
+web/dist/
+web/*.tsbuildinfo
+
+# deploy/.env holds the real settings and the signing key. It must never enter an image; compose
+# passes configuration as environment variables instead.
+deploy/.env

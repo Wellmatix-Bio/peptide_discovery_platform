@@ -26,13 +26,34 @@ def _split_gcs_uri(uri: str) -> tuple[str, str]:
     return bucket, blob_path
 
 
+class CloudStorageUnavailable(RuntimeError):
+    """A gs:// path was used, but the Google Cloud client libraries are not installed.
+
+    Raised instead of letting a bare `ModuleNotFoundError: No module named 'google'` escape, which
+    says nothing about what the caller did wrong. Cloud Storage is OPTIONAL -- the pipeline runs
+    entirely against local paths -- so reaching this means a gs:// path was configured without the
+    extra that supports it. See docs/ARCHITECTURE.md.
+    """
+
+
 @functools.lru_cache(maxsize=1)
 def _gcs_client():
-    # Local imports: optional dependency, GCS-mode only.
-    import google.auth
-    import google.auth.transport.requests
-    from google.cloud import storage
-    from requests.adapters import HTTPAdapter
+    # Local imports: OPTIONAL dependency, gs:// paths only. Everything in this module works
+    # against local paths with none of these installed, which is what makes the `gcp` extra
+    # genuinely optional rather than nominally so.
+    try:
+        import google.auth
+        import google.auth.transport.requests
+        from google.cloud import storage
+        from requests.adapters import HTTPAdapter
+    except ImportError as problem:
+        raise CloudStorageUnavailable(
+            "This path is a gs:// URI, but the Google Cloud client libraries are not installed.\n"
+            "Either install them:\n"
+            "    pip install -e '.[gcp]'\n"
+            "or point the run at local paths instead -- the pipeline does not need Cloud Storage.\n"
+            f"({problem})"
+        ) from problem
 
     # Cached (not one-per-call) so concurrent downloads in download_dir share
     # a single client/credentials/session instead of each thread making its

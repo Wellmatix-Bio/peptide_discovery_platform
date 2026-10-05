@@ -1,0 +1,130 @@
+/* Design system COPIED VERBATIM from /home/ajit/Documents/wmxccs/web/src/styles.css, which
+   took it from that project's dashboard prototype. The tokens and base classes are byte-identical
+   so the two products read as one; src/test/design.test.ts holds the copy to that, by comparing
+   against the original file rather than against a remembered list.
+
+   Everything below the ADDED marker is this app's own, uses the same variables and the same
+   idiom, and changes nothing above it. Glycan-specific classes from the source (.band, .klass)
+   are deliberately not carried over -- this app has no use for them, and an unused class invites
+   somebody to reuse it for something it does not mean.
+*/
+:root{--ink:#153c55;--blue:#2a6f97;--sky:#eaf3f7;--line:#d9e4ea;--bg:#f6f9fb;--good:#247a52;--warn:#a86b16;--bad:#a33b3b;--muted:#667985}*{box-sizing:border-box}body{margin:0;font-family:Inter,Arial,sans-serif;background:var(--bg);color:#18313f}.top{height:64px;background:#fff;border-bottom:1px solid var(--line);display:flex;align-items:center;padding:0 28px;position:sticky;top:0;z-index:5}.brand{font-weight:800;color:var(--ink);font-size:20px;letter-spacing:.3px}.brand span{color:var(--blue)}.tag{margin-left:14px;font-size:12px;padding:5px 9px;background:var(--sky);border-radius:20px;color:var(--blue)}.shell{display:grid;grid-template-columns:230px 1fr;min-height:calc(100vh - 64px)}aside{background:#123449;color:#dce8ee;padding:24px 14px}aside .small{font-size:11px;color:#9fb6c3;text-transform:uppercase;margin:0 10px 10px}.nav{padding:11px 12px;border-radius:8px;margin:4px 0;cursor:pointer}.nav.active,.nav:hover{background:#1d506d;color:#fff}.main{padding:28px;max-width:1420px}.hero{display:flex;justify-content:space-between;gap:18px;align-items:flex-start;margin-bottom:20px}.hero h1{margin:0;color:var(--ink);font-size:27px}.hero p{margin:7px 0;color:var(--muted)}.badge{font-size:12px;padding:7px 10px;border-radius:20px;background:#fff4d8;color:#8b5d00;border:1px solid #f1d99d}.grid{display:grid;grid-template-columns:1.15fr .85fr;gap:18px}.card{background:#fff;border:1px solid var(--line);border-radius:13px;padding:20px;box-shadow:0 3px 12px rgba(20,60,85,.04);margin-bottom:18px}.card h2{font-size:17px;color:var(--ink);margin:0 0 14px}.section-label{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.7px;margin:17px 0 8px}.row{display:grid;grid-template-columns:1fr 1fr;gap:12px}.field{margin-bottom:12px}.field label{display:block;font-size:12px;font-weight:700;color:#3e5663;margin-bottom:6px}.field input,.field select,.field textarea{width:100%;padding:10px 11px;border:1px solid #cfdce3;border-radius:8px;background:#fff;font-size:13px;color:#203945}.field textarea{min-height:78px;resize:vertical}.help{font-size:11px;color:#7c8f99;margin-top:4px}.btns{display:flex;gap:9px;flex-wrap:wrap;margin-top:10px}.btn{border:0;border-radius:8px;padding:10px 14px;font-weight:700;cursor:pointer}.primary{background:var(--blue);color:#fff}.secondary{background:#edf4f7;color:var(--ink)}.outline{background:#fff;border:1px solid #b9ccd6;color:var(--ink)}.metric-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}.metric{border:1px solid var(--line);border-radius:10px;padding:13px;background:#fbfdfe}.metric b{display:block;font-size:19px;color:var(--ink);margin-top:5px}.metric small{color:var(--muted)}.candidate{border:1px solid var(--line);border-radius:10px;padding:13px;margin:10px 0}.cand-head{display:flex;justify-content:space-between;align-items:center}.rank{font-weight:800;color:var(--ink)}.score{font-weight:800;color:var(--blue)}.bar{height:7px;background:#e8eff3;border-radius:10px;overflow:hidden;margin:9px 0}.bar i{display:block;height:100%;background:#2a6f97}.chips{display:flex;gap:6px;flex-wrap:wrap}.chip{font-size:10px;background:#eef4f7;color:#506b79;padding:4px 7px;border-radius:10px}.status{padding:12px;border-radius:10px;background:#fff7e8;border-left:4px solid #d89b33;font-size:13px}.status.good{background:#eef8f2;border-left-color:var(--good)}.status.bad{background:#fff0f0;border-left-color:var(--bad)}.compare{display:grid;grid-template-columns:1fr auto 1fr;gap:12px;align-items:center}.big{font-size:28px;font-weight:800;color:var(--ink)}.arrow{font-size:25px;color:#8aa0ad}.hidden{display:none}.footer-note{font-size:11px;color:#758993;padding:8px 2px}.tabs{display:flex;gap:8px;margin-bottom:15px}.tab{padding:8px 11px;border-radius:7px;background:#edf3f6;font-size:12px;cursor:pointer}.tab.on{background:var(--ink);color:white}@media(max-width:900px){.shell{grid-template-columns:1fr}aside{display:none}.grid{grid-template-columns:1fr}.main{padding:18px}.row,.metric-grid{grid-template-columns:1fr}.compare{grid-template-columns:1fr}.arrow{display:none}}
+
+
+/* ---- ADDED: carried over from the source's own additions, unchanged. ---- */
+.pill{font-size:10px;font-weight:700;letter-spacing:.4px;padding:4px 8px;border-radius:20px;text-transform:uppercase;white-space:nowrap}
+.pill.good{background:#eef8f2;color:var(--good);border:1px solid #bfe0cd}
+.pill.warn{background:#fff7e8;color:var(--warn);border:1px solid #f1d99d}
+.pill.bad{background:#fff0f0;color:var(--bad);border:1px solid #e9bcbc}
+.pill.muted{background:#eef4f7;color:#506b79;border:1px solid var(--line)}
+.mono{font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:11px;color:#2c4a5b;word-break:break-all;line-height:1.55}
+.unordered{list-style:none;padding:0;margin:8px 0 0}
+.unordered li{padding:6px 9px;border-radius:6px;background:#f4f8fa;margin:5px 0;border-left:2px solid #d9e4ea}
+.unordered li:before{content:"•  ";color:#9fb6c3;font-weight:700}
+.axis{border:1px solid var(--line);border-radius:10px;padding:14px;margin:10px 0;background:#fff}
+.axis-head{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:8px}
+.axis-head b{color:var(--ink);font-size:14px}
+.axis .why{font-size:12px;color:#5c7382;line-height:1.6;margin:6px 0 0}
+.kv{display:grid;grid-template-columns:200px 1fr;gap:6px 14px;font-size:12px}
+.kv dt{color:var(--muted);font-weight:700}
+.kv dd{margin:0;color:#23414f;word-break:break-all}
+.loading{font-size:13px;color:var(--muted);padding:10px 0}
+.err{padding:12px;border-radius:10px;background:#fff0f0;border-left:4px solid var(--bad);font-size:13px;color:#6d2a2a;white-space:pre-wrap}
+table.runs{width:100%;border-collapse:collapse;font-size:13px}
+table.runs th{text-align:left;color:#657b87;font-weight:700;padding-bottom:6px}
+table.runs td{padding:10px 8px 10px 0;border-top:1px solid var(--line);vertical-align:top}
+table.runs tr.clickable{cursor:pointer}
+table.runs tr.clickable:hover td{background:#f4f9fb}
+.filterbar{display:grid;grid-template-columns:repeat(4,1fr) auto;gap:10px;align-items:end;margin-bottom:14px}
+@media(max-width:900px){.kv{grid-template-columns:1fr}.filterbar{grid-template-columns:1fr}}
+a{color:var(--blue)}
+aside a.nav{display:block;color:inherit;text-decoration:none}
+aside a.nav.disabled{opacity:.45;pointer-events:none}
+.top .user{margin-left:14px;display:flex;align-items:center;gap:10px;font-size:12px;color:var(--muted)}
+.top .user a{color:var(--ink);font-weight:700;text-decoration:none}
+.auth-shell{min-height:100vh;display:flex;align-items:flex-start;justify-content:center;padding:60px 16px;background:var(--bg)}
+.auth-card{width:100%;max-width:440px}
+.auth-card .brand{margin-bottom:18px}
+.captcha{display:flex;gap:10px;align-items:center;margin-bottom:6px}
+.captcha img{border:1px solid var(--line);border-radius:8px;background:#fff}
+.code{font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:22px;font-weight:800;letter-spacing:2px;color:var(--ink);background:var(--sky);border:1px dashed #b9ccd6;border-radius:10px;padding:16px;text-align:center;margin:12px 0}
+.field textarea.json{min-height:260px;font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:12px}
+.btn:disabled{opacity:.55;cursor:not-allowed}
+table.runs td.num{font-variant-numeric:tabular-nums}
+.side-by-side{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+@media(max-width:900px){.side-by-side{grid-template-columns:1fr}}
+a.btn{display:inline-block;text-decoration:none;margin-left:6px}
+
+/* The source's .kv assumes a full-width card. Inside the two-column .grid at laptop width the
+   fixed 200px label column leaves about 44px for the value, so an email wraps one character per
+   line (measured at 1024px). Below 1200px the LABEL gives way instead of the value. */
+@media(max-width:1200px){.kv{grid-template-columns:minmax(90px,34%) 1fr}}
+/* break-all is right for an opaque id, which is what the source used it for, and wrong for text
+   a person reads. .plain keeps long values from overflowing without shredding them. */
+.kv dd.plain{word-break:normal;overflow-wrap:anywhere}
+
+/* ---- ADDED: selection controls and result cards. ------------------------------------------
+   The source's design system is for a form of text inputs. Its `.field input` rule sets
+   width:100%, padding, a border and a white background -- which also hits CHECKBOXES, rendering
+   each one as a full-width box floating above its own label. That is the cause of the broken
+   Stages list and the odd multi-select, not a matter of taste. Fixed first, then the controls
+   are built as real components instead of bare boxes with text beside them. */
+
+.field input[type="checkbox"],.field input[type="radio"]{width:auto;padding:0;border:0;background:none;border-radius:0}
+
+/* A multi-select option. The native input stays for keyboard and screen readers and is hidden
+   visually; the label is the control. */
+.choices{display:flex;flex-wrap:wrap;gap:8px;margin:2px 0 4px}
+.choice{position:relative;display:inline-flex;align-items:center;gap:7px;padding:8px 13px 8px 11px;border:1px solid var(--line);border-radius:999px;background:#fff;font-size:12.5px;color:#41606f;cursor:pointer;user-select:none;transition:background .12s,border-color .12s,color .12s}
+.choice:hover{border-color:#9dbccd;background:#f7fbfd}
+.choice input{position:absolute;opacity:0;width:1px;height:1px;margin:0;pointer-events:none}
+.choice .mark{display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;border:1.5px solid #c2d4de;border-radius:50%;background:#fff;flex:0 0 16px;transition:background .12s,border-color .12s}
+.choice .mark:after{content:"";width:7px;height:4px;border-left:2px solid #fff;border-bottom:2px solid #fff;transform:rotate(-45deg) translateY(-1px);opacity:0;transition:opacity .12s}
+.choice.on{background:var(--blue);border-color:var(--blue);color:#fff;font-weight:600}
+.choice.on .mark{background:rgba(255,255,255,.22);border-color:rgba(255,255,255,.8)}
+.choice.on .mark:after{opacity:1}
+.choice input:focus-visible+.mark{outline:2px solid var(--blue);outline-offset:2px}
+.choice.on input:focus-visible+.mark{outline-color:#fff}
+
+/* A stage: a switch, its name and what turning it off costs, on one row. */
+.toggles{display:flex;flex-direction:column;gap:2px;margin-top:4px}
+.toggle{display:flex;align-items:flex-start;gap:12px;padding:11px 12px;border-radius:9px;cursor:pointer;transition:background .12s}
+.toggle:hover{background:#f6fafc}
+.toggle input{position:absolute;opacity:0;width:1px;height:1px;margin:0;pointer-events:none}
+.toggle .switch{position:relative;flex:0 0 34px;width:34px;height:20px;border-radius:999px;background:#cfdce3;margin-top:1px;transition:background .15s}
+.toggle .switch:after{content:"";position:absolute;top:2px;left:2px;width:16px;height:16px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(20,60,85,.3);transition:transform .15s}
+.toggle.on .switch{background:var(--blue)}
+.toggle.on .switch:after{transform:translateX(14px)}
+.toggle input:focus-visible+.switch{outline:2px solid var(--blue);outline-offset:2px}
+.toggle b{display:block;font-size:13px;color:var(--ink);line-height:1.35}
+.toggle small{display:block;font-size:11px;color:#7c8f99;margin-top:2px;line-height:1.45}
+.toggle.off b,.toggle.off small{color:#9fb0ba}
+
+/* A result card. The rank leads, the sequence is the thing being read, everything else supports. */
+.cand{border:1px solid var(--line);border-radius:12px;background:#fff;margin:10px 0;overflow:hidden;transition:border-color .12s,box-shadow .12s}
+.cand:hover{border-color:#c3d8e4;box-shadow:0 2px 10px rgba(20,60,85,.05)}
+.cand-top{display:flex;align-items:center;gap:13px;padding:13px 15px}
+.cand-rank{flex:0 0 auto;min-width:38px;height:38px;padding:0 9px;border-radius:9px;background:var(--sky);color:var(--ink);font-weight:800;font-size:15px;display:inline-flex;align-items:center;justify-content:center}
+.cand-rank.none{background:#f2f6f8;color:#8aa0ad;font-size:10px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;min-width:74px}
+.cand-main{min-width:0;flex:1}
+.cand-seq{font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:14px;letter-spacing:.9px;color:#1d3b4b;word-break:break-all;line-height:1.4}
+.cand-sub{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-top:6px}
+.cand-facts{display:flex;flex-wrap:wrap;gap:4px 14px;font-size:11px;color:var(--muted)}
+.cand-facts span b{color:#33505f;font-weight:700;font-variant-numeric:tabular-nums}
+.cand-body{border-top:1px solid var(--line);background:#fbfdfe;padding:15px}
+.cand-cols{display:grid;grid-template-columns:repeat(auto-fit,minmax(215px,1fr));gap:18px}
+.cand-col h4{margin:0 0 9px;font-size:10.5px;letter-spacing:.7px;text-transform:uppercase;color:var(--muted);font-weight:800}
+
+/* One number, with its label, and a bar where the value is on a 0-1 scale. */
+.stat{margin-bottom:9px}
+.stat-head{display:flex;justify-content:space-between;align-items:baseline;gap:10px}
+.stat-head span{font-size:11.5px;color:#54707f}
+.stat-head b{font-size:12.5px;color:var(--ink);font-variant-numeric:tabular-nums;font-weight:700}
+.stat-bar{height:4px;border-radius:4px;background:#e8eff3;margin-top:4px;overflow:hidden}
+.stat-bar i{display:block;height:100%;background:var(--blue);border-radius:4px}
+.stat-none{font-size:11.5px;color:#9fb0ba;font-style:italic}
+.pathogen{display:flex;justify-content:space-between;gap:10px;font-size:11.5px;padding:4px 0;border-bottom:1px dashed #e4edf1}
+.pathogen:last-child{border-bottom:0}
+.pathogen i{font-style:italic;color:#54707f}
+.pathogen b{color:var(--ink);font-variant-numeric:tabular-nums}
+@media(max-width:640px){.cand-top{align-items:flex-start}.cand-cols{grid-template-columns:1fr}}

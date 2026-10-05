@@ -132,7 +132,8 @@ site/
 
 # ---------- Reports ----------
 *.pdf
-docs/
+# docs/ itself is tracked (project documentation). Generated PDF reports under it
+# stay tracked via the negation below, as before.
 !docs/**/*.pdf
 **/rationale.md
 scripts/
@@ -150,4 +151,13 @@ src/backend/api_stage/Dockerfile
 
 # --------- Miscellaneous ----------
 src/backend/worker_e2e/example_run.json
-src/backend/api_e2e/example_request.json
+# example_request.json was listed here, and that is why it was missing from a fresh clone.
+# It is now TRACKED instead: three test modules, README.md and API_SPECIFICATION.md all require
+# it, so ignoring it meant the test suite could not pass on a clean checkout. See docs/BASELINE.md.
+# (.venv/ is already covered at the top of this file.)
+
+# ---------- Web app (node) ----------
+node_modules/
+web/dist/
+web/*.tsbuildinfo
+deploy/.env

@@ -1,0 +1,11 @@
+{
+  "_derived_from": {
+    "changed": "status and stage forced to 'pending' while vertex_state stays JOB_STATE_SUCCEEDED and error is null: Vertex finished cleanly but no results.json was written, so the API reports pending indefinitely.",
+    "file": "status-9223232270029029376.json"
+  },
+  "error": null,
+  "job_id": "projects/example-project/locations/us-central1/customJobs/9223232270029029376",
+  "stage": "pending",
+  "status": "pending",
+  "vertex_state": "JOB_STATE_SUCCEEDED"
+}

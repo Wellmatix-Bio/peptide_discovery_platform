@@ -1,22 +1,44 @@
 """Start and inspect complete-pipeline Vertex AI Custom Jobs."""
 
+import hashlib
 import json
 import os
 import re
 import statistics
 import logging
 from functools import lru_cache
+from pathlib import Path
 from typing import Literal
 from fastapi import FastAPI, HTTPException
 from google.api_core.exceptions import GoogleAPICallError, NotFound
 from google.auth.exceptions import GoogleAuthError
 from pydantic import BaseModel, ConfigDict, Field, config
-from common import env, storage
+from common import storage
+# Imported for its import-time side effect only: common/env.py loads .env into
+# os.environ, which is what every required() call below reads. Nothing references
+# the module by name any more -- do not remove it as unused.
+from common import env  # noqa: F401
 from schemas.brief import Brief
 from schemas.e2e_config import validate_job_config
 from schemas.stage_configs import E2ERequest
 
 app = FastAPI(title="End-to-end Pipeline Job API")
+
+
+#: Settings forwarded into the worker container, read from the process environment.
+#: Deliberately explicit and minimal: these are the only variables anything on the
+#: worker's own code path reads (common/model_sync.py), and DEV_MODE, which is set
+#: to "false" separately below. Everything else the worker needs travels in its
+#: config.json -- SEED_CANDIDATES_FILE, for instance, reaches it as the config's
+#: seed_candidates_path, not as an environment variable.
+#:
+#: This was previously common/env.py's DOTENV_KEYS, which is populated only by
+#: parsing a .env FILE. An API process configured any other way -- docker compose
+#: `environment:`, Kubernetes, Cloud Run -- forwarded nothing, so the worker fell
+#: back to model_sync.py's placeholder gs://TODO-bucket/model_store and failed
+#: during weight sync rather than at submit time. It also forwarded every other key
+#: in .env, including deployment settings the worker never reads.
+WORKER_ENV_KEYS = ("VERTEX_MODEL_STORE",)
 
 
 def required(name):
@@ -131,8 +153,8 @@ def create_job(request: CreateJobRequest):
                             {"name": "DEV_MODE", "value": "false"},
                             *(
                                 {"name": key, "value": os.environ[key]}
-                                for key in env.DOTENV_KEYS
-                                if key != "DEV_MODE" and key in os.environ
+                                for key in WORKER_ENV_KEYS
+                                if key in os.environ
                             ),
                         ],
                     },
@@ -447,6 +469,110 @@ def cancel_job(job_id: str):
     except GoogleAPICallError as exc:
         raise HTTPException(502, str(exc)) from exc
     return {"job_id": name, "status": "cancelling"}
+
+
+#: model_store/, which holds each predictor's CODE. Weights are not here: they live in
+#: model_store/model_weights/<name>/ on the WORKER, synced from VERTEX_MODEL_STORE by
+#: common/model_sync.py on first use. See the manifest endpoint's own caveat.
+MODEL_STORE_DIR = Path(__file__).resolve().parents[3] / "model_store"
+
+
+class ModelEntry(BaseModel):
+    name: str
+    version: str
+    predictor_sha256: str | None = None
+    model_card: dict | None = None
+    model_card_present: bool = False
+
+
+class ModelManifest(BaseModel):
+    models: list[ModelEntry]
+    weights_source: str | None = None
+    caveat: str
+
+
+@app.get("/healthz")
+def healthz():
+    """Liveness only. It deliberately does NOT check Vertex or GCS: a readiness probe that
+    calls out to Google turns a Google incident into an unhealthy container, and this process
+    is perfectly able to answer 503s explaining itself. Whether the settings are present is
+    reported here as a fact rather than as health."""
+    missing = [
+        name
+        for name in (
+            "VERTEX_CLOUD_PROJECT",
+            "VERTEX_LOCATION",
+            "VERTEX_ARTIFACTS_DIR",
+            "VERTEX_MODEL_STORE",
+            "SEED_CANDIDATES_FILE",
+            "WORKER_IMAGE_URI",
+            "WORKER_SERVICE_ACCOUNT",
+            "MACHINE_TYPE",
+            "ACCELERATOR_TYPE",
+            "ACCELERATOR_COUNT",
+        )
+        if not os.environ.get(name)
+    ]
+    return {
+        "ok": True,
+        "settings_missing": missing,
+        "note": (
+            "ok reports only that this process is answering. Job creation returns 503 while"
+            " settings_missing is non-empty."
+            if missing
+            else "ok reports only that this process is answering; Vertex and Cloud Storage are"
+            " not contacted by this endpoint."
+        ),
+    }
+
+
+@app.get("/api/v1/models", response_model=ModelManifest)
+def model_manifest():
+    """What this deployment declares it will run, read from model_store/ on disk.
+
+    HONEST LIMITS, because a provenance endpoint that overstates is worse than none:
+    - `predictor_sha256` digests the predictor's CODE (predictor.py), not its weights. The API
+      container does not hold the weights at all -- the worker syncs them from
+      VERTEX_MODEL_STORE at run time -- so this process cannot digest them without downloading
+      them, which a status endpoint has no business doing.
+    - `version` is the suffix of the directory name, which is how this project versions a
+      predictor. It is not derived from the weights either.
+    - `model_card` is whatever the predictor ships. 7 of the 15 predictors ship none, and
+      `model_card_present` says which, rather than an empty object implying there is nothing
+      to know.
+    """
+    entries: list[ModelEntry] = []
+    for directory in sorted(MODEL_STORE_DIR.glob("*/")):
+        predictor = directory / "predictor.py"
+        if not predictor.is_file():
+            continue
+        name = directory.name
+        card_path = directory / "model_card.json"
+        card = None
+        if card_path.is_file():
+            try:
+                card = json.loads(card_path.read_text(encoding="utf-8"))
+            except ValueError:
+                card = None
+        entries.append(
+            ModelEntry(
+                name=name,
+                version=name.rsplit("_", 1)[-1] if "_v" in name else "unversioned",
+                predictor_sha256=hashlib.sha256(predictor.read_bytes()).hexdigest(),
+                model_card=card,
+                model_card_present=card is not None,
+            )
+        )
+    return ModelManifest(
+        models=entries,
+        weights_source=os.environ.get("VERTEX_MODEL_STORE") or None,
+        caveat=(
+            "Digests cover predictor code, not model weights: the weights are synced to the"
+            " worker from weights_source at run time and are not present in this process. A"
+            " matching digest therefore means the same scoring code, not provably the same"
+            " weights."
+        ),
+    )
 
 
 if __name__ == "__main__":

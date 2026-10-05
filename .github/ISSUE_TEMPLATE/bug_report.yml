@@ -1,0 +1,73 @@
+name: Bug report
+description: Something behaves differently from what it says it does
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Before filing: several behaviours that look like bugs are known and documented.
+        Please check [docs/BASELINE.md](../blob/main/docs/BASELINE.md) and
+        [docs/BRIEF_VALIDITY.md](../blob/main/docs/BRIEF_VALIDITY.md) first — particularly if it
+        involves a run reporting `pending`, or a brief being rejected.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What you did, and what the result was.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected instead
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: How to reproduce
+      description: The command or request, and the config or brief if one is involved.
+      render: shell
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Which part
+      options:
+        - Pipeline (src/pipeline)
+        - A predictor (model_store)
+        - Job API (src/backend/api_e2e)
+        - Accounts service / proxy (services/accounts)
+        - Web app (web)
+        - Deployment (deploy)
+        - Documentation
+        - Not sure
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version or commit
+      placeholder: "v0.1.0, or the output of: git rev-parse --short HEAD"
+    validations:
+      required: true
+  - type: textarea
+    id: run-state
+    attributes:
+      label: If this involves a run, both status fields
+      description: |
+        `status` and `vertex_state` can disagree, and the difference is usually the answer.
+        A run showing `status: pending` with a terminal `vertex_state` means the worker died
+        without writing a result — that is expected behaviour, not a bug in the UI.
+      placeholder: "status: pending / vertex_state: JOB_STATE_FAILED"
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      placeholder: |
+        OS, Python version, GPU or CPU
+        Running locally or through the compose stack?
+        Are model weights present? Are propy3 or s4pred installed?
+    validations:
+      required: true

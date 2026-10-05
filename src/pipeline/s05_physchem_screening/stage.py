@@ -491,25 +491,37 @@ class Stage5(CandidateStage):
             else "pass"
         )
 
+        # A score of None means the model did not run -- too short for it, or an optional
+        # dependency absent. It is recorded as not screened, which rolls up as a flag below.
+        # Reading None as a pass is the mistake this rule exists to prevent; see CONTRIBUTING.md.
         solubility_score = predictions["solubility"]["score"]
-        properties["solubility"] = (
-            "flag"
-            if solubility_score is not None
-            and solubility_score < t["solubility_flag_min"]
-            else "pass"
-        )
+        if solubility_score is None:
+            properties["solubility"] = "not_screened"
+        elif solubility_score < t["solubility_flag_min"]:
+            properties["solubility"] = "flag"
+        else:
+            properties["solubility"] = "pass"
 
         aggregation_score = predictions["aggregation_tendency"]["score"]
-        properties["aggregation_tendency"] = (
-            "flag"
-            if aggregation_score is not None
-            and aggregation_score > t["aggregation_tendency_flag_max"]
-            else "pass"
-        )
+        if aggregation_score is None:
+            properties["aggregation_tendency"] = "not_screened"
+        elif aggregation_score > t["aggregation_tendency_flag_max"]:
+            properties["aggregation_tendency"] = "flag"
+        else:
+            properties["aggregation_tendency"] = "pass"
 
-        properties["secondary_structure"] = (
-            "flag" if predictions["secondary_structure_consistency"]["flag"] else "pass"
-        )
+        # s4pred is optional and GPL-3.0 (docs/LICENSING.md). When it is absent the screen returns
+        # {"available": False, "reason": ...} and carries NO "flag" key, so reading ["flag"]
+        # unconditionally raised KeyError('flag') and took the whole stage down -- on every
+        # candidate, in the default configuration, since s4pred does not resolve from a fresh
+        # clone. Absent is now "not screened", which is what it is.
+        secondary_structure = predictions["secondary_structure_consistency"]
+        if not secondary_structure.get("available", True):
+            properties["secondary_structure"] = "not_screened"
+        elif secondary_structure["flag"]:
+            properties["secondary_structure"] = "flag"
+        else:
+            properties["secondary_structure"] = "pass"
 
         properties["disulfide_complexity"] = (
             "flag"
@@ -537,12 +549,22 @@ class Stage5(CandidateStage):
 
         if "reject" in properties.values():
             overall = "reject"
-        elif "flag" in properties.values():
+        elif "flag" in properties.values() or "not_screened" in properties.values():
+            # An unrun screen makes the whole verdict a flag, never a pass. It does not reject:
+            # nothing was measured against this candidate, so there is no finding to reject it on.
             overall = "flag"
         else:
             overall = "pass"
 
-        return {"properties": properties, "overall": overall}
+        unscreened = sorted(k for k, v in properties.items() if v == "not_screened")
+        verdict = {"properties": properties, "overall": overall}
+        if unscreened:
+            verdict["not_screened"] = unscreened
+            verdict["not_screened_note"] = (
+                "These checks did not run, so this candidate was not cleared by them. Not checked"
+                " is not the same as passed."
+            )
+        return verdict
 
     @staticmethod
     def _risk_category(count: int, config_params: dict) -> str:

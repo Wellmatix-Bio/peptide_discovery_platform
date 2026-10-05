@@ -1,9 +1,9 @@
 """Fail if the backend suite's result has moved from the recorded baseline.
 
-The backend suite cannot be green: s4pred is committed as a gitlink with no .gitmodules, so
-47 tests never collect, and 4 more fail on genuine disagreements between api.py and its tests
-(docs/BASELINE.md). A CI job that simply required a zero exit code would therefore always fail,
-and one that ignored the exit code would notice nothing.
+The backend suite cannot be green: 4 tests fail on genuine disagreements between api.py and its
+tests, and 3 need model weights that are gitignored and synced at run time (docs/BASELINE.md). A
+CI job that simply required a zero exit code would therefore always fail, and one that ignored
+the exit code would notice nothing.
 
 So this compares the OUTCOME to the recorded numbers. Any movement in either direction fails --
 a new failure is a regression, and a new pass means the baseline is stale and docs/BASELINE.md
@@ -20,7 +20,7 @@ import subprocess
 import sys
 
 #: From docs/BASELINE.md. Update BOTH together, never just this.
-EXPECTED = {"passed": 82, "failed": 7, "errors": 0}
+EXPECTED = {"passed": 105, "failed": 7, "errors": 0}
 
 #: THE BASELINE IS A PROPERTY OF AN ENVIRONMENT, NOT JUST OF THE CODE. A module the suite imports
 #: but that is not installed turns tests into collection ERRORS, and the count moves exactly as it
@@ -28,9 +28,34 @@ EXPECTED = {"passed": 82, "failed": 7, "errors": 0}
 #: These are the imports the recorded numbers assume. They are checked first so a missing one is
 #: reported as what it is, instead of being counted as a regression.
 #:
-#: Deliberately NOT the whole of requirements.txt: nothing here needs torch, transformers, sklearn
-#: or xgboost, because the 47 tests that would are uncollectable anyway (s4pred, docs/BASELINE.md).
-ASSUMED_IMPORTS = ("fastapi", "pydantic", "yaml", "google.cloud.storage", "structlog", "pandas")
+#: This list was once deliberately short, on the grounds that "nothing here needs torch,
+#: transformers, sklearn or xgboost, because the 47 tests that would are uncollectable anyway
+#: (s4pred)". Making s4pred optional removed that barrier and those 47 tests now collect and
+#: import the real ML stack -- so the short list no longer described the baseline's environment,
+#: and a CI job installing only part of it reported 34/6/2 as a regression. The guard failed in
+#: exactly the way it exists to prevent, because its premise had been changed out from under it.
+#:
+#: So: everything the collectable suite imports, deep enough to catch a partial install. Keep it
+#: in step with the python job in .github/workflows/ci.yml.
+ASSUMED_IMPORTS = (
+    "fastapi",
+    "pydantic",
+    "yaml",
+    "google.cloud.storage",
+    "structlog",
+    "pandas",
+    "numpy",
+    "torch",
+    "transformers",
+    "sklearn",
+    "xgboost",
+    "Bio",
+    "modlamp",
+    "deap",
+    "freesasa",
+    "joblib",
+    "rapidfuzz",
+)
 
 #: The baseline also assumes MODEL WEIGHTS ARE ABSENT. They are gitignored and synced at run time,
 #: so CI and a fresh clone never have them -- but a developer who has synced them locally will see

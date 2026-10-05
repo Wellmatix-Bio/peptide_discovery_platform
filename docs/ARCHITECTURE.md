@@ -59,7 +59,7 @@ copyleft library.** Each of those is an addition that announces itself when miss
 |---|---|---|
 | Google Cloud | `pip install -e '.[gcp]'` | Local paths work normally. A `gs://` path raises `CloudStorageUnavailable` naming the fix, not a bare import error. |
 | `propy3` (GPL-2.0-only) | `pip install -e '.[aggregation]'` | The aggregation screen reports `not_screened`; stage 8's verdict becomes `flag`, never a silent pass. |
-| `s4pred` (GPL-3.0) | not on PyPI; vendor it yourself | The secondary-structure screen reports `available: false` with a reason. Nothing else in stage 5 changes. |
+| `s4pred` (GPL-3.0) | not on PyPI; vendor it yourself | The secondary-structure screen reports `available: false` with a reason, and the candidate's stage-5 verdict becomes `flag` with `secondary_structure: not_screened` — never a pass. |
 | A GPU | — | Everything runs on CPU, slowly. ESMFold in stage 7 dominates. |
 | Model weights | see below | The predictors that need them cannot run. |
 

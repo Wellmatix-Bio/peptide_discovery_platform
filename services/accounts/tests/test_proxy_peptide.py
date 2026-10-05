@@ -80,10 +80,23 @@ async def status(job_id: str) -> Response:
 
 @api.get("/api/v1/jobs/{job_id:path}/results")
 async def results(job_id: str) -> Response:
+    # SHAPED FROM A CAPTURED RESPONSE, not from memory. `candidates` is the list;
+    # `ranked_candidates` and `insufficient_evidence_candidates` are integer COUNTS the API
+    # computes itself. An earlier version of this fake returned ranked_candidates as a LIST,
+    # which is how a real bug in _results_summary survived a passing test suite: the fake
+    # encoded the same misunderstanding as the code it was meant to check. See
+    # web/src/test/fixtures/README.md on why fixtures are captured rather than written.
     body = {
+        "job_id": job_id,
         "run_id": job_id.rsplit("/", 1)[-1],
+        "status": "success",
         "n_final": 2,
-        "ranked_candidates": [{"id": "c1", "sequence": "KRWWKWIRW"}, {"id": "c2", "sequence": "GIGKFLK"}],
+        "ranked_candidates": 2,
+        "insufficient_evidence_candidates": 0,
+        "candidates": [
+            {"id": "c1", "sequence": "KRWWKWIRW", "ranking": 1, "log_mic_um": {}, "pmbic": {}},
+            {"id": "c2", "sequence": "GIGKFLK", "ranking": 2, "log_mic_um": {}, "pmbic": {}},
+        ],
         "component_stats": {},
     }
     return Response(content=json.dumps(body), status_code=200, media_type="application/json")
@@ -276,7 +289,10 @@ def test_a_results_read_stores_the_body_for_reopening(proxied):
     assert listed["has_envelope"] is True
     entry = client.get(f"/auth/history/{listed['id']}", headers=bearer(token)).json()
     assert entry["envelope"]["n_final"] == 2
-    assert len(entry["envelope"]["ranked_candidates"]) == 2
+    # ranked_candidates is the API's integer COUNT; candidates is the list. This assertion read
+    # len(ranked_candidates) and so encoded the same mistake the code did.
+    assert entry["envelope"]["ranked_candidates"] == 2
+    assert len(entry["envelope"]["candidates"]) == 2
 
 
 def test_a_later_status_poll_does_not_wipe_a_stored_results_body(proxied):
@@ -464,3 +480,22 @@ def test_a_new_route_on_a_gated_router_is_refused_without_asking_for_it(settings
         )
     finally:
         router.routes[:] = [r for r in router.routes if getattr(r, "path", None) != path]
+
+
+def test_a_results_summary_is_recorded_for_a_real_envelope(proxied):
+    """`ranked_candidates` is an integer COUNT, not a list.
+
+    _results_summary used `len(ranked)` on it, which raises TypeError on every real results
+    response. observe() swallows every exception by design, so the failure was silent: the row
+    kept its old summary and nothing surfaced. Reported by review, reproduced against a captured
+    response before fixing.
+    """
+    client, token = proxied
+    submit(client, token)
+    client.get(f"/api/peptide/api/v1/jobs/{JOB}/results", headers=bearer(token))
+    entry = client.get("/auth/history", headers=bearer(token)).json()["entries"][0]
+    assert "final candidate(s)" in entry["summary"], (
+        "the results summary never replaced the submission summary, which is what happens when"
+        " _results_summary raises and observe() swallows it"
+    )
+    assert "2 ranked" in entry["summary"]

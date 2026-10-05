@@ -283,28 +283,55 @@ export function RunView() {
     if (decoded) lastRun.set(decoded);
   }, [decoded]);
 
-  const poll = useCallback(async () => {
-    try {
-      const { body } = await jobStatus(decoded);
-      setStatus(body);
-      setCheckedAt(new Date().toISOString());
-      const state = runState(body.status, body.vertex_state);
-      if (state === "succeeded") {
-        const { status: code, body: got } = await jobResults(decoded);
-        if (code === 404) setNotYet(true);
-        else setResults(got);
-      }
-      return state;
-    } catch (problem) {
-      setError(problem);
-      return null;
-    }
+  /* The run currently on screen. A response is applied only if it is still for THIS run.
+     Without it, navigating straight from one run to another lets the abandoned run's late
+     response land after the new one's and overwrite the page -- reported by review, and
+     reproduced in src/test/runview-switch.test.tsx. */
+  const showing = useRef(decoded);
+
+  /* The route parameter changes without remounting, so state from the previous run would
+     otherwise still be on screen while the new one loads. */
+  useEffect(() => {
+    showing.current = decoded;
+    setStatus(null);
+    setResults(null);
+    setNotYet(false);
+    setError(null);
+    setCheckedAt(null);
   }, [decoded]);
 
+  const poll = useCallback(
+    async (signal: AbortSignal) => {
+      const mine = decoded;
+      const stale = () => signal.aborted || showing.current !== mine;
+      try {
+        const { body } = await jobStatus(mine, signal);
+        if (stale()) return null;
+        setStatus(body);
+        setCheckedAt(new Date().toISOString());
+        const state = runState(body.status, body.vertex_state);
+        if (state === "succeeded") {
+          const { status: code, body: got } = await jobResults(mine, signal);
+          if (stale()) return null;
+          if (code === 404) setNotYet(true);
+          else setResults(got);
+        }
+        return state;
+      } catch (problem) {
+        /* An abort is this component tidying up, not something to show the reader. */
+        if (stale() || (problem as Error)?.name === "AbortError") return null;
+        setError(problem);
+        return null;
+      }
+    },
+    [decoded],
+  );
+
   useEffect(() => {
+    const controller = new AbortController();
     let live = true;
     const tick = async () => {
-      const state = await poll();
+      const state = await poll(controller.signal);
       if (!live) return;
       /* Stop polling once there is nothing left to learn. */
       if (state && !isFinished(state)) {
@@ -314,6 +341,7 @@ export function RunView() {
     tick();
     return () => {
       live = false;
+      controller.abort();
       if (timer.current) window.clearTimeout(timer.current);
     };
   }, [poll]);
@@ -405,7 +433,9 @@ export function RunView() {
                 try {
                   await cancelJob(decoded);
                   setCancelNote("Cancellation requested. Vertex may take a moment to report it.");
-                  await poll();
+                  /* Its own controller: this refresh is not the polling loop's, and must not be
+                     cancelled by the loop's cleanup or cancel the loop's request. */
+                  await poll(new AbortController().signal);
                 } catch (problem) {
                   setError(problem);
                 } finally {

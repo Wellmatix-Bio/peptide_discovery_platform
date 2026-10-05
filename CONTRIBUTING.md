@@ -46,13 +46,12 @@ cd web && npm ci && npm test
 
 ### The backend suite does not pass, on purpose
 
-It is **82 passed / 7 failed / 0 errors**, and that exact result is the baseline. CI compares
+It is **211 passed / 3 failed / 0 errors**, and that exact result is the baseline. CI compares
 against it with `.github/check_baseline.py`, which fails on *any* movement — more failures mean a
 regression, more passes mean the baseline is stale and must be updated in the same change.
 
-The 7 are documented in [docs/BASELINE.md](docs/BASELINE.md): 4 are stale `test_api_e2e.py`
-expectations that disagree with the shipped API, and 3 need model weights that a fresh clone does
-not have.
+The 3 are documented in [docs/BASELINE.md](docs/BASELINE.md): all need model weights that a fresh
+clone does not have, so they fail for the environment rather than for the code.
 
 **A count only means something against a stated environment.** The checker asserts its assumptions
 before counting — required modules present, model weights absent, the optional copyleft packages

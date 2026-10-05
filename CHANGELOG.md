@@ -30,7 +30,11 @@ and versions follow [Semantic Versioning](https://semver.org/).
 
 - The entire `pipeline` package was unimportable when `s4pred` was absent, making 47 tests
   uncollectable. The backend baseline went from 29 passed / 4 failed / 2 collection errors to
-  82 / 7 / 0.
+  82 / 7 / 0, and to 211 / 3 / 0 once the stage-11 work and its tests landed.
+- Stage 5 raised `KeyError('flag')` whenever `s4pred` was unavailable, which is the default on a
+  fresh clone — so the stage failed on every candidate. Four further screens across stages 5 and
+  8 recorded a model that never ran as a **pass**; `cleavage_stability` was the worst, clearing
+  candidates on a hard reject threshold nothing had evaluated.
 - A peptide too short for the aggregation model's features was recorded as having **passed** a
   screen that never ran.
 - A 401 from the upstream signed users out, treating another service's refusal as a dead session.

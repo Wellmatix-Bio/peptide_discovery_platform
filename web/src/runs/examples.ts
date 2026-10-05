@@ -52,9 +52,10 @@ export const EXAMPLES: Example[] = [
     note:
       "Uses the biofilm_positive context. Note that “antibiofilm” is not an accepted" +
       " desired function, so the brief asks for antimicrobial action instead — the biofilm" +
-      " model still scores every candidate.",
+      " model still scores every candidate. “high_exudate” was dropped from the accepted" +
+      " contexts: it affects dressing choice rather than any model the pipeline runs.",
     brief: {
-      wound_context: wound("chronic", "infected", "biofilm_positive", "high_exudate"),
+      wound_context: wound("chronic", "infected", "biofilm_positive"),
       desired_functions: functions("antimicrobial", "anti_inflammatory", "immunomodulation"),
       pathogens: pathogens("Pseudomonas_aeruginosa", "Staphylococcus_aureus"),
       min_length: 10,
@@ -65,9 +66,12 @@ export const EXAMPLES: Example[] = [
   {
     id: "clean-surgical",
     label: "Clean surgical incision",
-    note: "No infection to treat: the goal is closure and controlled remodelling.",
+    note:
+      "No infection to treat: the goal is closure and controlled remodelling. The" +
+      " \u201cclean\u201d context the name refers to is no longer an accepted value, so the" +
+      " brief says acute and surgical instead.",
     brief: {
-      wound_context: wound("acute", "clean", "surgical"),
+      wound_context: wound("acute", "surgical"),
       desired_functions: functions(
         "cell_proliferation/migration",
         "collagen_synthesis",
@@ -84,7 +88,7 @@ export const EXAMPLES: Example[] = [
     label: "Second-degree burn",
     note: "A large acute wound at high infection risk, needing re-vascularisation.",
     brief: {
-      wound_context: wound("acute", "burn", "high_exudate", "infected"),
+      wound_context: wound("acute", "burn", "infected"),
       desired_functions: functions(
         "antimicrobial",
         "keratinocyte_migration",

@@ -124,6 +124,7 @@ Open and documented rather than discovered later:
 | [API_SPECIFICATION.md](API_SPECIFICATION.md) | The job API's endpoints |
 | [BASELINE.md](docs/BASELINE.md) | Measured test baseline and the defects behind it |
 | [WEB_WALKTHROUGH.md](docs/WEB_WALKTHROUGH.md) | Every page, with screenshots |
+| [REVIEW_LOG.md](docs/REVIEW_LOG.md) | Queries raised in review, what was found, why it was missed |
 
 ---
 

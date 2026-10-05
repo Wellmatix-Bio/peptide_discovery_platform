@@ -11,9 +11,9 @@ dependencies = [
     "fastapi>=0.141",
     "uvicorn>=0.53",
     "httpx>=0.28",
-    "google-auth>=2.58",
-    "google-api-core>=2.38",
-    "google-cloud-aiplatform>=2.1",
+    "google-auth>=2.59.1",
+    "google-api-core>=2.40.0",
+    "google-cloud-aiplatform>=2.3.0",
     # ML / numerics
     "torch>=2.11",
     "numpy>=2.3",
@@ -56,8 +56,8 @@ aggregation = [
 # Google Cloud: Vertex AI job submission and Cloud Storage artifacts. Not needed to run the
 # pipeline locally -- see docs/ARCHITECTURE.md for the storage and compute backends.
 gcp = [
-    "google-cloud-storage>=3,<4",
-    "google-cloud-aiplatform>=1.71,<3",
+    "google-cloud-storage>=3.16.0,<4",
+    "google-cloud-aiplatform>=2.3.0,<3",
 ]
 
 [tool.pytest.ini_options]

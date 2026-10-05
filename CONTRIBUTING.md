@@ -170,6 +170,13 @@ harnesses already do this and are worth reading as examples:
   any sabotage goes undetected.
 - `tests/test_licensing.py` guards the licence posture; each check was verified by breaking it.
 
+The design-system tests compare `web/src/styles.css` against the project it was copied from. That
+project is not in this repository, so they also carry `web/src/test/design-manifest.json` — the
+source's rules, committed — and fall back to it when the original is not on disk. Without that,
+31 of the 36 tests skipped everywhere except one machine, CI included. Point at a local copy with
+`WMXCCS_STYLES=/path/to/styles.css`, and regenerate the manifest with
+`node web/scripts/design_manifest.mjs` when the reference design system changes.
+
 Fixtures for result views are **captured from a running API**, never hand-written — see
 `web/src/test/fixtures/README.md`. A hand-written fixture encodes what its author believed the API
 returns, so the test passes while the app misrenders the real thing. Capturing is what revealed

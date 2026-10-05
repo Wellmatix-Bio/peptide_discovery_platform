@@ -1,9 +1,11 @@
 """Fail if the backend suite's result has moved from the recorded baseline.
 
-The backend suite cannot be green: 4 tests fail on genuine disagreements between api.py and its
-tests, and 3 need model weights that are gitignored and synced at run time (docs/BASELINE.md). A
-CI job that simply required a zero exit code would therefore always fail, and one that ignored
-the exit code would notice nothing.
+The backend suite cannot be green: 3 tests need model weights that are gitignored and synced at
+run time (docs/BASELINE.md). A CI job that simply required a zero exit code would therefore
+always fail, and one that ignored the exit code would notice nothing.
+
+The 4 stale test_api_e2e disagreements that used to sit alongside them are gone -- PR #6 rewrote
+those tests to describe what api.py actually does.
 
 So this compares the OUTCOME to the recorded numbers. Any movement in either direction fails --
 a new failure is a regression, and a new pass means the baseline is stale and docs/BASELINE.md
@@ -20,7 +22,7 @@ import subprocess
 import sys
 
 #: From docs/BASELINE.md. Update BOTH together, never just this.
-EXPECTED = {"passed": 105, "failed": 7, "errors": 0}
+EXPECTED = {"passed": 211, "failed": 3, "errors": 0}
 
 #: THE BASELINE IS A PROPERTY OF AN ENVIRONMENT, NOT JUST OF THE CODE. A module the suite imports
 #: but that is not installed turns tests into collection ERRORS, and the count moves exactly as it

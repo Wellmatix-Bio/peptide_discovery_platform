@@ -60,15 +60,12 @@
                 "biofilm_positive",
                 "burn",
                 "chronic",
-                "clean",
                 "diabetic",
-                "high_exudate",
                 "high_glucose",
                 "infected",
                 "ischemic",
                 "low_perfusion",
                 "necrotic",
-                "radiation_induced",
                 "surgical",
                 "traumatic"
               ],
@@ -89,8 +86,45 @@
         "title": "BriefFields",
         "type": "object"
       },
+      "CancelJobResponse": {
+        "properties": {
+          "job_id": {
+            "title": "Job Id",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "cancelling",
+              "cancelled",
+              "failed"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "job_id",
+          "status"
+        ],
+        "title": "CancelJobResponse",
+        "type": "object"
+      },
       "CandidateResponse": {
         "properties": {
+          "activated_pathways": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Activated Pathways"
+          },
           "aggregation_tendency": {
             "anyOf": [
               {
@@ -173,19 +207,27 @@
             ],
             "title": "Deamidation Risk"
           },
-          "engaged_pathways": {
+          "evidence_coverage": {
             "anyOf": [
               {
-                "items": {
-                  "type": "string"
-                },
-                "type": "array"
+                "type": "number"
               },
               {
                 "type": "null"
               }
             ],
-            "title": "Engaged Pathways"
+            "title": "Evidence Coverage"
+          },
+          "final_score": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Final Score"
           },
           "hemolytic_activity_phc50": {
             "anyOf": [
@@ -202,6 +244,20 @@
             "default": "?",
             "title": "Id",
             "type": "string"
+          },
+          "inhibited_pathways": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Inhibited Pathways"
           },
           "instability_index": {
             "anyOf": [
@@ -239,6 +295,20 @@
             ],
             "default": 0,
             "title": "Migration Probability"
+          },
+          "missing_modules": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Missing Modules"
           },
           "molecular_weight": {
             "anyOf": [
@@ -1232,7 +1302,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/CancelJobResponse"
+                }
               }
             },
             "description": "Successful Response"

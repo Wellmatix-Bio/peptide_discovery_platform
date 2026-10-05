@@ -149,10 +149,22 @@ export interface components {
              * Wound Context
              * @description Context of the wound
              */
-            wound_context: ("acute" | "biofilm_positive" | "burn" | "chronic" | "clean" | "diabetic" | "high_exudate" | "high_glucose" | "infected" | "ischemic" | "low_perfusion" | "necrotic" | "radiation_induced" | "surgical" | "traumatic")[];
+            wound_context: ("acute" | "biofilm_positive" | "burn" | "chronic" | "diabetic" | "high_glucose" | "infected" | "ischemic" | "low_perfusion" | "necrotic" | "surgical" | "traumatic")[];
+        };
+        /** CancelJobResponse */
+        CancelJobResponse: {
+            /** Job Id */
+            job_id: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "cancelling" | "cancelled" | "failed";
         };
         /** CandidateResponse */
         CandidateResponse: {
+            /** Activated Pathways */
+            activated_pathways?: string[] | null;
             /** Aggregation Tendency */
             aggregation_tendency?: number | null;
             /** Amp Probability */
@@ -167,8 +179,10 @@ export interface components {
             cytotoxicity_probability?: number | null;
             /** Deamidation Risk */
             deamidation_risk?: ("low" | "medium" | "high") | null;
-            /** Engaged Pathways */
-            engaged_pathways?: string[] | null;
+            /** Evidence Coverage */
+            evidence_coverage?: number | null;
+            /** Final Score */
+            final_score?: number | null;
             /** Hemolytic Activity Phc50 */
             hemolytic_activity_phc50?: number | null;
             /**
@@ -176,6 +190,8 @@ export interface components {
              * @default ?
              */
             id: string;
+            /** Inhibited Pathways */
+            inhibited_pathways?: string[] | null;
             /** Instability Index */
             instability_index?: number | null;
             /** Log Mic Um */
@@ -187,6 +203,8 @@ export interface components {
              * @default 0
              */
             migration_probability: number | null;
+            /** Missing Modules */
+            missing_modules?: string[] | null;
             /** Molecular Weight */
             molecular_weight?: number | null;
             /** Net Charge */
@@ -783,7 +801,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["CancelJobResponse"];
                 };
             };
             /** @description Validation Error */

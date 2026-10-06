@@ -416,8 +416,28 @@ Two runs were being driven by hand that night; one landed on an occupied directo
   is.
 - **The data is not lost**, only unreachable: `candidates_final.json` still holds the 11
   candidates. Restoring the September `results.json` would make them readable again.
-- **The real defect is that nothing protects a run directory from a second writer.** The worker
-  takes `run_id` from its config and writes wherever that points, with no check that the directory
-  already holds a completed run. A guard at worker start — refuse to run when
-  `candidates_final.json` exists unless explicitly told to overwrite — would have turned this into
-  an error message instead of a destroyed result.
+- **The real defect was that nothing protected a run directory from a second writer.** The worker
+  took `run_id` from its config and wrote wherever that pointed, with no check that the directory
+  already held a completed run.
+
+## Fixed: the worker now refuses
+
+`run_job()` checks the run directory before its first write and raises `CompletedRunExists` when
+the directory already holds a finished run. Two independent signals, since either can be absent on
+its own: `candidates_final.json` exists, or `results.json` reports `status: success`. The refusal
+names what it found and what to do about it.
+
+**The check sits before the `try` block, deliberately.** That block's handler writes a `failed`
+status to the same `results.json` — so a guard raised inside it would destroy the very results it
+exists to protect. A test pins that specifically, and moving the check inside the block fails it.
+
+**A genuine Vertex retry is not blocked.** A retry restarts a run that did not finish, so neither
+signal is present. A test covers the failed-then-retried path for the same reason: treating a
+failed run as a finished one would turn a recoverable restart into a dead job.
+
+Overwriting on purpose is still possible with `--overwrite`, which is off by default. 8 tests, each
+verified by breaking the guard five different ways — removing it, moving it inside the `try`,
+disabling each of the two signals, and making an unparseable status count as finished. All five
+were caught.
+
+Baseline moves 220 → 228 passed; 3 failed, 0 errors, unchanged.

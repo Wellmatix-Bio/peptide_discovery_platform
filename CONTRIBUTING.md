@@ -81,6 +81,14 @@ combined work under that licence. [docs/LICENSING.md](docs/LICENSING.md) has the
 
 **Model weights are not in the repository** and several predictors cannot run without them.
 
+**TypeScript is pinned below 6 by a peer dependency, not by preference.**
+`openapi-typescript` generates `web/src/api/peptide.gen.ts`, and every published version of it —
+7.13.0 is the latest — declares `peer typescript@"^5.x"`. Bumping TypeScript past 5 makes
+`npm ci` fail with `ERESOLVE`, which breaks the web job *and* the image build, because
+`deploy/web.Dockerfile` runs `npm ci` too. A grouped Dependabot PR raising vite, vitest and
+TypeScript together fails for this reason alone and cannot be rebased green. Wait for
+`openapi-typescript` to support TypeScript 7, or drop the generator first.
+
 **Port 8080 is the job API's default** and is a popular port. Check what is listening before you
 blame the code; a proxy pointed at the wrong service fails in confusing ways.
 

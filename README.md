@@ -134,6 +134,7 @@ Open and documented rather than discovered later:
 | [WEB_WALKTHROUGH.md](docs/WEB_WALKTHROUGH.md) | Every page, with screenshots |
 | [REVIEW_LOG.md](docs/REVIEW_LOG.md) | Queries raised in review, what was found, why it was missed |
 | [PATHWAY_THRESHOLD.md](docs/PATHWAY_THRESHOLD.md) | For the model owner: the one open modelling decision |
+| [HISTORY_SCAN.md](docs/HISTORY_SCAN.md) | Pre-publication scan of the git history, and what it found |
 
 ---
 

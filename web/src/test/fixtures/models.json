@@ -145,13 +145,28 @@
         }
       },
       "model_card_present": true,
+      "model_card_status": "documented",
       "name": "aggregation_predictor_v1",
       "predictor_sha256": "a12749e68c0a80cf386321bb8e660ab8eb45fc40c948df0bde377201c917699c",
       "version": "v1"
     },
     {
-      "model_card": null,
-      "model_card_present": false,
+      "model_card": {
+        "documented": {
+          "applicability_domain": null,
+          "evaluation": null,
+          "features": null,
+          "target": null,
+          "task": null,
+          "training_data": null
+        },
+        "model_name": "amp_classifier_v1",
+        "note": "PLACEHOLDER. This predictor's training data, features and applicability domain are not yet documented. The card exists so the gap is visible and addressable, not to imply the model is described. To be completed by the model's author.",
+        "placeholder_added": "2026-10-06",
+        "status": "placeholder"
+      },
+      "model_card_present": true,
+      "model_card_status": "placeholder",
       "name": "amp_classifier_v1",
       "predictor_sha256": "c77b45885a6f300b79732d3cc08f7d57fc87dd7590732800240b9f8dd4922d1a",
       "version": "v1"
@@ -267,13 +282,28 @@
         }
       },
       "model_card_present": true,
+      "model_card_status": "documented",
       "name": "angiogenic_activity_predictor_v1",
       "predictor_sha256": "a7b4bde77c1b65eaf198b00d29f877015242e5be4ea826bd4a93d1357c2d5405",
       "version": "v1"
     },
     {
-      "model_card": null,
-      "model_card_present": false,
+      "model_card": {
+        "documented": {
+          "applicability_domain": null,
+          "evaluation": null,
+          "features": null,
+          "target": null,
+          "task": null,
+          "training_data": null
+        },
+        "model_name": "anti_inflammatory_predictor_v1",
+        "note": "PLACEHOLDER. This predictor's training data, features and applicability domain are not yet documented. The card exists so the gap is visible and addressable, not to imply the model is described. To be completed by the model's author.",
+        "placeholder_added": "2026-10-06",
+        "status": "placeholder"
+      },
+      "model_card_present": true,
+      "model_card_status": "placeholder",
       "name": "anti_inflammatory_predictor_v1",
       "predictor_sha256": "9d6cf98c4bcc619f5d85c105fdc6bf58424be92d1f474f5c0ae466352f0ca8eb",
       "version": "v1"
@@ -311,27 +341,70 @@
         "training_data_scale": "~7,844 UniProt-labeled enzymes (active-site task), ~52 aligned enzymes with MEROPS cleavage data (cleavage task) -- see source MODEL_ARCHITECTURE.md section 3.4 for why only 52 enzymes have usable cleavage training data despite the much larger active-site set."
       },
       "model_card_present": true,
+      "model_card_status": "documented",
       "name": "cleavage_site_predictor_v1",
       "predictor_sha256": "429b16d4b37de626a7c87f7ed9b94fec6dac907ac3bf6a9600aba2d83f1e5a95",
       "version": "v1"
     },
     {
-      "model_card": null,
-      "model_card_present": false,
+      "model_card": {
+        "documented": {
+          "applicability_domain": null,
+          "evaluation": null,
+          "features": null,
+          "target": null,
+          "task": null,
+          "training_data": null
+        },
+        "model_name": "cytotoxicity_predictor_v1",
+        "note": "PLACEHOLDER. This predictor's training data, features and applicability domain are not yet documented. The card exists so the gap is visible and addressable, not to imply the model is described. To be completed by the model's author.",
+        "placeholder_added": "2026-10-06",
+        "status": "placeholder"
+      },
+      "model_card_present": true,
+      "model_card_status": "placeholder",
       "name": "cytotoxicity_predictor_v1",
       "predictor_sha256": "daf29e2b104b218c63ed759c378b5ac5b9e3319aa3070c63d0aa958706e02c7d",
       "version": "v1"
     },
     {
-      "model_card": null,
-      "model_card_present": false,
+      "model_card": {
+        "documented": {
+          "applicability_domain": null,
+          "evaluation": null,
+          "features": null,
+          "target": null,
+          "task": null,
+          "training_data": null
+        },
+        "model_name": "esmfold_v1",
+        "note": "PLACEHOLDER. This predictor's training data, features and applicability domain are not yet documented. The card exists so the gap is visible and addressable, not to imply the model is described. To be completed by the model's author.",
+        "placeholder_added": "2026-10-06",
+        "status": "placeholder"
+      },
+      "model_card_present": true,
+      "model_card_status": "placeholder",
       "name": "esmfold_v1",
       "predictor_sha256": "817562ff92413399cc7d2af0ad03cfb01d645d1698b5586fbf86b7f162ea16d7",
       "version": "v1"
     },
     {
-      "model_card": null,
-      "model_card_present": false,
+      "model_card": {
+        "documented": {
+          "applicability_domain": null,
+          "evaluation": null,
+          "features": null,
+          "target": null,
+          "task": null,
+          "training_data": null
+        },
+        "model_name": "hemolysis_predictor_v1",
+        "note": "PLACEHOLDER. This predictor's training data, features and applicability domain are not yet documented. The card exists so the gap is visible and addressable, not to imply the model is described. To be completed by the model's author.",
+        "placeholder_added": "2026-10-06",
+        "status": "placeholder"
+      },
+      "model_card_present": true,
+      "model_card_status": "placeholder",
       "name": "hemolysis_predictor_v1",
       "predictor_sha256": "e9008a7a97427813ca5d946377c6051b30d13ad196fa6200c9f1330606e200a3",
       "version": "v1"
@@ -425,6 +498,7 @@
         "training_rows": 147
       },
       "model_card_present": true,
+      "model_card_status": "documented",
       "name": "mbic_predictor_v1",
       "predictor_sha256": "dc9f759d4c54385f98a74ecbf854617aef7103bc8e7a87e4bb381db01be303e9",
       "version": "v1"
@@ -507,20 +581,49 @@
         }
       },
       "model_card_present": true,
+      "model_card_status": "documented",
       "name": "mic_predictor_v1",
       "predictor_sha256": "6dcd5c046322bb61475568702c0a6e9b09867ca2cb7772027bf1e752c65da7a1",
       "version": "v1"
     },
     {
-      "model_card": null,
-      "model_card_present": false,
+      "model_card": {
+        "documented": {
+          "applicability_domain": null,
+          "evaluation": null,
+          "features": null,
+          "target": null,
+          "task": null,
+          "training_data": null
+        },
+        "model_name": "pathway_mapping_predictor_v1",
+        "note": "PLACEHOLDER. This predictor's training data, features and applicability domain are not yet documented. The card exists so the gap is visible and addressable, not to imply the model is described. To be completed by the model's author.",
+        "placeholder_added": "2026-10-06",
+        "status": "placeholder"
+      },
+      "model_card_present": true,
+      "model_card_status": "placeholder",
       "name": "pathway_mapping_predictor_v1",
       "predictor_sha256": "95d7f7169e7a7061652ab0963aee124814817f8cd829c1db115b609445b20d43",
       "version": "v1"
     },
     {
-      "model_card": null,
-      "model_card_present": false,
+      "model_card": {
+        "documented": {
+          "applicability_domain": null,
+          "evaluation": null,
+          "features": null,
+          "target": null,
+          "task": null,
+          "training_data": null
+        },
+        "model_name": "pathway_mapping_predictor_v2",
+        "note": "PLACEHOLDER. This predictor's training data, features and applicability domain are not yet documented. The card exists so the gap is visible and addressable, not to imply the model is described. To be completed by the model's author.",
+        "placeholder_added": "2026-10-06",
+        "status": "placeholder"
+      },
+      "model_card_present": true,
+      "model_card_status": "placeholder",
       "name": "pathway_mapping_predictor_v2",
       "predictor_sha256": "5a28f017f0f4da008c8a8a205520d0107ba894e4f49f4bf1a4e470aae438e295",
       "version": "v2"
@@ -624,13 +727,28 @@
         }
       },
       "model_card_present": true,
+      "model_card_status": "documented",
       "name": "proliferation_migration_predictor_v1",
       "predictor_sha256": "3b5bea7249f8fa9043102a4420ab7e8df6ae1e52f23f34656dcd4fe450d51414",
       "version": "v1"
     },
     {
-      "model_card": null,
-      "model_card_present": false,
+      "model_card": {
+        "documented": {
+          "applicability_domain": null,
+          "evaluation": null,
+          "features": null,
+          "target": null,
+          "task": null,
+          "training_data": null
+        },
+        "model_name": "routeb_protgpt2_lora_v1",
+        "note": "PLACEHOLDER. This predictor's training data, features and applicability domain are not yet documented. The card exists so the gap is visible and addressable, not to imply the model is described. To be completed by the model's author.",
+        "placeholder_added": "2026-10-06",
+        "status": "placeholder"
+      },
+      "model_card_present": true,
+      "model_card_status": "placeholder",
       "name": "routeb_protgpt2_lora_v1",
       "predictor_sha256": "7d33f4fdd467a33e4d797bee6a7a751d44dbdf95dbc594c962368cc2d98826e2",
       "version": "v1"
@@ -697,6 +815,7 @@
         }
       },
       "model_card_present": true,
+      "model_card_status": "documented",
       "name": "solubility_predictor_v1",
       "predictor_sha256": "0a2c5598d8bc781bf7c67e24d79ca3c703d26aed4f0b1c14c2cc5cd46781cf24",
       "version": "v1"
@@ -769,6 +888,7 @@
         "train_val_split": "5-fold StratifiedKFold, shuffle=True, random_state=42, refit on full dataset for the cached artifacts"
       },
       "model_card_present": true,
+      "model_card_status": "documented",
       "name": "synthesis_feasibility_predictor_v1",
       "predictor_sha256": "02c27317109b672ea46b03953a1550e7e7acae101aa574c6e241340897ed0fca",
       "version": "v1"

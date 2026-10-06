@@ -163,7 +163,8 @@ neither.
 **Prefer the API's own words.** Error text, refusal reasons and caveats come from the service that
 produced them, rendered rather than paraphrased.
 
-**Say what is not known.** Seven predictors ship no model card, and the UI says which. That is
+**Say what is not known.** Eight predictors carry only a placeholder model card, and the UI says
+which — `model_card_status`, not mere presence. That is
 better than a page implying all fifteen are documented.
 
 ---

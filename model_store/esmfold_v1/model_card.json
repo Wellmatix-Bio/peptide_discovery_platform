@@ -1,0 +1,14 @@
+{
+  "model_name": "esmfold_v1",
+  "status": "placeholder",
+  "note": "PLACEHOLDER. This predictor's training data, features and applicability domain are not yet documented. The card exists so the gap is visible and addressable, not to imply the model is described. To be completed by the model's author.",
+  "documented": {
+    "task": null,
+    "target": null,
+    "training_data": null,
+    "features": null,
+    "applicability_domain": null,
+    "evaluation": null
+  },
+  "placeholder_added": "2026-10-06"
+}

@@ -156,6 +156,21 @@ function Candidate({
                   {direction} {words(pathway)}
                 </span>
               ))}
+              {/* The direction is the model's call, not a measurement, and at the shipped
+                  threshold of 0.5 it has no "unsure" band. Said here rather than only in
+                  docs/PATHWAY_THRESHOLD.md, because this is where someone reads the result. */}
+              <span
+                className="help"
+                title={
+                  "The pathway model reports P(activator): it was trained on activators versus" +
+                  " inhibitors with the non-interacting examples dropped, so it cannot say a" +
+                  " peptide leaves a pathway alone. At the shipped threshold of 0.5 every" +
+                  " pathway is given a direction, including probabilities near a coin flip." +
+                  " Treat these as a weak signal, not a finding. See docs/PATHWAY_THRESHOLD.md."
+                }
+              >
+                how to read these
+              </span>
             </div>
           ) : null}
         </div>

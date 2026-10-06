@@ -114,9 +114,8 @@ Open and documented rather than discovered later:
 - Stage 7's pathway model reports **P(activator)**, not P(involved), and at the shipped threshold
   of 0.5 the activated and inhibited bands meet — so every pathway gets a direction and a 0.501
   coin flip reads as a definite call — [docs/BASELINE.md](docs/BASELINE.md)
-- Stages **s06 and s09** have no unit tests, and nor do the unimplemented stage directories.
-  s05, s07 and s08 gained them while fixing the unavailable-screen bugs; s11's arrived with
-  the ranking rework
+- The unimplemented stage directories (s10, s12–s14) have no tests, and nor do s01–s03. Every
+  implemented scoring stage — s04 through s09 and s11 — now does
 
 ---
 
@@ -132,6 +131,7 @@ Open and documented rather than discovered later:
 | [BASELINE.md](docs/BASELINE.md) | Measured test baseline and the defects behind it |
 | [WEB_WALKTHROUGH.md](docs/WEB_WALKTHROUGH.md) | Every page, with screenshots |
 | [REVIEW_LOG.md](docs/REVIEW_LOG.md) | Queries raised in review, what was found, why it was missed |
+| [PATHWAY_THRESHOLD.md](docs/PATHWAY_THRESHOLD.md) | For the model owner: the one open modelling decision |
 
 ---
 

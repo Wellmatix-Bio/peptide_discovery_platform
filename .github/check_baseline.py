@@ -22,7 +22,7 @@ import subprocess
 import sys
 
 #: From docs/BASELINE.md. Update BOTH together, never just this.
-EXPECTED = {"passed": 228, "failed": 3, "errors": 0}
+EXPECTED = {"passed": 267, "failed": 3, "errors": 0}
 
 #: THE BASELINE IS A PROPERTY OF AN ENVIRONMENT, NOT JUST OF THE CODE. A module the suite imports
 #: but that is not installed turns tests into collection ERRORS, and the count moves exactly as it

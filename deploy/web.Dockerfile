@@ -1,14 +1,14 @@
 # The React build, served by nginx, which also proxies /auth and /api to the accounts service so
 # the browser only ever talks to one origin.
 
-FROM node:22-alpine AS build
+FROM node:26-alpine AS build
 WORKDIR /web
 COPY web/package.json web/package-lock.json ./
 RUN npm ci --no-audit --no-fund
 COPY web/ ./
 RUN npm run build
 
-FROM nginx:1.27-alpine
+FROM nginx:1.31-alpine
 COPY deploy/nginx.conf /etc/nginx/conf.d/default.conf
 COPY --from=build /web/dist /usr/share/nginx/html
 EXPOSE 80

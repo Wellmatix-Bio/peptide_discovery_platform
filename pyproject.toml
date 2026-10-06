@@ -4,44 +4,44 @@ name = "wmx"
 version = "0.1.0"
 requires-python = ">=3.11"
 dependencies = [
-    "pydantic>=2.13",
-    "PyYAML>=6.0",
+    "pydantic>=2.13.5",
+    "PyYAML>=6.0.3",
     "structlog>=26.1",
     # API server
-    "fastapi>=0.141",
-    "uvicorn>=0.53",
-    "httpx>=0.28",
+    "fastapi>=0.142.2",
+    "uvicorn>=0.54.0",
+    "httpx>=0.28.1",
     "google-auth>=2.59.1",
     "google-api-core>=2.40.0",
     "google-cloud-aiplatform>=2.3.0",
     # ML / numerics
     "torch>=2.14.1",
-    "numpy>=2.3",
-    "pandas>=3.0",
-    "scikit-learn>=1.9",
-    "xgboost>=3.2",
+    "numpy>=2.4.6",
+    "pandas>=3.0.6",
+    "scikit-learn>=1.9.1",
+    "xgboost>=3.2.0",
     "transformers>=5.18.0",
     "peft>=0.21.2",
     "accelerate>=1.15",
     "bitsandbytes>=0.50.2",
-    "joblib>=1.5",
-    "tqdm>=4.70",
+    "joblib>=1.6.0",
+    "tqdm>=4.70.1",
     # Sequence / structure biology
     "biopython>=1.88",
-    "modlamp>=4.3",
-    "freesasa>=2.2",
-    "gemmi>=0.7",
-    "openmm>=8.6",
+    "modlamp>=4.3.3",
+    "freesasa>=2.2.1",
+    "gemmi>=0.7.5",
+    "openmm>=8.6.1",
     "pdbfixer>=1.12",
     "fair-esm>=2.0",
     # Route A/C generation
-    "deap>=1.4",
-    "rapidfuzz>=3.14",
+    "deap>=1.4.4",
+    "rapidfuzz>=3.14.6",
 ]
 
 [project.optional-dependencies]
 dev = [
-    "pytest>=9.1",
+    "pytest>=9.1.1",
 ]
 # COPYLEFT, and deliberately not a default. This project is Apache-2.0 and requires neither of
 # these; the pipeline reports the screens they enable as not run when they are absent, never as

@@ -255,3 +255,55 @@ Release
   [ ] CHANGELOG.md
   [ ] Semantic version tag, hand-edited notes, breaking changes first
 ```
+
+---
+
+## 11. A landing page with GitHub Pages
+
+Pages serves **two different kinds of site**, and the distinction decides your URL:
+
+| Kind | Repository | URL |
+|---|---|---|
+| **Project site** | any repository | `https://<org>.github.io/<repo>/` |
+| **Organization/user site** | one repository named exactly `<org>.github.io` | `https://<org>.github.io/` |
+
+**They are not alternatives — you can have both.** An org site is the landing page for the
+organisation; each repository can still have its own project site. A repository-specific page does
+not require an org site to exist first, which is the usual worry.
+
+### Publishing a project site from `/docs`
+
+**Settings → Pages → Build and deployment → Source: Deploy from a branch**, branch `main`, folder
+`/docs`. The site is live within a minute or two.
+
+Two files make that folder behave:
+
+- `docs/index.html` — the page itself.
+- `docs/.nojekyll` — **an empty file that matters.** Without it Pages runs Jekyll, which processes
+  the folder as a site source: it ignores files and folders beginning with `_`, may rewrite
+  Markdown, and will fail the build on syntax it does not like. With it, files are served exactly
+  as committed.
+
+Keep links in the page **relative** (`ARCHITECTURE.md`, `screenshots/x.jpg`). They then work both
+on github.com, where the repository renders Markdown, and on the published site. An absolute path
+beginning with `/` breaks on a project site, because the URL is already one level deep.
+
+> **Worked example.** This project's page is `docs/index.html`, published from `main` → `/docs`,
+> with every relative link checked against the folder it will be served from. Markdown documents
+> beside it are served raw rather than rendered, so the page links to the ones a reader needs and
+> the rest stay on github.com where they render properly.
+
+### If the site needs a build step
+
+Use **Source: GitHub Actions** instead, with a workflow that builds and uploads an artifact. Only
+do this when something must be compiled; a static page from a branch has nothing to break, needs
+no secrets, and cannot fail a deploy.
+
+### Before you point anyone at it
+
+- **A Pages site is public even when the repository is private** on most plans. Do not publish a
+  page for a repository you have not finished scanning (section 1).
+- Set the description and social preview image (section 9) — the page's own `<title>` and
+  `<meta name="description">` are what a search engine shows.
+- A custom domain goes in **Settings → Pages → Custom domain**, which writes a `CNAME` file into
+  the publishing folder. Enable **Enforce HTTPS** once the certificate is issued.

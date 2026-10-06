@@ -1,0 +1,194 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Wound Healing Peptide Discovery Platform</title>
+<meta name="description" content="An open-source pipeline that generates, screens and ranks candidate peptide sequences for wound healing. Every number is a model's estimate; none of it substitutes for wet-lab validation.">
+<style>
+  :root{
+    --bg:#f7f9fa; --surface:#fff; --line:#dde5e9; --ink:#15242b; --muted:#5b7280;
+    --accent:#0f6f8c; --accent-ink:#fff; --warn-bg:#fff6e6; --warn-line:#e8c583; --warn-ink:#6b4a08;
+    --code-bg:#eef3f5; --radius:10px;
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --bg:#0e1518; --surface:#141e22; --line:#243238; --ink:#e6eef1; --muted:#9bb0ba;
+      --accent:#49b3d0; --accent-ink:#06171d; --warn-bg:#241d0c; --warn-line:#6b541f; --warn-ink:#f0d9a4;
+      --code-bg:#1b262b;
+    }
+  }
+  :root[data-theme="dark"]{
+    --bg:#0e1518; --surface:#141e22; --line:#243238; --ink:#e6eef1; --muted:#9bb0ba;
+    --accent:#49b3d0; --accent-ink:#06171d; --warn-bg:#241d0c; --warn-line:#6b541f; --warn-ink:#f0d9a4;
+    --code-bg:#1b262b;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0; background:var(--bg); color:var(--ink);
+    font:16px/1.65 ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    -webkit-font-smoothing:antialiased;
+  }
+  .wrap{max-width:960px; margin:0 auto; padding:0 16px}
+  a{color:var(--accent)}
+  code,kbd{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; font-size:.92em}
+
+  header{padding:72px 0 44px; border-bottom:1px solid var(--line)}
+  .eyebrow{
+    display:inline-block; font-size:12px; letter-spacing:.09em; text-transform:uppercase;
+    color:var(--muted); border:1px solid var(--line); border-radius:999px; padding:4px 11px; margin-bottom:20px;
+  }
+  h1{font-size:clamp(28px,5.2vw,46px); line-height:1.12; margin:0 0 16px; letter-spacing:-.02em}
+  .lede{font-size:clamp(17px,2.3vw,20px); color:var(--muted); margin:0 0 28px; max-width:62ch}
+  .cta{display:flex; flex-wrap:wrap; gap:10px}
+  .btn{
+    display:inline-block; padding:10px 18px; border-radius:var(--radius); text-decoration:none;
+    font-weight:600; font-size:15px; border:1px solid var(--accent);
+  }
+  .btn.primary{background:var(--accent); color:var(--accent-ink)}
+  .btn.ghost{color:var(--accent); background:transparent}
+
+  .notice{
+    margin:28px 0 0; padding:16px 18px; background:var(--warn-bg);
+    border:1px solid var(--warn-line); border-left-width:4px; border-radius:var(--radius); color:var(--warn-ink);
+  }
+  .notice strong{display:block; margin-bottom:4px}
+
+  section{padding:46px 0; border-bottom:1px solid var(--line)}
+  h2{font-size:22px; margin:0 0 6px; letter-spacing:-.01em}
+  .sub{color:var(--muted); margin:0 0 24px; max-width:64ch}
+
+  .grid{display:grid; gap:14px; grid-template-columns:repeat(auto-fit,minmax(230px,1fr))}
+  .card{background:var(--surface); border:1px solid var(--line); border-radius:var(--radius); padding:18px}
+  .card h3{margin:0 0 6px; font-size:15px}
+  .card p{margin:0; color:var(--muted); font-size:14px}
+
+  pre{
+    background:var(--code-bg); border:1px solid var(--line); border-radius:var(--radius);
+    padding:14px 16px; overflow-x:auto; margin:0 0 12px; font-size:14px; line-height:1.55;
+  }
+  pre code{color:var(--ink)}
+
+  ul.plain{margin:0; padding-left:20px; color:var(--muted)}
+  ul.plain li{margin-bottom:8px}
+  ul.plain b{color:var(--ink); font-weight:600}
+
+  figure{margin:0}
+  figure img{
+    width:100%; height:auto; display:block; border:1px solid var(--line);
+    border-radius:var(--radius); background:var(--surface);
+  }
+  figcaption{color:var(--muted); font-size:13px; margin-top:8px}
+
+  table{width:100%; border-collapse:collapse; font-size:14.5px}
+  th,td{text-align:left; padding:9px 10px; border-bottom:1px solid var(--line); vertical-align:top}
+  th{color:var(--muted); font-weight:600; font-size:13px; text-transform:uppercase; letter-spacing:.05em}
+
+  footer{padding:36px 0 56px; color:var(--muted); font-size:14px}
+  footer a{color:var(--accent)}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="wrap">
+    <span class="eyebrow">Open source &middot; Apache-2.0</span>
+    <h1>Wound Healing Peptide Discovery Platform</h1>
+    <p class="lede">
+      Describe a wound and what the peptide should do. The pipeline generates candidate sequences,
+      screens them through physicochemical, functional, structural, safety and synthesis models,
+      and returns a ranked shortlist with the evidence behind each one.
+    </p>
+    <div class="cta">
+      <a class="btn primary" href="https://github.com/Wellmatix-Bio/peptide_discovery_platform">View on GitHub</a>
+      <a class="btn ghost" href="https://github.com/Wellmatix-Bio/peptide_discovery_platform#try-it-without-any-cloud-account">Run it locally</a>
+      <a class="btn ghost" href="WEB_WALKTHROUGH.md">Walkthrough</a>
+    </div>
+
+    <div class="notice">
+      <strong>Every number here is a model's estimate on a computationally generated sequence.</strong>
+      None of it substitutes for wet-lab validation. The interface says so too, and the platform
+      reports what it did <em>not</em> measure rather than leaving a gap to be read as a pass.
+    </div>
+  </div>
+</header>
+
+<section>
+  <div class="wrap">
+    <h2>What it is made of</h2>
+    <p class="sub">Each piece runs on its own. There is no hard dependency on Google Cloud, on a GPU, or on any copyleft library.</p>
+    <div class="grid">
+      <div class="card"><h3>Pipeline</h3><p>14 stage directories, 8 implemented — generation, screening, functional models, structure, safety, synthesis, ranking.</p></div>
+      <div class="card"><h3>16 predictors</h3><p>ESM-2 embeddings with XGBoost and sklearn heads, a BiLSTM+CNN MIC ensemble, ESMFold for structure, ProtGPT2+LoRA for de novo generation.</p></div>
+      <div class="card"><h3>Job API</h3><p>Submits Vertex AI Custom Jobs and reads their artifacts — optional, for scale. The pipeline runs locally without it.</p></div>
+      <div class="card"><h3>Accounts &amp; proxy</h3><p>Email/password accounts and an authenticating proxy: the only route to the job API, which has no auth of its own.</p></div>
+      <div class="card"><h3>Web app</h3><p>React and TypeScript, one origin, no CORS. Every number it shows is a field of a response, never recomputed.</p></div>
+      <div class="card"><h3>Deployment</h3><p>Three containers via Docker Compose. Only the web one publishes a port.</p></div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <h2>Try it without any cloud account</h2>
+    <p class="sub">The whole pipeline runs locally. No Google Cloud, no Docker, no GPU. Slower on CPU, and the predictors need model weights — but it is the same code, not a reduced version of it.</p>
+<pre><code>git clone https://github.com/Wellmatix-Bio/peptide_discovery_platform.git
+cd peptide_discovery_platform
+python -m venv .venv &amp;&amp; source .venv/bin/activate
+pip install -r requirements.txt
+python main.py configs/runs/test_run.yaml</code></pre>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <h2>What it will not answer</h2>
+    <p class="sub">Stated plainly, because the interface states it too. A platform that hides its limits is harder to trust than one that prints them.</p>
+    <ul class="plain">
+      <li><b>Pathogens outside <em>E. coli</em>, <em>S. aureus</em> and <em>P. aeruginosa</em>.</b> A pathogen outside that list is skipped, not scored.</li>
+      <li><b>Peptides shorter than 6 or longer than 50 residues.</b> Refused rather than scored out of domain.</li>
+      <li><b>Which models produced a given result.</b> No run carries a model identity.</li>
+      <li><b>Whether a candidate works.</b> That is what a laboratory is for.</li>
+    </ul>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <h2>A check that did not run is never reported as a pass</h2>
+    <p class="sub">The rule the codebase bends hardest to keep. If a model is unavailable, a screen is skipped or a value withheld, the result says so — <code>not_screened</code>, <code>available: false</code>, "No value" — never a default, a dash, or a zero.</p>
+    <figure>
+      <img src="screenshots/18-ranked-candidates.jpg" alt="The ranked shortlist, showing each candidate's score alongside the evidence behind it">
+      <figcaption>The ranked shortlist. Each candidate carries its score, the proportion of its intended evidence that actually existed, and the modules that produced none.</figcaption>
+    </figure>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <h2>Documentation</h2>
+    <table>
+      <tr><th>Document</th><th>What it covers</th></tr>
+      <tr><td><a href="ARCHITECTURE.md">Architecture</a></td><td>How the pieces fit, and what you can leave out</td></tr>
+      <tr><td><a href="DEPLOYMENT.md">Deployment</a></td><td>Running the stack locally and on a VM</td></tr>
+      <tr><td><a href="LICENSING.md">Licensing</a></td><td>Apache-2.0, the two optional copyleft dependencies, model weights</td></tr>
+      <tr><td><a href="BASELINE.md">Baseline</a></td><td>The measured test baseline and the defects behind it</td></tr>
+      <tr><td><a href="WEB_WALKTHROUGH.md">Walkthrough</a></td><td>Every page, with screenshots</td></tr>
+      <tr><td><a href="https://github.com/Wellmatix-Bio/peptide_discovery_platform/blob/main/CONTRIBUTING.md">Contributing</a></td><td>Setup, tests, and what will waste your afternoon if nobody tells you</td></tr>
+    </table>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <p>
+      Apache-2.0. <b>Model weights are not covered by that licence</b> and carry the terms of the
+      upstream models they derive from. 8 of 16 predictors ship no model card, so their
+      applicability domain is undocumented — see <a href="LICENSING.md">Licensing</a>.
+    </p>
+    <p>© Wellmatix Bio · <a href="https://github.com/Wellmatix-Bio/peptide_discovery_platform">github.com/Wellmatix-Bio/peptide_discovery_platform</a></p>
+  </div>
+</footer>
+
+</body>
+</html>

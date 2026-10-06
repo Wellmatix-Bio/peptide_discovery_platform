@@ -5,7 +5,7 @@ import { ErrorBox, Hero, Kv, Loading, Pill } from "../components/ui";
 /* What is serving, and what it will not answer.
  *
  * This page is as honest as the API allows, and no more. It says plainly that the digests cover
- * predictor code rather than weights, that half the predictors ship no model card, and that no
+ * predictor code rather than weights, that half the predictors carry only a placeholder card, and that no
  * model identity is attached to a run -- because a model page that implies reproducibility the
  * backend cannot deliver is worse than no model page. The caveat text is the API's own; this
  * renders it rather than rewording it. */
@@ -16,6 +16,10 @@ interface ModelEntry {
   predictor_sha256: string | null;
   model_card: Record<string, unknown> | null;
   model_card_present: boolean;
+  /* "documented" | "placeholder" | null. Every predictor now ships a card file, but half are
+     placeholders recording that the model is undescribed, so presence alone must not be read as
+     documentation. */
+  model_card_status: string | null;
 }
 
 interface Manifest {
@@ -38,8 +42,10 @@ function Card({ entry }: { entry: ModelEntry }) {
         <b>{entry.name}</b>
         <div className="chips">
           <span className="chip">{entry.version}</span>
-          {entry.model_card_present ? (
+          {entry.model_card_status === "documented" ? (
             <Pill tone="good">documented</Pill>
+          ) : entry.model_card_status === "placeholder" ? (
+            <Pill tone="warn">card is a placeholder</Pill>
           ) : (
             <Pill tone="warn">no model card</Pill>
           )}
@@ -67,6 +73,13 @@ function Card({ entry }: { entry: ModelEntry }) {
           calibration are not documented here. Not checked is not the same as passed.
         </p>
       )}
+      {entry.model_card_status === "placeholder" ? (
+        <p className="why">
+          The card for this predictor is a <b>placeholder</b>: it records that the training data,
+          features and applicability domain are not yet written down, and is to be completed by
+          the model's author. Treat this predictor's numbers as undocumented.
+        </p>
+      ) : null}
     </div>
   );
 }
@@ -87,7 +100,8 @@ export function ModelsAndHealth() {
 
   if (!manifest && !error) return <Loading>Asking the job API what it is running…</Loading>;
 
-  const documented = manifest?.models.filter((one) => one.model_card_present).length ?? 0;
+  const documented =
+    manifest?.models.filter((one) => one.model_card_status === "documented").length ?? 0;
   const total = manifest?.models.length ?? 0;
 
   return (

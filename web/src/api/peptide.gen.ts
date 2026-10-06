@@ -90,9 +90,10 @@ export interface paths {
          *       them, which a status endpoint has no business doing.
          *     - `version` is the suffix of the directory name, which is how this project versions a
          *       predictor. It is not derived from the weights either.
-         *     - `model_card` is whatever the predictor ships. half the predictors ship none, and
-         *       `model_card_present` says which, rather than an empty object implying there is nothing
-         *       to know.
+         *     - `model_card` is whatever the predictor ships, and `model_card_status` says whether it is a
+         *       real description or a PLACEHOLDER. Every predictor now has a card file, but half of them
+         *       record only that the model is undescribed -- so `model_card_present` alone would read as
+         *       "documented" for all sixteen. Read the status, not the presence.
          */
         get: operations["model_manifest_api_v1_models_get"];
         put?: never;
@@ -335,6 +336,8 @@ export interface components {
              * @default false
              */
             model_card_present: boolean;
+            /** Model Card Status */
+            model_card_status?: string | null;
             /** Name */
             name: string;
             /** Predictor Sha256 */

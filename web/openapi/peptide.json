@@ -701,6 +701,17 @@
             "title": "Model Card Present",
             "type": "boolean"
           },
+          "model_card_status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model Card Status"
+          },
           "name": {
             "title": "Name",
             "type": "string"
@@ -1417,7 +1428,7 @@
     },
     "/api/v1/models": {
       "get": {
-        "description": "What this deployment declares it will run, read from model_store/ on disk.\n\nHONEST LIMITS, because a provenance endpoint that overstates is worse than none:\n- `predictor_sha256` digests the predictor's CODE (predictor.py), not its weights. The API\n  container does not hold the weights at all -- the worker syncs them from\n  VERTEX_MODEL_STORE at run time -- so this process cannot digest them without downloading\n  them, which a status endpoint has no business doing.\n- `version` is the suffix of the directory name, which is how this project versions a\n  predictor. It is not derived from the weights either.\n- `model_card` is whatever the predictor ships. half the predictors ship none, and\n  `model_card_present` says which, rather than an empty object implying there is nothing\n  to know.",
+        "description": "What this deployment declares it will run, read from model_store/ on disk.\n\nHONEST LIMITS, because a provenance endpoint that overstates is worse than none:\n- `predictor_sha256` digests the predictor's CODE (predictor.py), not its weights. The API\n  container does not hold the weights at all -- the worker syncs them from\n  VERTEX_MODEL_STORE at run time -- so this process cannot digest them without downloading\n  them, which a status endpoint has no business doing.\n- `version` is the suffix of the directory name, which is how this project versions a\n  predictor. It is not derived from the weights either.\n- `model_card` is whatever the predictor ships, and `model_card_status` says whether it is a\n  real description or a PLACEHOLDER. Every predictor now has a card file, but half of them\n  record only that the model is undescribed -- so `model_card_present` alone would read as\n  \"documented\" for all sixteen. Read the status, not the presence.",
         "operationId": "model_manifest_api_v1_models_get",
         "responses": {
           "200": {

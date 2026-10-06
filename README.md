@@ -82,7 +82,8 @@ Both copyleft packages are optional on purpose. See [docs/LICENSING.md](docs/LIC
 
 How outside users obtain them is **not yet settled**. Weights carry their own terms, including
 those of the upstream models they derive from (ESM-2, ESMFold, ProtGPT2), and **8 of the 16
-predictors ship no model card**, so their training data and applicability domain are undocumented.
+predictors have only a placeholder model card**, so their training data and applicability
+domain are undocumented; the API's `model_card_status` says which.
 Tracked in [docs/LICENSING.md](docs/LICENSING.md).
 
 ---

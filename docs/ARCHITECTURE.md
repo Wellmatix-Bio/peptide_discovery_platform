@@ -159,4 +159,6 @@ Recorded in full in `docs/BASELINE.md` and `docs/BRIEF_VALIDITY.md`:
 - **No run carries a model identity.** Nothing in a stored result says which models produced it.
 - **The brief vocabulary contradicts itself**: the biofilm model scores 13 pathogens while a brief
   may request 3, and `antibiofilm` is a valid generation tag but not a valid desired function.
-- **8 of 16 predictors ship no model card**, so their applicability domain is undocumented.
+- **8 of 16 model cards are placeholders**, recording that the model is undescribed rather
+  than describing it. The API's `model_card_status` says which, so presence is not mistaken for
+  documentation.

@@ -108,25 +108,39 @@ def test_unknown_email_costs_the_same_as_a_wrong_password(client):
     real scrypt takes tens, so the ratio collapses to about 0.01. The threshold is loose on
     purpose: it is testing for the absence of a whole scrypt, not for a microsecond.
 
-    IT IS STILL LOAD-SENSITIVE. It measures wall-clock time, so running it beside another full
-    test suite on the same machine can fail it -- observed once here, passing immediately on an
-    idle machine. If it fails, re-run it alone before believing it. The tolerance is deliberately
-    NOT widened further: this guards a timing side channel, and a threshold loose enough to
-    survive any load would no longer notice a missing scrypt.
+    MEASURED BY INTERLEAVING, and that matters. An earlier version timed all the known-email
+    requests, then all the unknown-email ones, and compared medians. On a shared CI runner the
+    machine's load changes between those two blocks, so the ratio measured the runner's mood as
+    much as the code: one failure reported 40.1 ms against 109.0 ms, a 0.37 ratio, on a build
+    where both paths provably run the same scrypt. Alternating the two within one loop means any
+    drift hits both.
+
+    MINIMUM, NOT MEDIAN. Noise can only make a timing longer, never shorter, so the smallest
+    sample is the closest estimate of the true cost and the one least disturbed by a neighbour
+    process.
+
+    The threshold stays at half, because it has room: with the equal-work call removed the ratio
+    is about 0.01, which is fifty times below the bar. It is testing for the absence of a whole
+    scrypt, not for a microsecond.
     """
     register(client)
 
-    def median(email: str) -> float:
-        samples = []
-        for _ in range(7):
-            start = time.perf_counter()
-            client.post("/auth/login", json={"email": email, "password": "not it at all"})
-            samples.append(time.perf_counter() - start)
-        return statistics.median(samples)
+    def once(email: str) -> float:
+        start = time.perf_counter()
+        client.post("/auth/login", json={"email": email, "password": "not it at all"})
+        return time.perf_counter() - start
 
-    known = median("ada@example.org")
-    unknown = median("nobody@example.org")
-    assert unknown > 0.5 * known, f"unknown email {unknown*1000:.1f} ms vs known {known*1000:.1f} ms"
+    known_samples, unknown_samples = [], []
+    for _ in range(9):
+        known_samples.append(once("ada@example.org"))
+        unknown_samples.append(once("nobody@example.org"))
+
+    known, unknown = min(known_samples), min(unknown_samples)
+    assert unknown > 0.5 * known, (
+        f"unknown email {unknown*1000:.1f} ms vs known {known*1000:.1f} ms "
+        f"(medians {statistics.median(unknown_samples)*1000:.1f} / "
+        f"{statistics.median(known_samples)*1000:.1f} ms)"
+    )
 
 
 def test_login_is_case_insensitive_on_email(client):

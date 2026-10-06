@@ -8,6 +8,13 @@ to discover after they have built on it.
 dependencies declare. If you are redistributing this, or combining it with your own work, take it
 to a lawyer.
 
+> ### ⚖️ LEGAL REVIEW NEEDED — not yet done
+> No lawyer has reviewed this project's licence choice, its dependency audit, or the terms
+> attaching to the model weights. Deferred deliberately rather than overlooked: it is a
+> non-technical task that does not block development. **It should be settled before the
+> repository is published**, because publishing cannot be undone and the weights carry terms this
+> project did not write.
+
 ---
 
 ## Two optional copyleft dependencies
@@ -82,7 +89,8 @@ from. At minimum:
   (`facebook/esmfold_v1`) from Meta AI.
 - Route B builds on **ProtGPT2** (`nferruz/ProtGPT2`) with a LoRA adapter.
 
-**Open question for this repository.** Seven of the fifteen predictors ship no model card, so their
+**Open question for this repository.** Eight of the sixteen predictors carry only a placeholder
+model card, so their
 training data, applicability domain and licence are not documented anywhere. Before weights are
 distributed to anyone, each one needs its terms stated. The Models & health page in the web app
 already reports which predictors lack a card, and says plainly that *not checked is not the same as
@@ -119,5 +127,8 @@ Re-run the audit after any dependency change:
 - [x] No secrets, project ids or bucket names in the repository **or its git history** — verified
       with `git log --all -S`, not just the working tree
 - [x] Copyleft dependencies optional and documented
-- [ ] Per-predictor weight licences stated — **8 of 16 have no model card** (amp_classifier_v1, anti_inflammatory_predictor_v1, cytotoxicity_predictor_v1, esmfold_v1, hemolysis_predictor_v1, pathway_mapping_predictor_v1, pathway_mapping_predictor_v2, routeb_protgpt2_lora_v1)
-- [ ] A lawyer has reviewed the above
+- [ ] Per-predictor weight licences stated — **8 of 16 cards are placeholders** (amp_classifier_v1, anti_inflammatory_predictor_v1, cytotoxicity_predictor_v1, esmfold_v1, hemolysis_predictor_v1, pathway_mapping_predictor_v1, pathway_mapping_predictor_v2, routeb_protgpt2_lora_v1)
+- [ ] **LEGAL REVIEW NEEDED** — a lawyer has not reviewed the above. Deferred deliberately, not
+      overlooked: it is a non-technical task and does not block development. It should be done
+      before the repository is published, because publishing is the irreversible step and the
+      model weights carry terms this project did not write.

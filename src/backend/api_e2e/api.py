@@ -487,6 +487,11 @@ class ModelEntry(BaseModel):
     predictor_sha256: str | None = None
     model_card: dict | None = None
     model_card_present: bool = False
+    #: "documented" | "placeholder" | None. A card file exists for every predictor, but eight of
+    #: them are PLACEHOLDERS recording that the model is undescribed. Without this field
+    #: `model_card_present` alone would read as "documented" for all sixteen, which is the
+    #: opposite of what those files say.
+    model_card_status: str | None = None
 
 
 class ModelManifest(BaseModel):
@@ -541,9 +546,10 @@ def model_manifest():
       them, which a status endpoint has no business doing.
     - `version` is the suffix of the directory name, which is how this project versions a
       predictor. It is not derived from the weights either.
-    - `model_card` is whatever the predictor ships. half the predictors ship none, and
-      `model_card_present` says which, rather than an empty object implying there is nothing
-      to know.
+    - `model_card` is whatever the predictor ships, and `model_card_status` says whether it is a
+      real description or a PLACEHOLDER. Every predictor now has a card file, but half of them
+      record only that the model is undescribed -- so `model_card_present` alone would read as
+      "documented" for all sixteen. Read the status, not the presence.
     """
     entries: list[ModelEntry] = []
     for directory in sorted(MODEL_STORE_DIR.glob("*/")):
@@ -565,6 +571,11 @@ def model_manifest():
                 predictor_sha256=hashlib.sha256(predictor.read_bytes()).hexdigest(),
                 model_card=card,
                 model_card_present=card is not None,
+                model_card_status=(
+                    None
+                    if card is None
+                    else ("placeholder" if card.get("status") == "placeholder" else "documented")
+                ),
             )
         )
     return ModelManifest(

@@ -8,10 +8,10 @@
 #
 # The WORKER image is the one that needs requirements.txt; it is built separately
 # (src/backend/worker_e2e/Dockerfile, cloudbuild.yaml) and is not part of this compose stack.
-fastapi>=0.115,<1
-uvicorn>=0.34,<1
-pydantic>=2.11,<3
-PyYAML>=6,<7
+fastapi>=0.142.2,<1
+uvicorn>=0.54.0,<1
+pydantic>=2.13.5,<3
+PyYAML>=6.0.3,<7
 google-cloud-storage>=3.16.0,<4
 google-cloud-aiplatform>=2.3.0,<3
-tqdm>=4.67,<5
+tqdm>=4.70.1,<5

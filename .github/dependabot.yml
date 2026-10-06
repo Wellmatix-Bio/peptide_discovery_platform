@@ -1,5 +1,27 @@
 # Dependency update policy.
 #
+# ================================= PAUSED =================================
+# EVERY ECOSYSTEM BELOW HAS open-pull-requests-limit SET TO 0, WHICH DISABLES VERSION
+# UPDATES. No Dependabot pull requests will be raised.
+#
+# Why: the grouping worked -- 14 individual PRs became 8 grouped ones -- but what
+# remained were three MAJOR-version migrations that no amount of rebasing turns
+# green, and they sat at the top of the queue:
+#
+#   React 18 -> 19 and react-router-dom 6 -> 7
+#   TypeScript 5.6 -> 7.0, Vite 5 -> 8, Vitest 2 -> 5, plugin-react 4 -> 6
+#   node:22-alpine -> node:26-alpine
+#
+# Those are migrations, not bumps. Each wants its own deliberate piece of work.
+# Paused rather than deleted so the groups, limits and copyleft ignores below
+# survive for whoever re-enables it; see "To resume" at the foot of this file.
+#
+# THIS DOES NOT TOUCH DEPENDABOT SECURITY UPDATES OR ALERTS, which are repository
+# settings (Settings -> Code security), not this file. Vulnerability alerts keep
+# arriving. That is deliberate: pausing routine upgrades is a workload decision,
+# turning off security notification is not.
+# ==========================================================================
+#
 # THE GOAL IS A SMALL NUMBER OF REVIEWABLE PRs, NOT A LARGE NUMBER OF PRECISE ONES.
 # The first version of this file grouped only the dependencies that obviously move together and
 # left everything else ungrouped -- which means one PR per package. With 29 pip dependencies and
@@ -22,7 +44,7 @@ updates:
       # updates ignore this schedule and are raised as soon as an advisory lands, so a slower
       # version-update cadence costs nothing in exposure.
       interval: monthly
-    open-pull-requests-limit: 3
+    open-pull-requests-limit: 0  # PAUSED (was 3)
     groups:
       # The ML stack moves together and a torch bump without the matching transformers bump is
       # usually not what you want. Reviewing them separately wastes everyone's time.
@@ -42,7 +64,7 @@ updates:
     directory: "/web"
     schedule:
       interval: monthly
-    open-pull-requests-limit: 3
+    open-pull-requests-limit: 0  # PAUSED (was 3)
     groups:
       react:
         patterns: ["react", "react-dom", "react-router-dom", "@types/react*"]
@@ -57,7 +79,7 @@ updates:
     directory: "/"
     schedule:
       interval: monthly
-    open-pull-requests-limit: 1
+    open-pull-requests-limit: 0  # PAUSED (was 1)
     groups:
       actions:
         patterns: ["*"]
@@ -66,7 +88,22 @@ updates:
     directory: "/deploy"
     schedule:
       interval: monthly
-    open-pull-requests-limit: 1
+    open-pull-requests-limit: 0  # PAUSED (was 1)
     groups:
       images:
         patterns: ["*"]
+
+# ---------------------------------------------------------------------------
+# To resume: restore each `open-pull-requests-limit` to the value noted beside
+# it, and decide first what to do about major versions. The straightforward
+# option is to stop proposing them at all:
+#
+#     ignore:
+#       - dependency-name: "*"
+#         update-types: ["version-update:semver-major"]
+#
+# KNOW THE TRADE BEFORE ADOPTING IT: `ignore` also suppresses SECURITY updates
+# for the ignored versions, so a CVE fixed only in a new major would not be
+# proposed. Narrowing it to npm and docker -- a build-time toolchain and a base
+# image -- while leaving pip majors visible keeps that exposure off the runtime.
+# ---------------------------------------------------------------------------

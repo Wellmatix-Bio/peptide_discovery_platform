@@ -137,6 +137,14 @@ administrators and say when it may be used.
 > **Worked example.** This project's CI builds images with a placeholder signing key and needs no
 > real secret, which is the easy case. Keep it that way as long as you can.
 
+> **Worked example: version updates are not free.** Grouping cut this project's queue from 14 PRs
+> to 8, and what was left were three major-version migrations — React 18→19, TypeScript 5→7 with
+> Vite 5→8, and a Node base-image jump — none of which a rebase can turn green. Version updates
+> are now paused in `.github/dependabot.yml` (`open-pull-requests-limit: 0`), while **security
+> updates and alerts stay on**, because those are repository settings rather than that file.
+> Separating the two is the point: an unreviewed upgrade queue is a workload problem, an unseen
+> vulnerability is not the same kind of problem at all.
+
 ---
 
 ## 6. Security features

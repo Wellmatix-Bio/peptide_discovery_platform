@@ -66,9 +66,9 @@ complain about your environment, it is telling you the truth.
 
 ## Things that will trip you up
 
-**`s4pred` does not resolve.** It is committed as a git submodule pointer (a gitlink) with no
-`.gitmodules` entry, so `git submodule update --init` cannot fetch it — `git submodule status`
-answers `no submodule mapping found in .gitmodules`. A fresh clone gets an empty directory.
+**`s4pred` is not in the repository.** It used to be committed as a submodule pointer with no
+`.gitmodules` entry, so `git submodule update --init` could not fetch it and a fresh clone got an
+empty directory. The pointer has been removed; the path is gitignored instead.
 
 It is optional. Stage 5's secondary-structure screen reports itself unavailable, the pipeline
 imports fine, and nothing else in stage 5 changes. **Set it up only if you need that screen** —

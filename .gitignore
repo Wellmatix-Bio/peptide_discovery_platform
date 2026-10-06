@@ -171,3 +171,11 @@ deploy/.env
 # a username, and the hook would fire for every contributor using the same tool and fail, since
 # the binary exists on exactly one machine. Local tool settings are local.
 .claude/
+
+# ---------- Optional, copyleft, obtained by the user ----------
+# s4pred was committed as a submodule POINTER with no .gitmodules entry, so it never resolved:
+# `git submodule update --init` answered "no submodule mapping found" and a fresh clone got an
+# empty directory. The pointer is gone. s4pred is GPL-3.0 and optional, and making every clone
+# pull it is exactly what keeping it optional avoids -- CONTRIBUTING.md has the setup for anyone
+# who wants that screen. Ignored so a local copy placed here is never committed by accident.
+src/pipeline/s05_physchem_screening/s4pred/

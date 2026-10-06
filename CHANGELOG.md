@@ -28,6 +28,11 @@ and versions follow [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- The worker refuses to run into a directory that already holds a finished run. A config carries
+  both `run_id` and `artifacts_dir`, so replaying one wrote over that run's results; a completed
+  run's 11 candidates became unreadable through the API this way. `--overwrite` still allows it
+  deliberately.
+
 - The entire `pipeline` package was unimportable when `s4pred` was absent, making 47 tests
   uncollectable. The backend baseline went from 29 passed / 4 failed / 2 collection errors to
   82 / 7 / 0, and to 211 / 3 / 0 once the stage-11 work and its tests landed.

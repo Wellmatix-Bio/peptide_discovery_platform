@@ -222,3 +222,99 @@ def test_wait_for_config_timeout(monkeypatch):
     monkeypatch.setattr(worker.storage, "read_text", missing)
     with pytest.raises(FileNotFoundError):
         worker.load_job_config("pending.json", wait_seconds=0)
+
+
+# ----------------------------------------------------------------------
+# Refusing to overwrite a run that already finished.
+#
+# A config carries run_id AND artifacts_dir, so replaying one writes into that run's directory.
+# On 2026-10-02 a worker started outside Vertex from an existing config did exactly that: the
+# "running" status it wrote at startup replaced a completed run's results.json, and its 11 final
+# candidates stopped being readable through the API although candidates_final.json was untouched
+# beside them. docs/BASELINE.md has the investigation.
+# ----------------------------------------------------------------------
+
+
+def test_a_second_run_refuses_to_overwrite_a_finished_one(runtime, tmp_path):
+    path = config_file(tmp_path)
+    worker.run_job(path)
+    run = tmp_path / "artifacts/runs/test"
+    before = (run / "results.json").read_text()
+    final_before = (run / "candidates_final.json").read_text()
+
+    with pytest.raises(worker.CompletedRunExists) as refused:
+        worker.run_job(path)
+
+    # The refusal must name what it found and what to do, not merely fail.
+    assert "candidates_final.json" in str(refused.value)
+    assert "--overwrite" in str(refused.value)
+    # And it must have changed NOTHING. This is the whole point: the first run survives intact.
+    assert (run / "results.json").read_text() == before
+    assert (run / "candidates_final.json").read_text() == final_before
+
+
+def test_the_refusal_does_not_write_a_failed_status(runtime, tmp_path):
+    """The guard sits before the try block on purpose. That block's handler writes a "failed"
+    status to the same results.json, so a guard raised inside it would destroy the very run it
+    exists to protect."""
+    path = config_file(tmp_path)
+    worker.run_job(path)
+    run = tmp_path / "artifacts/runs/test"
+
+    with pytest.raises(worker.CompletedRunExists):
+        worker.run_job(path)
+
+    assert json.loads((run / "results.json").read_text())["status"] == "success"
+
+
+def test_overwrite_is_still_possible_when_asked_for(runtime, tmp_path):
+    path = config_file(tmp_path)
+    worker.run_job(path)
+    result = worker.run_job(path, overwrite=True)
+    run = tmp_path / "artifacts/runs/test"
+    assert json.loads((run / "results.json").read_text())["status"] == "success"
+    assert len(result) == 1
+
+
+def test_an_unfinished_run_is_not_blocked(runtime, tmp_path):
+    """A Vertex retry restarts a run that did NOT finish, so neither signal is present and the
+    worker must proceed. Blocking this would turn a recoverable restart into a dead job."""
+    path = config_file(tmp_path, finish={"fail": True})
+    with pytest.raises(RuntimeError, match="test failure"):
+        worker.run_job(path)
+    run = tmp_path / "artifacts/runs/test"
+    assert json.loads((run / "results.json").read_text())["status"] == "failed"
+    assert not (run / "candidates_final.json").exists()
+
+    # The retry succeeds, which it could not do if a failed run counted as a finished one.
+    worker.run_job(config_file(tmp_path))
+    assert json.loads((run / "results.json").read_text())["status"] == "success"
+
+
+def test_a_fresh_run_directory_is_not_blocked(runtime, tmp_path):
+    worker.run_job(config_file(tmp_path))
+    assert json.loads(
+        (tmp_path / "artifacts/runs/test/results.json").read_text()
+    )["status"] == "success"
+
+
+def test_a_success_status_alone_is_enough_to_refuse(tmp_path):
+    """The two signals are independent. A run whose candidates_final.json was removed, but whose
+    own results.json still says it succeeded, is still a finished run."""
+    run = tmp_path / "artifacts/runs/test"
+    run.mkdir(parents=True)
+    (run / "results.json").write_text(json.dumps({"run_id": "test", "status": "success"}))
+    assert "success" in (worker.completed_run_reason(str(run)) or "")
+
+
+def test_an_unreadable_status_is_not_treated_as_a_finished_run(tmp_path):
+    """Refusing on a file that cannot be parsed would block recovery from a half-written run."""
+    run = tmp_path / "artifacts/runs/test"
+    run.mkdir(parents=True)
+    (run / "results.json").write_text("{not json")
+    assert worker.completed_run_reason(str(run)) is None
+
+
+def test_the_cli_exposes_the_override(tmp_path):
+    assert worker._parse_args(["--config", "c.json"]).overwrite is False
+    assert worker._parse_args(["--config", "c.json", "--overwrite"]).overwrite is True

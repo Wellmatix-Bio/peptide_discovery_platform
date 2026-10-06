@@ -106,4 +106,4 @@ does not cover the mistake.**
 | `pathway_engagement_min_probability` defaults to 0.5, so the activated and inhibited bands meet and a 0.501 coin flip reads as a definite call. A modelling decision, not made here. | `docs/BASELINE.md` |
 | Captured web fixtures predate the pathway-predictor v2 API and still carry `engaged_pathways`. Needs a live run; hand-editing is forbidden for the reason Q2 demonstrates. | `web/src/test/fixtures/README.md` |
 | `status` still reports `"pending"` for a dead worker. Now pinned by a test that documents the defect. | `docs/BASELINE.md` |
-| 7 of 15 predictors ship no model card; the licensing has had no lawyer review. | `docs/LICENSING.md` |
+| 8 of 16 predictors ship no model card; the licensing has had no lawyer review. | `docs/LICENSING.md` |

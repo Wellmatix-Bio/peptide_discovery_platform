@@ -30,7 +30,7 @@ endpoints.
 | `results-2046288866976989184.json` | Vertex says `JOB_STATE_SUCCEEDED`; the API says `running` at `s05_physchem_screening`, with no candidates |
 | `results-9223232270029029376.json` | A succeeded run, 33 candidates |
 | `status-*.json` | The matching status responses |
-| `models.json` | 15 predictors, 8 with model cards |
+| `models.json` | 16 predictors, 8 with model cards |
 | `healthz.json` | A fully configured API |
 
 ## What the real responses revealed

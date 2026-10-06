@@ -48,6 +48,11 @@ your choice; copyleft dependencies can constrain it.
 **Check what you are entitled to publish**: third-party code, model weights, data, and anything
 written under a contract that assigns rights elsewhere.
 
+> **Worked example: the scan itself.** This project's run is written up in
+> [HISTORY_SCAN.md](HISTORY_SCAN.md) — what was checked, what came back, and the one finding with
+> a recommendation either way. Writing it down matters: the next person to ask "has anyone checked
+> this?" gets an answer with a date on it instead of a shrug.
+
 > **Worked example.** This project found two copyleft dependencies compiled in — `propy3`
 > (GPL-2.0-only) and `s4pred` (GPL-3.0), which are also incompatible with each other. Both were
 > made optional before publishing, which is recorded in `docs/LICENSING.md`. The history scan came

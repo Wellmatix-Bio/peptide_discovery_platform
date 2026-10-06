@@ -56,8 +56,9 @@ screen that never ran. That path now reports `not_screened` too.
 pip install propy3
 ```
 
-`s4pred` is not on PyPI. It is referenced at `src/pipeline/s05_physchem_screening/s4pred/` as a
-git submodule pointer with no `.gitmodules` entry, which does not resolve — see `docs/BASELINE.md`.
+`s4pred` is not on PyPI, and is deliberately not vendored: it goes at
+`src/pipeline/s05_physchem_screening/s4pred/`, which is gitignored so a local copy is never
+committed. (It used to be an unresolvable submodule pointer; that has been removed.)
 You obtain it from [upstream](https://github.com/psipred/s4pred) and place it there yourself;
 step-by-step instructions, including how to avoid dirtying the gitlink, are in
 [CONTRIBUTING.md](../CONTRIBUTING.md#setting-up-s4pred-optional-gpl-30).

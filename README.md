@@ -110,9 +110,9 @@ Open and documented rather than discovered later:
   generation tag but not a valid desired function — [docs/BRIEF_VALIDITY.md](docs/BRIEF_VALIDITY.md)
 - `status` never reflects the Vertex job state; a dead worker reports `"pending"` forever —
   [docs/BASELINE.md](docs/BASELINE.md)
-- `s4pred` is committed as a git submodule pointer with no `.gitmodules`, so it does not resolve
-  — it is optional, and [CONTRIBUTING.md](CONTRIBUTING.md#setting-up-s4pred-optional-gpl-30) has
-  the setup if you want that screen
+- `s4pred` is optional and not vendored (GPL-3.0). The screen it powers reports itself
+  unavailable; [CONTRIBUTING.md](CONTRIBUTING.md#setting-up-s4pred-optional-gpl-30) has the setup
+  if you want it
 - Stage 7's pathway model reports **P(activator)**, not P(involved), and at the shipped threshold
   of 0.5 the activated and inhibited bands meet — so every pathway gets a direction and a 0.501
   coin flip reads as a definite call — [docs/BASELINE.md](docs/BASELINE.md)

@@ -76,6 +76,11 @@ have no unit tests.**
    `test_s11_ranking.py` (28 tests) cannot be collected. Left untouched by
    decision; s4pred upstream is GPL-3.0, so vendoring it is a licensing call for
    the backend owner. **Filed for the backend owner, not fixed here.**
+
+   > **Resolved since.** The module-scope import was made optional, which restored the 47
+   > uncollectable tests, and the gitlink itself has now been removed from the index — the path is
+   > gitignored instead, so a local copy is never committed. s4pred stays optional and GPL-3.0;
+   > `CONTRIBUTING.md` has the setup. This paragraph is left as the record of what was found.
 3. **`test_worker_e2e.py` silently requires `DEV_MODE=true`.** `runner.py:120`
    gates `write_run_stats` behind `DEV_MODE`, while the tests assert
    `stats_test.txt` exists unconditionally. 8/8 pass with the flag, 5/8 without.

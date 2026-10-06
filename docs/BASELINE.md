@@ -421,6 +421,31 @@ Two runs were being driven by hand that night; one landed on an occupied directo
   is.
 - **The data is not lost**, only unreachable: `candidates_final.json` still holds the 11
   candidates. Restoring the September `results.json` would make them readable again.
+## Restored, 2026-10-06
+
+The run now reads correctly through the API: `status: success`, `n_final: 11`,
+`ranked_candidates: 11`, 11 candidates in the list, the first at rank 1.
+
+What was done, and what deliberately was not:
+
+- The counts were **read from `candidates_final.json`**, not taken from the write-up above. It
+  holds 11 candidates, all 11 carrying a `ranking.rank`, none marked `insufficient_evidence`.
+  The figure quoted earlier happened to be right; it was re-derived anyway, because a number
+  repeated from a document is not a measurement — and this one was about to be written into a
+  production bucket.
+- The replacement is the **exact shape `worker.py` writes on success** —
+  `{"run_id", "status": "success", "n_final": 11, "progress": 1.0, "stage": null}` — so nothing
+  distinguishes this run's record from one a successful worker produced.
+- The previous `results.json` was **backed up before the write**, to
+  `artifacts/runs/2046288866976989184/results.json.pre-restore-backup` beside it and to a local
+  copy. Reverting is a one-object copy.
+- **No other object was touched.** The September stage outputs, the October s04 output and the
+  mixed `audit_log.jsonl` all remain exactly as found. The directory still contains artefacts from
+  two executions; this restores the API's *view* of it, not its history.
+
+`stage` reads `"pending"` on the restored run, as it does on every succeeded run here — the
+defect recorded above, not an artefact of the restore.
+
 - **The real defect was that nothing protected a run directory from a second writer.** The worker
   took `run_id` from its config and wrote wherever that pointed, with no check that the directory
   already held a completed run.

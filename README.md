@@ -13,6 +13,8 @@ not answer](#what-this-platform-will-not-answer).
 
 [![Licence](https://img.shields.io/badge/licence-Apache--2.0-blue)](LICENSE)
 
+**[wellmatix-bio.github.io/peptide_discovery_platform](https://wellmatix-bio.github.io/peptide_discovery_platform/)** — project page, once GitHub Pages is enabled for `main` → `/docs`.
+
 ---
 
 ## Try it without any cloud account

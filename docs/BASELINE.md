@@ -471,3 +471,33 @@ disabling each of the two signals, and making an unparseable status count as fin
 were caught.
 
 Baseline moves 220 → 228 passed; 3 failed, 0 errors, unchanged.
+
+
+---
+
+# Update: tests for stages 1 to 3
+
+**304 passed / 3 failed / 0 collection errors.** The 37 extra passes cover the last implemented
+stages without any: s01 (10), s02 (22) and s03 (5). The 3 failures are unchanged and still need
+model weights.
+
+Neither s01 nor s02 had the null-reads-as-pass mistake. What they did have is behaviour nobody
+had written down, and four things are now pinned **as documentation rather than as approval**:
+
+| Stage | Behaviour | Why it is pinned, not fixed |
+|---|---|---|
+| s01 | `DEV_MODE` is bound at **import** time (`from common.env import DEV_MODE`) | Setting the env var later changes nothing. A test that only set `os.environ` would pass while exercising the other branch |
+| s01 | An empty brief `{}` is refused as "not specified" | Defensible — a `Brief` cannot be built from it — but the message describes a brief that *was* specified |
+| s02 | `contains` on a **string** field is a substring test, so a rule for `acute` fires on `subacute` | Brief vocabulary fields are lists, where `in` is exact. Only a rule naming a scalar field reaches it, and nothing rejects such a rule |
+| s02 | Severity is capped above but has **no floor** | `min(severity, cap)` bounds one side only, so negative deltas can drive a deficit below zero. Rule files are editable data |
+
+Changing either s02 behaviour changes scoring, so both belong to whoever owns the rules.
+
+**s03 is a stub and its tests say so.** It returns one record echoing the knowledge base's
+`source_path` — not peptide data — and `test_the_stage_is_still_a_stub_and_returns_no_peptide_data`
+fails the moment that changes, which is the signal to replace the tests rather than trust them.
+
+All seven sabotages were caught: the DEV_MODE fork falling back, a missing brief going unrefused
+in either path, an unknown operator silently never firing, the cap going unapplied, every
+contribution being reported as a driver, and an absent knowledge base returning `None` instead of
+an empty list.

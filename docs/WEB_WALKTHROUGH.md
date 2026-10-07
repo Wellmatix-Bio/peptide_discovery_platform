@@ -193,7 +193,8 @@ digest means the same scoring code, not provably the same weights.
 ![Predictors](screenshots/13-predictors.jpg)
 
 Each predictor shows its version and a sha256 of its `predictor.py`, and whether its model card
-is real or a placeholder. The eight placeholders are labelled *card is a placeholder* and say so:
+is real or a placeholder. All sixteen are now written; a placeholder would be labelled *card is a
+placeholder* and say so:
 *"The card for this predictor is a placeholder: it records that the training data, features and
 applicability domain are not yet written down... Treat this predictor's numbers as
 undocumented."* The screenshot below predates that change and shows the earlier *no model card*

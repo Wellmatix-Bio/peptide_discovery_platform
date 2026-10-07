@@ -152,34 +152,73 @@
     },
     {
       "model_card": {
-        "documented": {
-          "applicability_domain": null,
-          "evaluation": null,
-          "features": null,
-          "target": null,
-          "task": null,
-          "training_data": null
+        "architecture": "5-fold XGBoost ensemble stacked through a meta-model (meta_model.joblib) that calibrates the fold-averaged raw score into a probability",
+        "cv_metrics": {
+          "mean_auprc": 0.9067,
+          "mean_auroc": 0.8921,
+          "per_fold_auroc": [
+            0.9054,
+            0.9042,
+            0.8736,
+            0.9204,
+            0.8569
+          ],
+          "std_auprc": 0.0253,
+          "std_auroc": 0.026
         },
+        "esm_model_name": "facebook/esm2_t30_150M_UR50D",
+        "feature_cols": "esm2_0..esm2_639 (mean-pooled ESM2 embedding) followed by 21 modlAMP global/moment descriptors (modlamp_Length, MW, Charge, ChargeDensity, pI, InstabilityInd, Aromaticity, AliphaticInd, BomanInd, HydrophRatio, eisenberg/gravy/flexibility/aasi global+moment, z3, z5, abhprk); the full ordered list is in the weights-side model_card.json that predictor.py loads",
+        "locked_test_metrics": {
+          "auprc": 0.8957,
+          "auroc": 0.8703,
+          "f1_at_0.5": 0.7867,
+          "macrel_baseline": {
+            "auprc": 0.839,
+            "auroc": 0.7614,
+            "f1_at_0.5": 0.6237
+          },
+          "precision_at_50": 1.0
+        },
+        "metrics": "see cv_metrics and locked_test_metrics",
         "model_name": "amp_classifier_v1",
-        "note": "PLACEHOLDER. This predictor's training data, features and applicability domain are not yet documented. The card exists so the gap is visible and addressable, not to imply the model is described. To be completed by the model's author.",
-        "placeholder_added": "2026-10-06",
-        "status": "placeholder"
+        "n_esm2_features": 640,
+        "n_features": 661,
+        "n_folds": 5,
+        "n_modlamp_features": 21,
+        "normalize_amino": true,
+        "task": "binary classification: antimicrobial-peptide (AMP) probability in [0, 1]",
+        "training_data": {
+          "cv": "5-fold GroupKFold on cluster_id",
+          "locked_test": "651 peptides (338 pos / 313 neg) in 539 clusters; zero cluster overlap with train/val",
+          "sources": "DRAMP general/patent (tested negatives)",
+          "train_val": "3766 peptides in 3056 identity clusters (CD-HIT 90%)"
+        },
+        "weights_dir": "model_store/model_weights/amp_classifier_v1",
+        "xgb_params": {
+          "colsample_bytree": 0.7,
+          "early_stopping_rounds": 30,
+          "eval_metric": "aucpr",
+          "learning_rate": 0.08,
+          "max_depth": 5,
+          "n_estimators": 1000,
+          "objective": "binary:logistic",
+          "random_state": 42,
+          "scale_pos_weight": 0.8905622489959839,
+          "subsample": 0.8
+        }
       },
       "model_card_present": true,
-      "model_card_status": "placeholder",
+      "model_card_status": "documented",
       "name": "amp_classifier_v1",
       "predictor_sha256": "c77b45885a6f300b79732d3cc08f7d57fc87dd7590732800240b9f8dd4922d1a",
       "version": "v1"
     },
     {
       "model_card": {
-        "caveat": "Severe class imbalance (23/206 positive) and small n drive low MCC/Recall for both deployed models despite class-weighting. Treat angiogenic_dominant as a soft screening signal, not a high-confidence classifier.",
-        "deployment_object_provenance": "Each of the 2 deployed models (SVM, MLP) was fit ONCE on the FULL 206-row dataset (fit_production_model in pipeline_35M_embedder.ipynb, no held-out fold) -- the notebook's own designated deployable object, distinct from the per-fold models fit during LOOCV which exist only to produce honest out-of-sample metrics. A RandomForestClassifier was also fit but is not part of the deployed ensemble. Exported from 'Models/Angiogenic activity prediction/pipeline_35M_embedder.ipynb' (despite the filename, this run embeds with facebook/esm2_t30_150M_UR50D).",
-        "ensemble_architecture": "2 independently trained models (a 3rd, RandomForestClassifier, was trained in the source notebook but excluded from the deployed ensemble), each a Pipeline wrapping a ColumnTransformer([passthrough 16 physchem descriptors, StandardScaler->PCA(0.95 variance) over 640-dim ESM2 block]): SVC(probability=True) and a custom TorchMLPClassifier (3-layer MLP). Deployed prediction is the unweighted mean of the two models' P(angiogenic_dominant).",
+        "ensemble_architecture": "2 independently trained models, each a Pipeline wrapping a ColumnTransformer([passthrough 16 physchem descriptors, StandardScaler->PCA(0.95 variance) over 640-dim ESM2 block]): SVC(probability=True) and a custom TorchMLPClassifier (3-layer MLP). Deployed prediction is the unweighted mean of the two models' P(angiogenic_dominant).",
         "esm_embed_dim": 640,
         "esm_model_name": "facebook/esm2_t30_150M_UR50D",
         "esm_pooling": "mean-pool per-residue hidden states, excluding BOS/EOS",
-        "evaluation_metrics_source": "notebook's own per-fold Leave-One-Out CV (206 folds), NOT a direct evaluation of the deployed full-data-refit objects -- reported as the best available generalization estimate since the deployed objects have no held-out evaluation of their own",
         "feature_cols": [
           "length",
           "net_charge",
@@ -289,32 +328,55 @@
     },
     {
       "model_card": {
-        "documented": {
-          "applicability_domain": null,
-          "evaluation": null,
-          "features": null,
-          "target": null,
-          "task": null,
-          "training_data": null
+        "architecture": "Conv1d/MaxPool1d variational-autoencoder encoder (208-dim latent mu/logvar) + 2-layer classification head; decoder and triplet contrastive loss are training-only",
+        "checkpoint": "dac_aips_final.pt",
+        "independent_test_metrics": {
+          "ACC": 0.6968541468064824,
+          "AUC": 0.7342569460216519,
+          "MCC": 0.37556408566290816,
+          "Sn": 0.6523809523809524,
+          "Sp": 0.7265500794912559
         },
+        "input_encoding": "fused one-hot (k=1) + multi-hot (k=2) + multi-hot (k=3) sliding window, 60 channels x seq_len, no ESM2",
+        "latent_dim": 208,
+        "loss": "reconstruction (BCE-with-logits, pos_weight) + KL (free bits 0.02 nats/dim) + triplet contrastive + class-weighted cross-entropy",
         "model_name": "anti_inflammatory_predictor_v1",
-        "note": "PLACEHOLDER. This predictor's training data, features and applicability domain are not yet documented. The card exists so the gap is visible and addressable, not to imply the model is described. To be completed by the model's author.",
-        "placeholder_added": "2026-10-06",
-        "status": "placeholder"
+        "selection": "best validation MCC with early stopping (patience 5)",
+        "seq_len": 25,
+        "task": "binary classification: anti-inflammatory peptide (AIP) probability, softmax(logits)[:, 1]",
+        "training_config": {
+          "alpha": 1.0,
+          "beta_start": 0.01,
+          "beta_target": 0.0075,
+          "class_weight": [
+            0.8313645124435425,
+            1.2544561624526978
+          ],
+          "gamma": 1.0,
+          "kl_hold_epochs": 5,
+          "kl_warmup_epochs": 20,
+          "margin": 1.0,
+          "num_epochs": 30,
+          "patience": 5,
+          "recon_pos_weight": 15.590259552001953
+        },
+        "training_data": {
+          "augmentation": "random interception, sequence reversal, noise addition (training split only)",
+          "benchmarking": "3145 sequences (1258 pos / 1887 neg), CD-HIT deduplicated then split into train 2506 (997 pos / 1509 neg) and val 627 (250 / 377)",
+          "extra_source": "IEDB T-cell assay export evaluated as an additional benchmark",
+          "independent_test": "1049 sequences (420 pos / 629 neg)"
+        }
       },
       "model_card_present": true,
-      "model_card_status": "placeholder",
+      "model_card_status": "documented",
       "name": "anti_inflammatory_predictor_v1",
       "predictor_sha256": "9d6cf98c4bcc619f5d85c105fdc6bf58424be92d1f474f5c0ae466352f0ca8eb",
       "version": "v1"
     },
     {
       "model_card": {
-        "architecture": "UniZyme joint model (UniZyme\\SE structure-only ablation): shared EnzymeEncoder + ActiveSiteHead produce a pooled enzyme representation h^e; SubstrateEncoder produces per-residue substrate hidden states H^s; CleavageSiteHead gathers a +/-15-residue window of H^s around each candidate position, concatenates with h^e, and scores a per-residue logit via MLP. See architecture.py and README.md.",
-        "caveat": "The cleavage task's training set is small (52 enzymes) relative to the active-site task's; the joint loss (loss_c + 10*loss_a) leans on the active-site task to shape the shared enzyme encoder. Treat cleavage-site probabilities as a screening signal for protease susceptibility, not a validated high-confidence prediction -- especially for enzyme accessions far from the training distribution (non-human orthologs, unusual families).",
-        "checkpoint_provenance": "unizyme model/joint_model/best_model.pt from the source project, retrained end-to-end on facebook/esm2_t30_150M_UR50D embeddings (enzyme PCA refit to 640-dim input; supersedes the earlier 35M-embedder epoch-13 checkpoint). Selected during training by lowest val_combined_loss, epoch 8. Model_state_dict, epoch, and best_score are as saved by the source checkpoint.",
+        "architecture": "Shared EnzymeEncoder + ActiveSiteHead produce a pooled enzyme representation h^e; SubstrateEncoder produces per-residue substrate hidden states H^s; CleavageSiteHead gathers a +/-15-residue window of H^s around each candidate position, concatenates with h^e, and scores a per-residue logit via MLP. See architecture.py and README.md.",
         "checkpoint_val_metrics_epoch8": {
-          "note": "From the source checkpoint's own training-time history (epochs 0-8); this 150M-embedder retrain's best epoch differs from the prior 35M-embedder export's epoch-13 checkpoint (val_pr_auc_cleavage 0.8298) -- the two are not directly comparable runs. No independent held-out evaluation was re-run for this update -- these are the source project's own validation-split metrics, not a fresh test-set score.",
           "val_aupr_active_site": 0.9808,
           "val_combined_loss": 0.1519,
           "val_combined_pr_auc": 5.6097,
@@ -332,7 +394,6 @@
           "enzyme_accession": "UniProt accession of a bundled enzyme (see enzymes/enzyme_catalog.csv), or omit to score against the full 118-enzyme panel via predict()",
           "sequence": "candidate peptide amino-acid sequence, standard 20 AAs"
         },
-        "known_coverage_gap": "Human MMP-1 (P03956), MMP-2 (P08253), MMP-3 (P08254), MMP-8 (P22894), MMP-9 (P14780), MMP-12 (P39900), and human neutrophil elastase (P08246) are NOT in the bundled panel -- their structures failed the source pipeline's aligned+verified check (structure length did not match sequence length) and were dropped upstream, before this migration. The panel does include their non-human orthologs (rat/mouse/rabbit MMPs, mouse neutrophil elastase Q3UP87) and a handful of human family members (MMP-11, MMP-19, MMP-24, MMP-26, ELA1_HUMAN, EL2A_HUMAN). Treat cleavage-site predictions against non-human orthologs as directional evidence of protease-family susceptibility, not a substitute for the specific human enzyme.",
         "local_attention_span": 128,
         "model_name": "cleavage_site_predictor_v1",
         "pca_target_dim": 128,
@@ -348,63 +409,115 @@
     },
     {
       "model_card": {
-        "documented": {
-          "applicability_domain": null,
-          "evaluation": null,
-          "features": null,
-          "target": null,
-          "task": null,
-          "training_data": null
+        "architecture": "4-fold ensemble (mean of sigmoid outputs); BiLSTM + self-attention over per-residue ESM2 embeddings, cross-attended against a global sequence embedding, plus nn.Embedding(7, 16) over cell_type concatenated with the length feature before the head",
+        "cell_type_to_id": "7 cell types: DBAASP_no_cytotoxicity_hit, DRAMP_aggregate (default), Human PBMC, HEK, HaCat, HMEC-1, skin fibroblasts",
+        "config": {
+          "d_model": 120,
+          "dropout": 0.2,
+          "hidden_dim": 400,
+          "lr": 0.001,
+          "n_heads": 1,
+          "pos_weight": 1.0
         },
+        "default_cell_type": "DRAMP_aggregate",
+        "esm_embedding_dim": 640,
+        "esm_model_name": "facebook/esm2_t30_150M_UR50D",
+        "hyperparameter_search": "32 configs x 4 folds, best mean val AUPRC 0.9138",
+        "loss": "BCEWithLogitsLoss",
+        "max_sequence_length": 50,
         "model_name": "cytotoxicity_predictor_v1",
-        "note": "PLACEHOLDER. This predictor's training data, features and applicability domain are not yet documented. The card exists so the gap is visible and addressable, not to imply the model is described. To be completed by the model's author.",
-        "placeholder_added": "2026-10-06",
-        "status": "placeholder"
+        "n_folds": 4,
+        "per_fold_test_metrics": {
+          "AUPRC": [
+            0.6612,
+            0.6626,
+            0.7451,
+            0.7164
+          ],
+          "AUROC": [
+            0.7283,
+            0.7713,
+            0.8162,
+            0.827
+          ]
+        },
+        "task": "binary classification: mammalian-cell cytotoxicity probability in [0, 1], conditioned on assay cell type",
+        "training_data": "21028 peptides -> 14560 after CD-HIT 90%; 161 cytotoxic (119 DRAMP_aggregate, 31 HaCaT, 11 other) downsampled to a balanced 322; 64-row held-out test, 4-fold StratifiedGroupKFold"
       },
       "model_card_present": true,
-      "model_card_status": "placeholder",
+      "model_card_status": "documented",
       "name": "cytotoxicity_predictor_v1",
       "predictor_sha256": "daf29e2b104b218c63ed759c378b5ac5b9e3319aa3070c63d0aa958706e02c7d",
       "version": "v1"
     },
     {
       "model_card": {
-        "documented": {
-          "applicability_domain": null,
-          "evaluation": null,
-          "features": null,
-          "target": null,
-          "task": null,
-          "training_data": null
-        },
+        "architecture": "facebook/esmfold_v1 via transformers.EsmForProteinFolding: ESM2-650M language-model backbone (fp16 on GPU) feeding a folding trunk (fp32) that outputs atom37 coordinates and pLDDT",
+        "base_model": "facebook/esmfold_v1",
+        "downstream_use": "ca_distance_matrix feeds cleavage_site_predictor_v1.predict_one(distance_matrix=...)",
+        "fine_tuned": false,
+        "metrics": "none; third-party pretrained model with no platform-side evaluation",
         "model_name": "esmfold_v1",
-        "note": "PLACEHOLDER. This predictor's training data, features and applicability domain are not yet documented. The card exists so the gap is visible and addressable, not to imply the model is described. To be completed by the model's author.",
-        "placeholder_added": "2026-10-06",
-        "status": "placeholder"
+        "outputs": [
+          "pdb_str",
+          "mean_plddt",
+          "per_residue_plddt",
+          "ca_coordinates",
+          "ca_distance_matrix"
+        ],
+        "plddt_scale": "0-1 fraction (not 0-100); mean_plddt ~0.69 on the reference defensin-like peptide",
+        "task": "single-sequence protein/peptide structure prediction (no MSA)",
+        "weights": "full facebook/esmfold_v1 snapshot (~7.9GB) in model_store/model_weights/esmfold_v1/weights, vendored unmodified via huggingface_hub.snapshot_download"
       },
       "model_card_present": true,
-      "model_card_status": "placeholder",
+      "model_card_status": "documented",
       "name": "esmfold_v1",
       "predictor_sha256": "817562ff92413399cc7d2af0ad03cfb01d645d1698b5586fbf86b7f162ea16d7",
       "version": "v1"
     },
     {
       "model_card": {
-        "documented": {
-          "applicability_domain": null,
-          "evaluation": null,
-          "features": null,
-          "target": null,
-          "task": null,
-          "training_data": null
+        "architecture": "sklearn Pipeline: SimpleImputer(strategy='median') + RandomForestRegressor(n_estimators=800, max_depth=30, random_state=42)",
+        "description": "Native Python reproduction of HemoPI2's regression model, trained on HemoPI2's own published cross-validation/test splits; no subprocess or vendored GPL code",
+        "features": "1167 hand-computed descriptors: MW, length, AAC, DPC, ATC, BTC, PCP, RRI, PRI, DDR, SER, SEP, CTC, CeTD, PAAC, APAAC, QSO, SOC (see predictor.py Extractor and property_tables.py)",
+        "hyperparameter_search": {
+          "best_params": {
+            "rf__max_features": 1.0
+          },
+          "candidates": 3,
+          "cv_mse": 0.2185,
+          "method": "5-fold grid search, training only"
+        },
+        "independent_test_metrics": {
+          "hc50_um_mae": 103.65,
+          "hc50_um_rmse": 190.73,
+          "mae": 0.3184,
+          "mse": 0.1848,
+          "note": "metrics are on -log10(HC50 uM)",
+          "paper_reported": {
+            "pearson_r": 0.739,
+            "r2": 0.543
+          },
+          "pearson_r": 0.7397,
+          "r2": 0.544,
+          "rmse": 0.4299
         },
         "model_name": "hemolysis_predictor_v1",
-        "note": "PLACEHOLDER. This predictor's training data, features and applicability domain are not yet documented. The card exists so the gap is visible and addressable, not to imply the model is described. To be completed by the model's author.",
-        "placeholder_added": "2026-10-06",
-        "status": "placeholder"
+        "target_transform": "model predicts y = -log10(HC50 in uM); pHC50 = y_pred + 6.0",
+        "task": "regression: pHC50 (= -log10(HC50 in M)) for a peptide; high pHC50 = hemolytic at low concentration = worse",
+        "trained_with": "scikit-learn 1.9.0 (loading under 1.6.1 emits InconsistentVersionWarning)",
+        "training_data": {
+          "rows": 1540,
+          "source": "HemoPI2 cross_val_dataset.csv / independent_dataset.csv",
+          "test_rows": 386
+        },
+        "valid_sequence_length": [
+          6,
+          50
+        ]
       },
       "model_card_present": true,
-      "model_card_status": "placeholder",
+      "model_card_status": "documented",
       "name": "hemolysis_predictor_v1",
       "predictor_sha256": "e9008a7a97427813ca5d946377c6051b30d13ad196fa6200c9f1330606e200a3",
       "version": "v1"
@@ -505,7 +618,7 @@
     },
     {
       "model_card": {
-        "ensemble_method": "simple unweighted mean of BiLSTM, CNN, and Random Forest predictions (not computed by the source notebook; combined here per export instructions)",
+        "ensemble_method": "simple unweighted mean of BiLSTM, CNN, and Random Forest predictions",
         "esm_embedding_dim": 640,
         "esm_embedding_type": "per-residue (last_hidden_state), BOS/EOS dropped, left-aligned into a fixed MAX_SEQ_LEN=50 slot with zero padding",
         "esm_model_name": "facebook/esm2_t30_150M_UR50D",
@@ -562,8 +675,6 @@
           "Pseudomonas aeruginosa": "ATCC 27853",
           "Staphylococcus aureus": "ATCC 25923"
         },
-        "source_artifact_dir": "saved_models/",
-        "source_notebook": "mic_prediction_pipelineC_35M_embedding.ipynb",
         "supported_organisms": [
           "Escherichia coli",
           "Staphylococcus aureus",
@@ -588,51 +699,76 @@
     },
     {
       "model_card": {
-        "documented": {
-          "applicability_domain": null,
-          "evaluation": null,
-          "features": null,
-          "target": null,
-          "task": null,
-          "training_data": null
-        },
+        "architecture": "per pathway, a 100-model PU (positive-unlabeled) bagging ensemble of RandomForestClassifier(n_estimators=100, max_depth=5); each bag trains on all known positives plus an equal-sized random sample of the unlabeled set; probability = mean predict_proba over bags",
+        "feature_source": "modlAMP GlobalDescriptor; Hydrophobicity/HydrophobicMoment from the Eisenberg scale",
+        "features": [
+          "MW",
+          "Charge",
+          "ChargeDensity",
+          "pI",
+          "InstabilityInd",
+          "Aromaticity",
+          "AliphaticInd",
+          "BomanInd",
+          "HydrophRatio",
+          "Hydrophobicity",
+          "HydrophobicMoment"
+        ],
+        "metrics": "not recorded in the export",
         "model_name": "pathway_mapping_predictor_v1",
-        "note": "PLACEHOLDER. This predictor's training data, features and applicability domain are not yet documented. The card exists so the gap is visible and addressable, not to imply the model is described. To be completed by the model's author.",
-        "placeholder_added": "2026-10-06",
-        "status": "placeholder"
+        "n_bags_per_pathway": 100,
+        "n_model_files": 900,
+        "pathways": [
+          "MAPK",
+          "ERK",
+          "PI3K_AKT_MTOR",
+          "TGFB_SMAD",
+          "NF_KB",
+          "WNT_BCATENIN",
+          "FGFR_JAK2_STAT3",
+          "VEGF_ANGIOGENESIS",
+          "CYTOKINE_MACROPHAGE"
+        ],
+        "task": "multi-label pathway engagement: per-pathway probability that a peptide engages the pathway",
+        "trained_with": "scikit-learn 1.9.0 (loading under 1.6.1 emits InconsistentVersionWarning)"
       },
       "model_card_present": true,
-      "model_card_status": "placeholder",
+      "model_card_status": "documented",
       "name": "pathway_mapping_predictor_v1",
       "predictor_sha256": "95d7f7169e7a7061652ab0963aee124814817f8cd829c1db115b609445b20d43",
       "version": "v1"
     },
     {
       "model_card": {
-        "documented": {
-          "applicability_domain": null,
-          "evaluation": null,
-          "features": null,
-          "target": null,
-          "task": null,
-          "training_data": null
+        "architecture": "per pathway, an unweighted mean of two models' P(activator): LDA and RF",
+        "features": "11 modlAMP descriptors: MW, Charge, ChargeDensity, pI, InstabilityInd, Aromaticity, AliphaticInd, BomanInd, HydrophRatio, Hydrophobicity, HydrophobicMoment",
+        "heldout_test_metrics_mean_over_pathways": {
+          "ACC": 0.591,
+          "AUCROC": 0.632,
+          "F1": 0.638,
+          "MCC": 0.146
         },
+        "label_handling": "label-0 rows dropped before training",
         "model_name": "pathway_mapping_predictor_v2",
-        "note": "PLACEHOLDER. This predictor's training data, features and applicability domain are not yet documented. The card exists so the gap is visible and addressable, not to imply the model is described. To be completed by the model's author.",
-        "placeholder_added": "2026-10-06",
-        "status": "placeholder"
+        "models": {
+          "LDA": "StandardScaler + LinearDiscriminantAnalysis(solver='lsqr', shrinkage='auto')",
+          "RF": "RandomForestClassifier(n_estimators=300, max_depth=5, class_weight='balanced')"
+        },
+        "n_model_files": 18,
+        "pathways": "MAPK, ERK, PI3K_AKT_MTOR, TGFB_SMAD, NF_KB, WNT_BCATENIN, FGFR_JAK2_STAT3, VEGF_ANGIOGENESIS, CYTOKINE_MACROPHAGE",
+        "task": "per-pathway activator (+1) vs inhibitor (-1) classification; output is P(activator), so a low value means inhibitor, not uninvolved",
+        "training_data": "training_dataset_long.csv + train_ready_dataset_v3.csv; 11-40 training rows per pathway (3-10 curated test peptides), 80/20 split by family_group",
+        "training_signature": "sha1 d29b5d9155851c9d9daa0f04d9810b5902893ff5 (model/signature.txt: hash of the train split + feature list)"
       },
       "model_card_present": true,
-      "model_card_status": "placeholder",
+      "model_card_status": "documented",
       "name": "pathway_mapping_predictor_v2",
       "predictor_sha256": "5a28f017f0f4da008c8a8a205520d0107ba894e4f49f4bf1a4e470aae438e295",
       "version": "v2"
     },
     {
       "model_card": {
-        "deployment_object_provenance": "FULL-DATA REFIT for deployment. Notebook (pipeline.ipynb) never persists a fitted model: build_ensemble() is built fresh inside every Leave-One-Out CV fold, fit on that fold only, used once, then discarded; no joblib.dump/pickle exists in the notebook. The two .joblib artifacts shipped here were fit once each on the FULL 103-row dataset (no LOO holdout) using the exact same feature code and hyperparameters as the notebook, by a standalone script outside the source project, per explicit user authorization. This is a deliberate deviation from the notebook's own protocol (training-set size only: full data vs n-1 rows per LOO fold).",
         "ensemble_architecture": "VotingClassifier(voting='soft') over RandomForestClassifier + XGBClassifier + Pipeline(StandardScaler -> LogisticRegression), one independent ensemble instance per target",
-        "evaluation_metrics_source": "notebook's own per-fold Leave-One-Out CV (103 folds per target), NOT a direct evaluation of this deployed full-data-refit object -- reported as the best available generalization estimate since the deployed object has no held-out evaluation of its own",
         "feature_cols": [
           "length",
           "net_charge",
@@ -722,8 +858,7 @@
         ],
         "training_data": {
           "cleaning_filter": "sequence non-null and fullmatch [ACDEFGHIKLMNPQRSTVWY]+; labels derived from 'T'/other flag columns migration_dominant and proliferation_dominant",
-          "n_rows_after_cleaning": 103,
-          "source_csv": "Models/Proliferation + Migration prediction/data/peptide_activity_unique_clean.csv"
+          "n_rows_after_cleaning": 103
         }
       },
       "model_card_present": true,
@@ -734,21 +869,23 @@
     },
     {
       "model_card": {
-        "documented": {
-          "applicability_domain": null,
-          "evaluation": null,
-          "features": null,
-          "target": null,
-          "task": null,
-          "training_data": null
+        "adapter": "LoRA r=16, alpha=32, dropout=0.05 on c_attn; wte and lm_head also trained",
+        "base_model": "nferruz/ProtGPT2",
+        "base_model_loading": "4-bit NF4, frozen; base weights are downloaded from the Hugging Face Hub on first load and are not stored here",
+        "base_model_params": "738M",
+        "checkpoint": {
+          "epoch": 12,
+          "train_loss": 1.1851765131215177,
+          "val_loss": 1.2221991942763504
         },
+        "condition_tags": "<AMP>, <ANTIBACTERIAL>, <ANTIBIOFILM>",
         "model_name": "routeb_protgpt2_lora_v1",
-        "note": "PLACEHOLDER. This predictor's training data, features and applicability domain are not yet documented. The card exists so the gap is visible and addressable, not to imply the model is described. To be completed by the model's author.",
-        "placeholder_added": "2026-10-06",
-        "status": "placeholder"
+        "task": "conditional peptide generation (Stage 4 Route B), conditioned on tag tokens",
+        "training_data": "24172 sequences (DRAMP, ESCAPE, BAAMP, DBAASP) in 10385 identity clusters (>0.7 similarity); 21466 train / 2706 val, split by cluster",
+        "training_hyperparameters": "lr 2e-4, effective batch 32, max_length 128; trained to epoch 12"
       },
       "model_card_present": true,
-      "model_card_status": "placeholder",
+      "model_card_status": "documented",
       "name": "routeb_protgpt2_lora_v1",
       "predictor_sha256": "7d33f4fdd467a33e4d797bee6a7a751d44dbdf95dbc594c962368cc2d98826e2",
       "version": "v1"
@@ -759,19 +896,15 @@
           "best_iteration": 141,
           "file": "pair_stratified_87a389cf6ee76d08.joblib",
           "n_features_in": 1286,
-          "source_path": "Models/Solubility/model_cache/B_raw/pair_stratified_87a389cf6ee76d08.joblib",
           "split_strategy": "pair_stratified: random 64/16/20 train/val/test split stratified on y (peptide-solvent pairs can appear across both train and test)",
-          "variant": "Pipeline B raw (ESM2 embedding + solvent descriptors, no PCA)",
-          "why_chosen": "pipelineB.ipynb was read in full and contains no full-data refit step after the evaluation loop (the notebook ends at the LOSO summary in the final cell). All 6 cached B_raw artifacts are evaluation-fold models: pair_stratified and seq_disjoint each hold out a test partition, and the 4 loso_* files each hold out one entire solvent. There is no cached or in-notebook model trained on 100% of long_peptide_solvent.csv. Per the documented fallback rule, pair_stratified was selected as the most defensible deployment choice: it uses the largest train portion, is a standard random split (not group-held-out), and is closest in spirit to a general-purpose model. This is a FALLBACK, not an ideal full-data-refit deployment model \u2014 see README.md Provenance section."
+          "variant": "Pipeline B raw (ESM2 embedding + solvent descriptors, no PCA)"
         },
         "esm_feature_prefix": "esm_",
         "esm_model_name": "facebook/esm2_t33_650M_UR50D",
         "esm_pooling": "mean-pool per-residue last_hidden_state, BOS and EOS tokens excluded from the mean",
         "evaluation_summary_from_prior_investigation": {
           "loso_macro_accuracy": 0.775,
-          "loso_macro_auc": 0.773,
-          "note_coverage_gap": "3 of 7 solvents (0.2 M acetic acid, 3% ammonia water (v/v), HCOOH) are 100% single-class (all-soluble) in this dataset and were skipped in LOSO evaluation entirely -> zero held-out validation coverage for those solvents",
-          "note_dmso": "DMSO LOSO AUC ~0.56 (near chance-level) even in this best-performing (raw) variant"
+          "loso_macro_auc": 0.773
         },
         "n_esm_features": 1280,
         "n_solvent_features": 6,
@@ -842,8 +975,8 @@
             "roc_auc": 0.7597
           }
         },
-        "data_variant": "combined (pipeline_combined_35M_embedding.ipynb, PepSySco.csv + MS2-labeled peptides merged, 3560 peptides)",
-        "ensemble_method": "unweighted mean of predict_proba positive-class probability across the 3 models (soft voting); notebook itself does not define a cross-model ensembling scheme, this is a downstream choice",
+        "data_variant": "combined (PepSySco.csv + MS2-labeled peptides merged, 3560 peptides)",
+        "ensemble_method": "unweighted mean of predict_proba positive-class probability across the 3 models (soft voting)",
         "esm_model_name": "facebook/esm2_t30_150M_UR50D",
         "esm_pooling": "mean-pooled last_hidden_state, CLS/EOS special tokens masked out before pooling, no L2 normalization",
         "models": {
@@ -883,7 +1016,6 @@
           }
         },
         "n_esm2_features": 640,
-        "source_notebook": "pipeline_combined_35M_embedding.ipynb",
         "task": "binary classification: synthesis feasible (label=1) vs not (label=0)",
         "train_val_split": "5-fold StratifiedKFold, shuffle=True, random_state=42, refit on full dataset for the cached artifacts"
       },

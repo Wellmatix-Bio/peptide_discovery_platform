@@ -5,13 +5,7 @@ from src.schemas.candidate import Candidate
 
 
 class Stage4Route(ABC):
-    """Abstract base class for Stage 4 routing strategies (A/B/C/D).
-
-    Mirrors `CandidateStage.run()`'s signature so `Stage4.run()` can delegate
-    to whichever routes a run config enables and concatenate the results.
-    Routes are not stages themselves — they don't get their own preconditions,
-    gating, or audit entry; `Stage4` is the `CandidateStage` that owns those.
-    """
+    """Abstract base class for Stage 4 routing strategies (A/B/C/D), mirroring `CandidateStage.run()`; routes are not stages and get no audit entry of their own."""
 
     _config: dict[str, Any] = {}
 

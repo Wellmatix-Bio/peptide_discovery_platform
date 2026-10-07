@@ -28,8 +28,7 @@ from model_store.pathway_mapping_predictor_v2 import (
     PathwayMappingPredictor,
 )  # noqa: E402
 
-# Default thresholds (screening table). Override per-run via
-# StageConfig.params — every key here is read with config.params.get(key, default).
+# Default filter thresholds, overridable per run via config.params.get(key, default).
 DEFAULT_THRESHOLDS = {
     # pLDDT is a 0-1 fraction for this checkpoint.
     "plddt_low_confidence_max": 0.5,
@@ -305,14 +304,6 @@ class Stage7(CandidateStage):
         self, structure: dict, pathway_involvement: dict, thresholds: dict
     ) -> dict:
         """Combines structure and pathway evidence into the Stage 7 MoA summary (CLAUDE.md's MoA-map output)."""
-        # The v2 model's probability is P(ACTIVATOR), not P(involved): its training set dropped
-        # the label-0 rows, so it cannot express "this peptide does not touch this pathway"
-        # (model_store/pathway_mapping_predictor_v2/README.md). Every label therefore gets a
-        # direction, and the only honest gate on it is confidence.
-        #
-        # A label between the two cutoffs is UNDETERMINED and is reported as such. It used to
-        # fall out of both lists and simply vanish, which reads as "not relevant" when it
-        # actually means "the model could not call it".
         cutoff = thresholds["pathway_engagement_min_probability"]
         activated_pathways = [
             label for label, result in pathway_involvement.items() if result["probability"] >= cutoff

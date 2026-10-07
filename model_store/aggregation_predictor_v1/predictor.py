@@ -41,8 +41,7 @@ def protscale_features(seq: str, aaindex_scales: dict) -> dict:
 
 
 class AggregationPredictor:
-    """Lazy-loaded XGBoost classifier over biopython/propy/AAindex descriptors.
-    Returns an aggregation-propensity probability in [0, 1]. See README.md."""
+    """Lazy-loaded XGBoost classifier over biopython/propy/AAindex descriptors returning an aggregation-propensity probability; see README.md."""
 
     def __init__(self, model_dir: Path = MODEL_DIR):
         self.model_dir = Path(model_dir)

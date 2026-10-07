@@ -19,9 +19,7 @@ AMINO_ACID_SET = set("ACDEFGHIKLMNPQRSTVWY")
 ESM_MODEL_NAME = "facebook/esm2_t30_150M_UR50D"
 ESM_DIM = 640
 
-# Fixed architecture hyperparameters — identical across all 4 fold checkpoints
-# (verified against each checkpoint's saved "config" dict), so hardcoded here
-# rather than re-read from each checkpoint at load time.
+# Fixed architecture hyperparameters, identical across all 4 fold checkpoints.
 HIDDEN_DIM = 400
 D_MODEL = 120
 N_HEADS = 1
@@ -30,9 +28,7 @@ LSTM_LAYERS = 1
 MAX_LEN = 50
 CELL_TYPE_DIM = 16
 
-# Default cell_type context for a sequence with no known assay cell line.
-# "DRAMP_aggregate" represents an unspecified/aggregate cytotoxicity source,
-# as opposed to a specific cell line or the DBAASP negative-control bucket.
+# Default cell_type for sequences with no known assay cell line (an unspecified aggregate source).
 DEFAULT_CELL_TYPE = "DRAMP_aggregate"
 
 
@@ -99,9 +95,7 @@ class CytotoxicityPredictor(nn.Module):
 
 
 class CytotoxicityClassifier:
-    """Lazy-loaded 4-fold ensemble. Returns a mammalian-cell cytotoxicity
-    probability in [0, 1] (sigmoid already applied) — see README.md for the
-    cell_type context requirement."""
+    """Lazy-loaded 4-fold ensemble returning a mammalian-cell cytotoxicity probability"""
 
     def __init__(self, model_dir: Path = MODEL_DIR):
         self.model_dir = Path(model_dir)
@@ -129,9 +123,7 @@ class CytotoxicityClassifier:
     def _embed(self, sequence: str, feature_extractor: FeatureExtractor):
         embedding = feature_extractor.get_esm2_embedding(sequence)
         with torch.no_grad():
-            # Cached hidden_states are already trimmed to this sequence's
-            # own valid length (BOS + residues + EOS, no padding) --
-            # strip BOS/EOS the same way the original per-call tokenize did.
+            # Cached hidden_states are trimmed to valid length, so strip BOS/EOS.
             residues = torch.from_numpy(embedding.hidden_states[1:-1]).to(self.device)
         with torch.no_grad():
             lengths = torch.tensor([residues.shape[0]], device=self.device)

@@ -48,10 +48,7 @@ def _validate_organism(organism: str) -> None:
         )
 
 
-# ---------------------------------------------------------------------------
-# Genomic nucleotide-composition features (NAC + DNC + TNC, 84-dim)
-# Precomputed per organism at export time; see genome_vectors.json.
-# ---------------------------------------------------------------------------
+# Genomic nucleotide-composition features (NAC + DNC + TNC, 84-dim), precomputed per organism (see genome_vectors.json).
 
 class GenomicANN(nn.Module):
     def __init__(self, in_dim=GENOME_DIM, out_dim=32, dropout=0.2):
@@ -120,11 +117,7 @@ class CNNModel(nn.Module):
         return self.regressor(merged).squeeze(-1)
 
 
-# ---------------------------------------------------------------------------
 # iFeature protein descriptors (AAC, GAAC, CTDC, CTDT, CTDD, PAAC lambda=1)
-# Vendored from iFeature (Chen et al.) so the RF branch needs no external
-# iFeature install. Group definitions and PAAC property table copied verbatim.
-# ---------------------------------------------------------------------------
 
 _AAC_ORDER = "ACDEFGHIKLMNPQRSTVWY"
 
@@ -301,9 +294,7 @@ def ifeature_descriptors(sequence: str) -> dict:
 
 
 class MICPredictorEnsemble:
-    """Lazy-loaded ensemble of BiLSTM, CNN (per-residue ESM2 + genome features)
-    and Random Forest (iFeature descriptors + genome features). Predicts
-    log10(MIC, uM) for one of 3 ATCC reference organisms. See README.md."""
+    """Lazy-loaded BiLSTM + CNN + Random Forest ensemble predicting log10(MIC, uM) for 3 ATCC organisms"""
 
     def __init__(self, model_dir: Path = MODEL_DIR):
         self.model_dir = Path(model_dir)
@@ -347,10 +338,7 @@ class MICPredictorEnsemble:
         n = len(sequences)
         embeddings = feature_extractor.get_esm2_embedding_batch(sequences)
         with torch.no_grad():
-            # Cached hidden_states are already trimmed to each sequence's
-            # own valid length (BOS + residues + EOS, no padding) --
-            # stripping BOS/EOS (positions 0 and -1) leaves exactly the
-            # same valid residues the original CLS/EOS-id masking selected.
+            # Cached hidden_states are trimmed to valid length, so stripping BOS/EOS leaves exactly the residues.
             batch_arr = torch.zeros((n, MAX_SEQ_LEN, ESM_DIM), dtype=torch.float32, device=self.device)
             batch_mask = torch.zeros((n, MAX_SEQ_LEN), dtype=torch.float32, device=self.device)
             for row, embedding in enumerate(embeddings):
@@ -406,8 +394,7 @@ class MICPredictorEnsemble:
         organism: str,
         feature_extractor: FeatureExtractor,
     ) -> float:
-        """Predicted log10(MIC, uM) against `organism`, averaged over the
-        3-model ensemble. Convert with MIC_uM = 10 ** result."""
+        """Predicted log10(MIC, uM) against `organism`, averaged over the ensemble; MIC_uM = 10 ** result."""
         _validate_sequence(sequence)
         _validate_organism(organism)
         self._load()
@@ -423,8 +410,7 @@ class MICPredictorEnsemble:
         organism: str,
         feature_extractor: FeatureExtractor,
     ) -> list[float]:
-        """Batched predict_log_mic: one ESM2 forward pass for the whole batch,
-        same genome vector (per `organism`) applied to every row."""
+        """Batched predict_log_mic: one ESM2 forward pass, with the same genome vector applied to every row."""
         for i, sequence in enumerate(sequences):
             try:
                 _validate_sequence(sequence)

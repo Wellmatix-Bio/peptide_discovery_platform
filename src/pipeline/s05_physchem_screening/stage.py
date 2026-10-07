@@ -49,8 +49,7 @@ if str(MODEL_STORE_DIR) not in sys.path:
 from model_store.solubility_predictor_v1 import SolubilityPredictor  # noqa: E402
 from model_store.aggregation_predictor_v1 import AggregationPredictor  # noqa: E402
 
-# Default solvent for the solubility model when no delivery-vehicle-specific solvent is
-# configured: closest bundled match to physiological/wound-fluid conditions (aqueous, pH 7.4).
+# Default solubility solvent: aqueous pH 7.4, closest to wound-fluid conditions.
 DEFAULT_SOLUBILITY_SOLVENT = "0.1 M PBS"
 
 # AggregationPredictor requires len(sequence) >= 5 (QSO/SOCN/PAAC/APAAC lag requirement).
@@ -76,8 +75,7 @@ def _get_aggregation_model() -> AggregationPredictor:
 
 _SS_CLASSES = {0: "C", 1: "H", 2: "E"}  # coil, helix, strand -- s4pred's output order
 
-# Dominant fold each desired function mechanistically depends on; used to flag
-# a fold prediction that contradicts the candidate's intended mechanism.
+# Dominant fold each desired function depends on, used to flag contradicting fold predictions.
 FUNCTION_EXPECTED_FOLD = {
     "antimicrobial action": {"H"},  # amphipathic helix drives membrane disruption
     "cell proliferation/migration": {"H", "C"},
@@ -86,8 +84,7 @@ FUNCTION_EXPECTED_FOLD = {
     "collagen synthesis": {"C", "E"},  # extended/coil, not a folded globular domain
 }
 
-# Default filter thresholds (screening table). Override per-run via
-# StageConfig.params — every key here is read with config.params.get(key, default).
+# Default filter thresholds, overridable per run via config.params.get(key, default).
 DEFAULT_THRESHOLDS = {
     "molecular_weight_reject_max": 5000.0,  # Da; >4-5 kDa flagged for delivery/synthesis
     "net_charge_flag_min": -5.0,
@@ -161,8 +158,7 @@ class Stage5(CandidateStage):
         max_length = ctx.brief.max_length
 
         feature_extractor = ctx.feature_extractor
-        # Warm the shared ESM2 cache once for the whole stage instead of
-        # one embedding per candidate inside compute_solubility below.
+        # Warm the shared ESM2 cache once for the whole stage.
         sequences = [
             candidate.sequence for candidate in candidates if candidate.sequence
         ]
@@ -220,9 +216,7 @@ class Stage5(CandidateStage):
 
         return survivors
 
-    # ------------------------------------------------------------------
-    # Individual attribute computations — one method each.
-    # ------------------------------------------------------------------
+    # Individual attribute computations, one method each.
 
     def compute_molecular_weight(self, sequence: str) -> float:
         """Monoisotopic-free average molecular weight in Daltons (modlAMP GlobalDescriptor)."""
@@ -341,11 +335,7 @@ class Stage5(CandidateStage):
     def compute_secondary_structure_consistency(
         self, sequence: str, desired_functions: list[str], config_params: dict
     ) -> dict:
-        """s4pred secondary-structure screen: flags low-confidence/ambiguous folds and folds inconsistent with the candidate's intended mechanism.
-
-        Returns `available: False` with the reason when s4pred is not installed, rather than a
-        verdict. A screen that did not run is reported as not run -- never as a pass.
-        """
+        """s4pred secondary-structure screen; returns `available: False` with a reason when s4pred is missing, never a pass."""
         if not S4PRED_AVAILABLE:
             return {"available": False, "reason": S4PRED_UNAVAILABLE_REASON}
         t = {
@@ -403,18 +393,13 @@ class Stage5(CandidateStage):
         feature_extractor,
         solvent: str = DEFAULT_SOLUBILITY_SOLVENT,
     ) -> dict:
-        """P(soluble) from solubility_predictor_v1 (XGBoost over ESM2 + solvent descriptors).
-        `solvent` defaults to a physiological/wound-fluid-like aqueous buffer since the brief's
-        delivery_system is free text, not one of the model's 7 trained-on lab solvents.
-        """
+        """P(soluble) from solubility_predictor_v1; `solvent` defaults to a physiological aqueous buffer."""
         model = _get_solubility_model()
         score = model.predict_proba(sequence, solvent, feature_extractor)
         return {"score": score, "solvent": solvent, "status": "ok"}
 
     def compute_aggregation_tendency(self, sequence: str, feature_extractor) -> dict:
-        """Aggregation-propensity probability from aggregation_predictor_v1 (XGBoost over
-        AAindex1/biopython/propy descriptors). Below AGGREGATION_MIN_LENGTH the model's
-        feature extraction (QSO/SOCN/PAAC/APAAC lag) is undefined, so it's skipped."""
+        """Aggregation-propensity probability from aggregation_predictor_v1; skipped below AGGREGATION_MIN_LENGTH."""
         if len(sequence) < AGGREGATION_MIN_LENGTH:
             return {
                 "score": None,
@@ -437,12 +422,7 @@ class Stage5(CandidateStage):
     def compute_screening_verdict(
         self, sequence: str, predictions: dict, config_params: dict, max_length: int
     ) -> dict:
-        """Applies the Stage 5 filter table's thresholds to this candidate's predictions.
-
-        Returns a per-property reject/flag/pass verdict plus an overall status:
-        "reject" if any property rejects, else "flag" if any property flags, else "pass".
-        Thresholds default to DEFAULT_THRESHOLDS and are overridable via config params.
-        """
+        """Applies the Stage 5 thresholds (overridable via config params) to give a per-property verdict and an overall reject/flag/pass."""
         t = {
             **DEFAULT_THRESHOLDS,
             **{k: v for k, v in config_params.items() if k in DEFAULT_THRESHOLDS},
@@ -491,9 +471,7 @@ class Stage5(CandidateStage):
             else "pass"
         )
 
-        # A score of None means the model did not run -- too short for it, or an optional
-        # dependency absent. It is recorded as not screened, which rolls up as a flag below.
-        # Reading None as a pass is the mistake this rule exists to prevent; see CONTRIBUTING.md.
+        # A None score means the model did not run; it is recorded as not screened, which rolls up as a flag.
         solubility_score = predictions["solubility"]["score"]
         if solubility_score is None:
             properties["solubility"] = "not_screened"
@@ -510,11 +488,7 @@ class Stage5(CandidateStage):
         else:
             properties["aggregation_tendency"] = "pass"
 
-        # s4pred is optional and GPL-3.0 (docs/LICENSING.md). When it is absent the screen returns
-        # {"available": False, "reason": ...} and carries NO "flag" key, so reading ["flag"]
-        # unconditionally raised KeyError('flag') and took the whole stage down -- on every
-        # candidate, in the default configuration, since s4pred does not resolve from a fresh
-        # clone. Absent is now "not screened", which is what it is.
+        # Absent s4pred returns {"available": False} with no "flag" key, which is "not screened".
         secondary_structure = predictions["secondary_structure_consistency"]
         if not secondary_structure.get("available", True):
             properties["secondary_structure"] = "not_screened"
@@ -550,8 +524,7 @@ class Stage5(CandidateStage):
         if "reject" in properties.values():
             overall = "reject"
         elif "flag" in properties.values() or "not_screened" in properties.values():
-            # An unrun screen makes the whole verdict a flag, never a pass. It does not reject:
-            # nothing was measured against this candidate, so there is no finding to reject it on.
+            # An unrun screen makes the verdict a flag, never a pass or a reject.
             overall = "flag"
         else:
             overall = "pass"

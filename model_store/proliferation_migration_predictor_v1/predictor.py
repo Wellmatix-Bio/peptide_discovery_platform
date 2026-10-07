@@ -120,9 +120,7 @@ def featurize(seq: str) -> dict:
 
 
 class ProliferationMigrationPredictor:
-    """Lazy-loaded pair of VotingClassifier (RF + XGBoost + scaled LogReg) ensembles.
-    Returns dominant-mode probabilities for migration and proliferation. See README.md.
-    """
+    """Lazy-loaded pair of VotingClassifier ensembles returning dominant-mode migration and proliferation probabilities"""
 
     def __init__(self, model_dir: Path = MODEL_DIR):
         self.model_dir = Path(model_dir)

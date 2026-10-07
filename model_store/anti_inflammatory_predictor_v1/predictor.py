@@ -35,9 +35,10 @@ def _validate_sequence(sequence: str) -> None:
         )
 
 
-def encode_sequence(sequence: str, max_len: int = SEQ_LEN, k_values=K_VALUES) -> torch.Tensor:
-    """Fused one-hot (k=1) + multi-hot (k=2) + multi-hot (k=3) sliding-window encoding.
-    Sequences longer than max_len are truncated; shorter ones are zero-padded on the right."""
+def encode_sequence(
+    sequence: str, max_len: int = SEQ_LEN, k_values=K_VALUES
+) -> torch.Tensor:
+    """Fused one-hot (k=1) + multi-hot (k=2, k=3) sliding-window encoding; truncated to max_len, zero-padded on the right."""
     seq = sequence[:max_len]
     length = len(seq)
 
@@ -60,7 +61,9 @@ def encode_sequence(sequence: str, max_len: int = SEQ_LEN, k_values=K_VALUES) ->
 
 
 def encode_batch(sequences, max_len: int = SEQ_LEN, k_values=K_VALUES) -> torch.Tensor:
-    return torch.stack([encode_sequence(s, max_len, k_values) for s in sequences], dim=0)
+    return torch.stack(
+        [encode_sequence(s, max_len, k_values) for s in sequences], dim=0
+    )
 
 
 class Encoder(nn.Module):
@@ -141,7 +144,12 @@ def reparameterize(mu: torch.Tensor, logvar: torch.Tensor) -> torch.Tensor:
 class ClassificationHead(nn.Module):
     """Two fully connected layers, applied to latent features. Softmax applied by the caller."""
 
-    def __init__(self, latent_dim: int, hidden_dim: int = CLS_HIDDEN_DIM, num_classes: int = NUM_CLASSES):
+    def __init__(
+        self,
+        latent_dim: int,
+        hidden_dim: int = CLS_HIDDEN_DIM,
+        num_classes: int = NUM_CLASSES,
+    ):
         super().__init__()
         self.fc1 = nn.Linear(latent_dim, hidden_dim)
         self.fc2 = nn.Linear(hidden_dim, num_classes)
@@ -155,8 +163,14 @@ class ClassificationHead(nn.Module):
 class DACAIPs(nn.Module):
     """Deep variational Autoencoder + Contrastive learning for anti-inflammatory peptide identification."""
 
-    def __init__(self, seq_len: int = SEQ_LEN, in_channels: int = NUM_AMINO_ACIDS * 3,
-                 latent_dim: int = LATENT_DIM, cls_hidden_dim: int = CLS_HIDDEN_DIM, num_classes: int = NUM_CLASSES):
+    def __init__(
+        self,
+        seq_len: int = SEQ_LEN,
+        in_channels: int = NUM_AMINO_ACIDS * 3,
+        latent_dim: int = LATENT_DIM,
+        cls_hidden_dim: int = CLS_HIDDEN_DIM,
+        num_classes: int = NUM_CLASSES,
+    ):
         super().__init__()
         self.encoder = Encoder(in_channels, seq_len, latent_dim)
         self.decoder = Decoder(latent_dim, self.encoder.flat_dim, in_channels, seq_len)
@@ -182,9 +196,7 @@ class DACAIPs(nn.Module):
 
 
 class AntiInflammatoryPredictor:
-    """Lazy-loaded DAC-AIPs classifier. Returns the calibrated anti-inflammatory
-    class probability in [0, 1] (softmax over the 2-class head, positive class).
-    See README.md for architecture and provenance details."""
+    """Lazy-loaded classifier returning the calibrated anti-inflammatory probability"""
 
     def __init__(self, model_dir: Path = MODEL_DIR):
         self.model_dir = Path(model_dir)
@@ -196,7 +208,9 @@ class AntiInflammatoryPredictor:
         sync_model_weights(CODE_DIR)
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         checkpoint_path = self.model_dir / "dac_aips_final.pt"
-        checkpoint = torch.load(checkpoint_path, map_location=self.device, weights_only=False)
+        checkpoint = torch.load(
+            checkpoint_path, map_location=self.device, weights_only=False
+        )
         self.config = checkpoint["config"]
         self.model = DACAIPs(seq_len=int(self.config["seq_len"])).to(self.device)
         self.model.load_state_dict(checkpoint["model_state"])
@@ -206,7 +220,9 @@ class AntiInflammatoryPredictor:
     def predict_proba(self, sequence: str) -> float:
         _validate_sequence(sequence)
         self._load()
-        x = encode_batch([sequence], max_len=int(self.config["seq_len"])).to(self.device)
+        x = encode_batch([sequence], max_len=int(self.config["seq_len"])).to(
+            self.device
+        )
         with torch.no_grad():
             logits = self.model(x)["logits"]
             probs = torch.softmax(logits, dim=1)[:, 1]

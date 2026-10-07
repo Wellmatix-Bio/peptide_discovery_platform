@@ -1,13 +1,4 @@
-# Stage 11: Multi-Objective Ranking.
-#
-# Scores and orders candidates; never filters them. Ten modules, each with one
-# model score used as-is (no rescaling against the candidate pool, so a score
-# never changes with the batch). Objective modules are weighted from the brief
-# by counting references and wound-context implications (N_k); always-on
-# modules get the average of the objectives' N_k and are the only ones that carry Stage 5 flags,
-# which are deducted from the module score. A missing score stays missing and
-# is never treated as zero. No ML here. MVP scope: no formulation/delivery
-# (Stage 10), novelty/IP, or commercial feasibility.
+# Stage 11: Multi-Objective Ranking; scores and orders candidates, never filters them.
 from __future__ import annotations
 
 import math
@@ -47,8 +38,7 @@ MODULE_NAMES: tuple[ModuleName, ...] = (
     "synthesis_feasibility",
     "mechanistic_confidence",
 )
-# "objective": N_k comes from the brief. "always_on": N_k is the average of the
-# objectives' N_k, and it carries flags.
+# "objective": N_k comes from the brief. "always_on": N_k is the objectives' average, and it carries flags.
 ModuleGroup = Literal["objective", "always_on"]
 
 Finite = Annotated[float, Field(strict=True, allow_inf_nan=False)]
@@ -60,24 +50,18 @@ class StrictModel(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
 
-# ----------------------------------------------------------------------
 # Input and result models.
-# ----------------------------------------------------------------------
 
 
 class ImmuneInputs(StrictModel):
-    """The model outputs the immunomodulation module combines: the NF-kB and
-    cytokine/macrophage pathway probabilities (Stage 7). None means missing."""
+    """The pathway probabilities the immunomodulation module combines; None means missing."""
 
     nfkb: Finite | None = None
     cytokine: Finite | None = None
 
 
 class RankingInput(StrictModel):
-    """One candidate's Stage 11 input. `measurements` holds each module's raw
-    model score; None or a missing key means missing. `immune_inputs` feeds the
-    immunomodulation module, whose score is computed from several outputs.
-    `flag_values` holds the raw value behind each flag."""
+    """One candidate's Stage 11 input: raw module scores, immunomodulation inputs and flag values; None or missing means missing."""
 
     candidate_id: str = Field(min_length=1)
     sequence: str = Field(min_length=1)
@@ -94,12 +78,7 @@ class FlagDeductionAudit(StrictModel):
 
 
 class ModuleResult(StrictModel):
-    """Everything about one module for one candidate.
-
-    score = max(0, normalized_score - total_deduction). nominal_weight is the
-    weight before missing-evidence renormalization (0 for a module the brief
-    does not activate); weight is after it (0 for a missing or inactive
-    module); contribution = weight * score."""
+    """Everything about one module for one candidate; score = max(0, normalized_score - total_deduction)."""
 
     group: ModuleGroup
     activated: bool
@@ -120,9 +99,7 @@ class ModuleResult(StrictModel):
 
 
 class RankingResult(StrictModel):
-    """One candidate's full Stage 11 output: every input, intermediate, and
-    final value needed to reproduce or audit the ranking decision without
-    re-running anything."""
+    """One candidate's full Stage 11 output, with every value needed to audit the ranking."""
 
     candidate_id: str
     sequence: str
@@ -145,17 +122,11 @@ class BatchResult(StrictModel):
     insufficient_evidence_candidates: list[RankingResult]
 
 
-# ----------------------------------------------------------------------
-# Config: biological policy, kept separate from the scoring/weighting logic
-# below so it can be edited without touching code.
-# ----------------------------------------------------------------------
+# Config: biological policy, separate from the scoring logic.
 
 
 class NormalizerConfig(StrictModel):
-    """A ScoreNormalizer's configuration. "probability": the raw value is
-    already [0,1], higher-is-better unless flipped. "linear": maps fixed
-    [lower, upper] -> [0,1] first -- for outputs that aren't natively [0,1].
-    Bounds are fixed config, never derived from the candidate pool."""
+    """A ScoreNormalizer's config: "probability" is already [0,1]; "linear" maps fixed [lower, upper] to [0,1]."""
 
     kind: Literal["probability", "linear"] = "probability"
     lower: Finite | None = None
@@ -183,9 +154,7 @@ def _validate_source_path(path: str) -> None:
 
 
 class Measurement(StrictModel):
-    """A module's score: a literal dot-path lookup (relative to
-    Candidate.predictions), no implicit composites and no derivation, then
-    normalized to [0, 1] with higher = better."""
+    """A module's score: a dot-path lookup into Candidate.predictions, normalized to [0, 1] with higher = better."""
 
     source: str
     normalizer: NormalizerConfig = Field(default_factory=NormalizerConfig)
@@ -197,16 +166,7 @@ class Measurement(StrictModel):
 
 
 class ImmuneAlignment(StrictModel):
-    """The immunomodulation measurement, computed from the NF-kB and cytokine pathway probabilities:
-
-        d_NFkB = 1 - 2 * p_NFkB, d_cyto = 1 - 2 * p_cytokine   (+1 inhibitor / anti-inflammatory, -1 activator / pro-inflammatory)
-        d      = w * d_NFkB + (1 - w) * d_cyto
-        d*     = minimum of `context_targets` over the brief's wound-context tags (0 if none match)
-        match  = 1 - |d - d*| / (1 + |d*|)
-        agree  = 1 - |d_NFkB - d_cyto| / 2
-        score  = match * (0.5 + 0.5 * agree)
-
-    A missing pathway probability makes the score missing."""
+    """The immunomodulation measurement from the NF-kB and cytokine pathway probabilities: match to the wound-context target times agreement; missing if either is missing."""
 
     kind: Literal["immune_alignment"] = "immune_alignment"
     nfkb_source: str
@@ -251,8 +211,7 @@ class ImmuneAlignment(StrictModel):
 
 
 class Bound(StrictModel):
-    """One side of a numeric flag: the deduction starts at `line` and is
-    maximal at `limit`. A limit below the line means lower-is-worse."""
+    """One side of a numeric flag: the deduction starts at `line` and is maximal at `limit`."""
 
     line: Finite
     limit: Finite
@@ -265,11 +224,7 @@ class Bound(StrictModel):
 
 
 class FlagRule(StrictModel):
-    """One Stage 5 flag that deducts from its module's score. Numeric flags
-    use `bounds` (two for a two-sided flag, the nearer boundary counts):
-    deduction = clamp((value - line) / (2 * (limit - line)), 0, max_flag_deduction).
-    Categorical flags use `levels` (str(raw) -> deduction). `center` turns
-    the raw value into |raw - center| first."""
+    """One Stage 5 flag that deducts from its module's score, via numeric `bounds` or categorical `levels`."""
 
     source: str
     bounds: list[Bound] = Field(default_factory=list)
@@ -287,10 +242,7 @@ class FlagRule(StrictModel):
 
 
 class ModuleSpec(StrictModel):
-    """One ranking module. Weights are not stored here: every module's weight
-    comes from its N_k (see WeightAllocator). `measurement` None marks a
-    placeholder: no data yet, so it is always missing. Only always-on modules
-    carry `flags`."""
+    """One ranking module; weights come from N_k, a None `measurement` is a placeholder, and only always-on modules carry `flags`."""
 
     group: ModuleGroup
     measurement: Measurement | ImmuneAlignment | None = None
@@ -311,17 +263,7 @@ class BriefLink(StrictModel):
 
 
 class ObjectiveWeightingConfig(StrictModel):
-    """How the brief turns into objective counts N_k.
-
-    - A desired function (`function_links`) adds its link's points to the
-      module, once per module however many of its functions are listed (the
-      largest link counts). Non-empty `pathogens` adds `pathogen_link` the same
-      way (several pathogens are still one reference).
-    - Each wound-context tag (`context_links`) adds its links' points. Tags stack.
-    Every always-on module gets N_k = the average N_k of the objective
-    modules (all of them, zeros included). weight_k = N_k / sum(N) over all
-    modules; an objective with N_k = 0 gets weight 0. An empty brief (or one
-    with no mapped entries) gives every objective N_k = `empty_brief_n_k`."""
+    """How the brief turns into objective counts N_k (function, pathogen and wound-context links)."""
 
     empty_brief_n_k: Finite = 1.0
     pathogen_link: BriefLink
@@ -369,10 +311,7 @@ DEFAULT_OBJECTIVE_WEIGHTING = ObjectiveWeightingConfig(
 
 
 class RankingConfig(StrictModel):
-    """The full Stage 11 policy, constructed in code: the modules (measurement,
-    flags), how the brief gives each module its N_k, and the cap on a single
-    numeric flag's deduction. Validation enforces: exactly the ten modules,
-    unique flag names, brief mappings pointing only to objective modules."""
+    """The full Stage 11 policy: the modules, how the brief gives each its N_k, and the flag deduction cap."""
 
     modules: dict[ModuleName, ModuleSpec]
     objective_weighting: ObjectiveWeightingConfig = DEFAULT_OBJECTIVE_WEIGHTING
@@ -410,10 +349,7 @@ class RankingConfig(StrictModel):
         }
 
 
-# ----------------------------------------------------------------------
-# Built-in policy. Flag lines mirror Stage 5's DEFAULT_THRESHOLDS; limits
-# (where the deduction is maximal) are Stage 11's own.
-# ----------------------------------------------------------------------
+# Built-in policy; flag lines mirror Stage 5's DEFAULT_THRESHOLDS.
 
 # Code-owned ranking policy; run configs cannot override it.
 BUILTIN_RANKING_POLICY = RankingConfig(
@@ -547,10 +483,7 @@ BUILTIN_RANKING_POLICY = RankingConfig(
 )
 
 
-# ----------------------------------------------------------------------
-# ScoreNormalizer: converts a raw measurement into a [0,1] score, higher =
-# better. Missing values pass through untouched.
-# ----------------------------------------------------------------------
+# ScoreNormalizer: raw measurement to a [0,1] score; missing values pass through.
 
 
 class ScoreNormalizer:
@@ -578,14 +511,11 @@ class ScoreNormalizer:
         return score if config.higher_is_better else 1.0 - score
 
 
-# ----------------------------------------------------------------------
-# ApplyFlagDeductions: a module's flags -> its total deduction.
-# ----------------------------------------------------------------------
+# ApplyFlagDeductions: a module's flags to its total deduction.
 
 
 class ApplyFlagDeductions:
-    """Deductions on one module add: score = max(0, normalized - sum). Flags
-    are deducted from the score, never from the weight. Nothing is rejected."""
+    """Deductions add: score = max(0, normalized - sum); nothing is rejected."""
 
     def __init__(self, max_flag_deduction: float):
         self.max_flag_deduction = max_flag_deduction
@@ -609,8 +539,7 @@ class ApplyFlagDeductions:
     def evaluate(
         self, flags: dict[str, FlagRule], flag_values: dict[str, Any]
     ) -> tuple[list[FlagDeductionAudit], float]:
-        """Returns the flags that deducted and the module's total deduction.
-        Flags with no raw value are skipped."""
+        """Returns the flags that deducted and the total deduction; flags with no raw value are skipped."""
         fired: list[FlagDeductionAudit] = []
         for name, rule in flags.items():
             raw = flag_values.get(name)
@@ -625,9 +554,7 @@ class ApplyFlagDeductions:
         return fired, total
 
 
-# ----------------------------------------------------------------------
-# WeightAllocator: brief -> module weights.
-# ----------------------------------------------------------------------
+# WeightAllocator: brief to module weights.
 
 
 class ModuleWeight(StrictModel):
@@ -642,11 +569,7 @@ class ModuleWeight(StrictModel):
 
 
 class WeightAllocator:
-    """Each objective module accumulates N_k from the brief (see
-    ObjectiveWeightingConfig). Each always-on module gets N_k = the average
-    N_k of the objective modules. weight_k = N_k / sum(N) over all modules;
-    N_k = 0 means weight 0 and the module is not activated. If no objective
-    has any N_k (empty brief), every objective gets N_k = empty_brief_n_k."""
+    """Accumulates N_k per module from the brief; weight_k = N_k / sum(N), and N_k = 0 means weight 0."""
 
     def __init__(self, config: RankingConfig):
         self.config = config
@@ -705,11 +628,7 @@ class WeightAllocator:
         }
 
 
-# ----------------------------------------------------------------------
-# CandidateScorer: per-module score, missing-value handling, final score. No
-# gating -- every candidate is scored; only zero usable evidence makes a rank
-# impossible.
-# ----------------------------------------------------------------------
+# CandidateScorer: per-module score, missing-value handling, final score.
 
 
 class CandidateScorer:
@@ -763,9 +682,7 @@ class CandidateScorer:
         evidence_coverage = len(scored) / len(activated)
         status = "insufficient_evidence" if not scored else "ranked"
 
-        # Missing scores are excluded and the remaining weights renormalized,
-        # so each module's contribution is literal and the contributions sum
-        # to final_score exactly.
+        # Missing scores are excluded and the remaining weights renormalized.
         scored_weight = math.fsum(allocation[m].nominal_weight for m in scored)
         modules: dict[ModuleName, ModuleResult] = {}
         for name in MODULE_NAMES:
@@ -825,14 +742,11 @@ class CandidateScorer:
         )
 
 
-# ----------------------------------------------------------------------
-# CandidateRanker: sort + rank + batch summary.
-# ----------------------------------------------------------------------
+# CandidateRanker: sort, rank, batch summary.
 
 
 class CandidateRanker:
-    """Sorts ranked candidates by final_score descending; ties break on higher
-    evidence_coverage, then higher penalized stability, then candidate_id."""
+    """Sorts by final_score descending; ties break on evidence_coverage, then stability, then candidate_id."""
 
     @staticmethod
     def _tie_break_key(result: RankingResult) -> tuple[float, float, float, str]:
@@ -850,9 +764,7 @@ class CandidateRanker:
         return [r.model_copy(update={"rank": i + 1}) for i, r in enumerate(ranked)]
 
 
-# ----------------------------------------------------------------------
-# Stage11Service: orchestrates scoring + ranking for a batch.
-# ----------------------------------------------------------------------
+# Stage11Service: orchestrates scoring and ranking for a batch.
 
 
 class Stage11Service:
@@ -875,9 +787,8 @@ class Stage11Service:
         )
 
 
-# ----------------------------------------------------------------------
-# Pipeline adapter: Candidate.predictions <-> RankingInput/RankingResult.
-# ----------------------------------------------------------------------
+# Pipeline adapter: Candidate.predictions to RankingInput/RankingResult.
+
 
 
 def _read_path(predictions: dict[str, Any], path: str) -> Any:

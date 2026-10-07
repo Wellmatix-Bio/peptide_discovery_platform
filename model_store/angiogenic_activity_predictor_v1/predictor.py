@@ -47,8 +47,7 @@ KD = {
     "V": 4.2,
 }
 
-# Boman (1995) solubility / protein-binding potential scale (kcal/mol), free energy
-# of side-chain transfer from cyclohexane to water. Boman Index = mean over residues.
+# Boman (1995) solubility / protein-binding potential scale (kcal/mol); Boman Index = mean over residues.
 BOMAN = {
     "A": -0.17,
     "R": -0.81,
@@ -102,8 +101,7 @@ FEATURE_COLS = [
     "hydrophobic_fraction",
 ]
 
-# MLPNet/TorchMLPClassifier must stay importable under this module path — the
-# .joblib artifact was pickled against these exact class definitions.
+# MLPNet/TorchMLPClassifier must stay importable here; the .joblib was pickled against these classes.
 MLP_HIDDEN1 = 32
 MLP_HIDDEN2 = 16
 
@@ -166,8 +164,7 @@ def featurize(seq: str) -> dict:
 
 
 def esm_embedding_cached(sequence: str, feature_extractor: FeatureExtractor) -> np.ndarray:
-    # mean-pool cached per-token hidden states, excluding BOS/EOS (positions 0
-    # and -1 of the cache's already-trimmed tensor), matching source pipeline.ipynb
+    # Mean-pool cached hidden states excluding BOS/EOS, matching the source pipeline.ipynb.
     embedding = feature_extractor.get_esm2_embedding(sequence)
     return embedding.hidden_states[1:-1].mean(axis=0)
 
@@ -193,9 +190,7 @@ class MLPNet(nn.Module):
 
 
 class TorchMLPClassifier(BaseEstimator, ClassifierMixin):
-    """sklearn-compatible wrapper around MLPNet. Applies the same ESM2-block PCA
-    reduction as the SVM/RF pipelines (via the fitted esm_pca_/scaler_ attributes
-    restored from the pickle) before feeding the network."""
+    """sklearn-compatible wrapper around MLPNet applying the same ESM2-block PCA reduction as the SVM/RF pipelines."""
 
     def __init__(
         self,
@@ -229,9 +224,7 @@ class TorchMLPClassifier(BaseEstimator, ClassifierMixin):
 
 
 class AngiogenicActivityPredictor:
-    """Lazy-loaded 2-model ensemble (SVM, MLP) over 16 physicochemical
-    descriptors + PCA-reduced ESM2 embeddings. Returns per-model and averaged
-    P(angiogenic-dominant) in [0, 1]. See README.md for architecture and provenance."""
+    """Lazy-loaded SVM + MLP ensemble over 16 physicochemical descriptors and PCA-reduced ESM2 embeddings returning P(angiogenic-dominant); see README.md."""
 
     def __init__(self, model_dir: Path = MODEL_DIR):
         self.model_dir = Path(model_dir)
@@ -242,10 +235,8 @@ class AngiogenicActivityPredictor:
             return
         sync_model_weights(CODE_DIR)
         self.svm_model = joblib.load(self.model_dir / "production_svm.joblib")
-        # production_mlp.joblib was pickled from inside the training notebook,
-        # where TorchMLPClassifier/MLPNet are top-level __main__ classes -- the
-        # pickle records that module path, so unpickling anywhere else needs
-        # these names aliased into sys.modules["__main__"] first.
+        # The joblib was pickled from a notebook's __main__, so those names must be aliased into sys.modules["__main__"] first.
+        
         main_module = sys.modules["__main__"]
         main_module.TorchMLPClassifier = TorchMLPClassifier
         main_module.MLPNet = MLPNet

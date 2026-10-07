@@ -14,9 +14,7 @@ from google.api_core.exceptions import GoogleAPICallError, NotFound
 from google.auth.exceptions import GoogleAuthError
 from pydantic import BaseModel, ConfigDict, Field, config
 from common import storage
-# Imported for its import-time side effect only: common/env.py loads .env into
-# os.environ, which is what every required() call below reads. Nothing references
-# the module by name any more -- do not remove it as unused.
+# Imported for its side effect: common/env.py loads .env into os.environ; do not remove as unused.
 from common import env  # noqa: F401
 from schemas.brief import Brief
 from schemas.e2e_config import validate_job_config
@@ -413,9 +411,7 @@ def _candidate_response(candidate: dict) -> CandidateResponse:
 
 
 def _component_stats(candidates: list[dict]) -> dict[str, ComponentStats]:
-    """Mean/median/min/max per ranking module over ranked candidates' module
-    `score` (after flag deductions) -- insufficient_evidence candidates and
-    modules without a score are excluded rather than treated as zero."""
+    """Mean/median/min/max per ranking module over ranked candidates' post-deduction `score`; missing scores are excluded."""
     values_by_component: dict[str, list[float]] = {}
     for candidate in candidates:
         ranking = candidate.get("predictions", {}).get("ranking")
@@ -526,9 +522,7 @@ def cancel_job(job_id: str):
     return {"job_id": name, "status": "cancelling"}
 
 
-#: model_store/, which holds each predictor's CODE. Weights are not here: they live in
-#: model_store/model_weights/<name>/ on the WORKER, synced from VERTEX_MODEL_STORE by
-#: common/model_sync.py on first use. See the manifest endpoint's own caveat.
+#: model_store/ holds each predictor's code; weights live on the worker, synced from VERTEX_MODEL_STORE by common/model_sync.py.
 MODEL_STORE_DIR = Path(__file__).resolve().parents[3] / "model_store"
 
 

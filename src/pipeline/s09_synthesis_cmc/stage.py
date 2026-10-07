@@ -52,10 +52,7 @@ NON_STANDARD_BUILDING_BLOCKS = {
 DIFFICULTY_MEDIUM_MIN_SCORE = 2
 DIFFICULTY_HIGH_MIN_SCORE = 5
 
-# Hard gate: difficulty classes rejected outright regardless of other scores
-# (CLAUDE.md: hard thresholds override score). Everything else here --
-# yield, purification, cost, storage, scale-up -- is a soft penalty carried
-# through to Stage 11, never a rejection reason on its own.
+# Hard gate: difficulty classes rejected outright; everything else is a soft penalty carried to Stage 11.
 REJECTED_DIFFICULTY_CLASSES = {"high"}
 
 FINAL_PURITY_BASE_RECOVERY = 0.95  # fraction of crude purity retained through purification, routine case
@@ -79,15 +76,10 @@ class Stage9(CandidateStage):
         config: StageConfig,
         ctx: RunContext,
     ) -> list[Candidate]:
-        """Rule-based synthesis/CMC feasibility assessment per candidate,
-        then rejects candidates that are effectively unsynthesizable (hard
-        gate on difficulty_class). Yield, purification, cost, storage, and
-        scale-up risk are preserved as soft-penalty scores for Stage 11,
-        never rejection reasons on their own."""
+        """Rule-based synthesis/CMC feasibility per candidate, rejecting the effectively unsynthesizable via the difficulty_class hard gate."""
         model = build_model()
         feature_extractor = ctx.feature_extractor
-        # Warm the shared ESM2 cache once for the whole stage instead of
-        # once per candidate inside compute_ml_feasibility_prior.
+        # Warm the shared ESM2 cache once for the whole stage.
         sequences = [
             candidate.sequence for candidate in candidates if candidate.sequence
         ]
@@ -116,9 +108,8 @@ class Stage9(CandidateStage):
         return survivors
 
     def compute_synthesis_verdict(self, feasibility: dict, config_params: dict) -> dict:
-        """Hard gate on difficulty_class only. Everything else in
-        `feasibility` (cost bands, purity ceiling, penalty drivers) is a soft
-        signal Stage 11 weighs, not a reject condition here."""
+        """Hard gate on difficulty_class only; the rest of `feasibility` is a soft signal for Stage 11."""
+        
         override = config_params.get("rejected_difficulty_classes")
         rejected_classes = set(override) if override is not None else REJECTED_DIFFICULTY_CLASSES
 

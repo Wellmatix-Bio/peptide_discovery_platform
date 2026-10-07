@@ -1,3 +1,3 @@
-from .predictor import ReplicatedHemoPI2Predictor
+from .predictor import ModifiedHemolyticPredictor
 
-__all__ = ["ReplicatedHemoPI2Predictor"]
+__all__ = ["ModifiedHemolyticPredictor"]

@@ -19,9 +19,7 @@ logger = get_logger(__name__)
 def _build_route_a(
     candidates: list[Candidate], config: StageConfig, ctx: RunContext
 ) -> Stage4Route:
-    """One GA run per incoming candidate, all sharing the same GA parameters
-    (route_a_ga_params) and hard-reject constraints (route_a_constraint_config)
-    — the seed sequence is the only thing that varies per candidate."""
+    """One GA run per incoming candidate, sharing route_a_ga_params and route_a_constraint_config; only the seed varies."""
     shared_params = {
         "min_length": ctx.brief.min_length,
         "max_length": ctx.brief.max_length,
@@ -61,8 +59,7 @@ class Stage4(CandidateStage):
     name = "s04_candidate_generation"
     produces = {"sequence"}
 
-    #: route_key -> factory building a configured Stage4Route from this
-    #: stage's (candidates, config, ctx). Populated as each route is implemented.
+    #: route_key -> factory building a configured Stage4Route from (candidates, config, ctx).
     routes: dict[
         str, Callable[[list[Candidate], StageConfig, RunContext], Stage4Route]
     ] = {

@@ -42,11 +42,7 @@ logger = get_logger(__name__)
 
 
 class StageError(RuntimeError):
-    """Raised when a stage cannot execute.
-
-    Carries `stage` and `cause` so callers (and the audit log) can tell which
-    stage failed and why without re-parsing the message string.
-    """
+    """Raised when a stage cannot execute; carries `stage` and `cause` for the audit log."""
 
     def __init__(
         self, stage: str, reason: str, *, cause: Exception | None = None
@@ -71,11 +67,7 @@ class PreconditionError(StageError):
 
 @dataclass(frozen=True)
 class RunContext:
-    """Shared services handed to every stage.
-
-    Injected rather than imported so stages remain decoupled from global state
-    and can be unit-tested against a fake context.
-    """
+    """Shared services handed to every stage, injected so stages can be tested against a fake context."""
 
     run_id: str
     audit: AuditWriter
@@ -116,13 +108,9 @@ class CandidateStageResult:
 
 
 class Stage(ABC):
-    """Shared identity and contract metadata for both stage kinds.
+    """Shared identity and contract metadata for both stage kinds; subclass `SetupStage` or `CandidateStage`."""
 
-    Not runnable on its own — subclass `SetupStage` or `CandidateStage`.
-    """
-
-    #: Stage identifier, e.g. "s08_safety_developability". Must match the
-    #: key used in run configs.
+    #: Stage identifier, e.g. "s08_safety_developability"; must match the run-config key.
     name: str
 
     #: If False, a run config cannot disable this stage.
@@ -142,13 +130,7 @@ class Stage(ABC):
 
 
 class SetupStage(Stage):
-    """Base class for s01-s03: stages that run before any candidates exist.
-
-    Subclasses must set `name` and implement `run()`. `run()` receives the
-    run config and returns a JSON-serialisable payload — the brief, target
-    definitions, or standardized records that downstream stages read back out
-    of `RunContext`/config, not a candidate list.
-    """
+    """Base class for s01-s03, which run before any candidates exist; `run()` takes the run config and returns a JSON-serialisable payload."""
 
     @abstractmethod
     def run(self, config: StageConfig, ctx: RunContext) -> Any:
@@ -180,17 +162,7 @@ class SetupStage(Stage):
 
 
 class CandidateStage(Stage):
-    """Base class for s04-s14: stages that operate on the candidate list.
-
-    Subclasses must set `name`, `requires`, `produces` and implement `run()`.
-
-    Contract for `run()`:
-      - It MAY add or modify fields on candidates.
-      - It MAY filter candidates out directly, based on its own thresholds.
-        Return only the survivors — `execute()` logs however many were removed.
-      - It MUST populate every field listed in `produces`, or record a warning
-        explaining the omission.
-    """
+    """Base class for s04-s14; `run()` may modify candidates, may filter them out (returning survivors), and must populate every field in `produces` or warn."""
 
     #: Candidate fields that must already be present on input.
     requires: set[str] = set()
@@ -208,10 +180,7 @@ class CandidateStage(Stage):
         """Stage-specific logic. Return the surviving candidates, enriched."""
 
     def models_used(self) -> list[ModelRef]:
-        """Models invoked during the last `run()`, for provenance.
-
-        Override in stages that call registered models.
-        """
+        """Models invoked during the last `run()`, for provenance; override in stages that call registered models."""
         return []
 
     def execute(
@@ -263,16 +232,10 @@ class CandidateStage(Stage):
         )
         return result
 
-    # ------------------------------------------------------------------
     # Contract checks
-    # ------------------------------------------------------------------
 
     def _check_preconditions(self, candidates: Sequence[Candidate]) -> None:
-        """Fail fast if the incoming candidates lack required fields.
-
-        The runner performs the same check statically before any stage runs;
-        this is the per-candidate safety net for data arriving from disk.
-        """
+        """Fail fast if the incoming candidates lack required fields (the per-candidate safety net for data from disk)."""
         if not candidates:
             return
 
@@ -282,9 +245,7 @@ class CandidateStage(Stage):
             raise PreconditionError(self.name, list(missing))
 
     def _check_postconditions(self, candidates: Sequence[Candidate]) -> list[str]:
-        """Warn if declared outputs are missing. Non-fatal by design: a model
-        may legitimately abstain on a given candidate.
-        """
+        """Warn if declared outputs are missing; non-fatal because a model may abstain on a candidate."""
         if not candidates:
             return []
 

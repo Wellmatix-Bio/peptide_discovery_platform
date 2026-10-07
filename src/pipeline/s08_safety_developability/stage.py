@@ -20,19 +20,13 @@ MODEL_STORE_DIR = Path(__file__).resolve().parents[3] / "model_store"
 if str(MODEL_STORE_DIR) not in sys.path:
     sys.path.insert(0, str(MODEL_STORE_DIR))
 
-from model_store.hemolysis_predictor_v1 import ReplicatedHemoPI2Predictor  # noqa: E402
+from model_store.hemolysis_predictor_v1 import ModifiedHemolyticPredictor  # noqa: E402
 from model_store.cytotoxicity_predictor_v1 import CytotoxicityClassifier  # noqa: E402
 from model_store.solubility_predictor_v1 import SolubilityPredictor  # noqa: E402
 from model_store.aggregation_predictor_v1 import AggregationPredictor  # noqa: E402
 from model_store.cleavage_site_predictor_v1 import CleavageSitePredictor  # noqa: E402
 
-# Reject thresholds. Same "hard threshold overrides score" convention as the
-# rest of the pipeline (CLAUDE.md) -- any one of these failing rejects the
-# candidate at Stage 8 regardless of its other scores.
-# pHC50 = -log10(HC50 in M); HIGH pHC50 = hemolytic at LOW concentration = worse
-# (see routeA.py's _hemolysis_safety_factor, which has always used this direction
-# correctly: "-> 1 as pHC50 falls (safer), -> 0 as pHC50 rises (more hemolytic)").
-# 4.0 = HemoPI2's own HC50 < 100 uM "Hemolytic" cutoff, converted: 6 - log10(100) = 4.0.
+# Hard reject thresholds; any one failing rejects the candidate (high pHC50 = hemolytic at low concentration = worse).
 HEMOLYSIS_PHC50_REJECT_MAX = 4.0
 CYTOTOXICITY_REJECT_MAX = 0.5  # P(cytotoxic)
 AGGREGATION_REJECT_MAX = 0.7  # P(aggregation-prone)
@@ -71,15 +65,12 @@ WOUND_PROTEASE_ACCESSIONS = {
     "P34960",
     "P79227",
     "Q63341",
-    # Neutrophil elastase, true neutrophil serine protease (EC 3.4.21.37) --
-    # NOT the "Elastase-1/-2 precursor" entries, which are pancreatic.
+    # Neutrophil elastase (EC 3.4.21.37), not the pancreatic Elastase-1/-2 entries.
     "Q3UP87",
     # Cathepsin G, neutrophil serine protease released with NETs (EC 3.4.21.20)
     "P17977",
     "P28293",
-    # Plasmin/plasminogen itself, wound-fluid fibrinolysis (EC 3.4.21.7) --
-    # NOT the uPA/tPA/salivary plasminogen-activator entries (EC
-    # 3.4.21.68/73), which activate plasmin but aren't the protease itself.
+    # Plasmin itself (EC 3.4.21.7), not the plasminogen activators.
     "O18783",
     "P06867",
     "P12545",
@@ -87,27 +78,21 @@ WOUND_PROTEASE_ACCESSIONS = {
     "Q01177",
     "Q29485",
     "Q5R8X6",
-    # Bacterial secreted protease: S. epidermidis extracellular elastase
-    # (M04 family). No Pseudomonas-secreted protease is in this panel.
+    # S. epidermidis extracellular elastase (M04); no Pseudomonas protease is in the panel.
     "P0C0Q4",
 }
 
 # Cleavage stability score = exp(-CLEAVAGE_DECAY_RATE * weighted_site_count).
-# Chosen so a single fully-exposed, high-confidence cut site (weight ~1.0)
-# costs a moderate stability penalty, and sites compound geometrically.
 CLEAVAGE_DECAY_RATE = 0.5
 
-# Fallback for when Stage 7 did not run. Stage 7 IS implemented and populates
-# candidate.predictions["structure"] with real Ca coordinates, a distance matrix and
-# per-residue exposure; both accessors below prefer it and fall back only when the key is
-# absent, which happens when Stage 7 is disabled in the run config.
+# Fallback used only when Stage 7 is disabled and its structure predictions are absent.
 IDEALIZED_CA_STEP_ANGSTROM = 3.8  # extended-chain Ca-Ca spacing along backbone
 
 
-def _get_hemolysis_v1_model() -> ReplicatedHemoPI2Predictor:
+def _get_hemolysis_v1_model() -> ModifiedHemolyticPredictor:
     global _hemolysis_v1_model
     if _hemolysis_v1_model is None:
-        _hemolysis_v1_model = ReplicatedHemoPI2Predictor()
+        _hemolysis_v1_model = ModifiedHemolyticPredictor()
     return _hemolysis_v1_model
 
 
@@ -139,7 +124,7 @@ def _get_cleavage_model() -> CleavageSitePredictor:
     return _cleavage_model
 
 
-_hemolysis_v1_model: ReplicatedHemoPI2Predictor | None = None
+_hemolysis_v1_model: ModifiedHemolyticPredictor | None = None
 _cytotoxicity_model: CytotoxicityClassifier | None = None
 _solubility_model: SolubilityPredictor | None = None
 _aggregation_model: AggregationPredictor | None = None
@@ -150,7 +135,7 @@ _cleavage_model: CleavageSitePredictor | None = None
 class Stage8Models:
     """Bundle returned by build_models(): every model this stage depends on, lazy-loaded on first use of each."""
 
-    hemolysis: ReplicatedHemoPI2Predictor
+    hemolysis: ModifiedHemolyticPredictor
     cytotoxicity: CytotoxicityClassifier
     solubility: SolubilityPredictor
     aggregation: AggregationPredictor
@@ -158,12 +143,7 @@ class Stage8Models:
 
 
 def build_models(config_params: dict) -> Stage8Models:
-    """Factory: import and initialize every Stage 8 model.
-
-    Each predictor lazy-loads its own weights on first predict() call, so
-    construction here is cheap; this just fixes the one place that knows how
-    to build each of them.
-    """
+    """Factory: import and initialize every Stage 8 model (each lazy-loads its weights on first predict())."""
     return Stage8Models(
         hemolysis=_get_hemolysis_v1_model(),
         cytotoxicity=_get_cytotoxicity_model(),
@@ -189,17 +169,13 @@ class Stage8(CandidateStage):
         config: StageConfig,
         ctx: RunContext,
     ) -> list[Candidate]:
-        """Scores hemolysis, cytotoxicity, solubility, aggregation, and
-        cleavage stability, then rejects candidates that fail any hard
-        safety/developability threshold (CLAUDE.md: hard thresholds override
-        score, applied throughout -- not as a late add-on)."""
+        """Scores hemolysis, cytotoxicity, solubility, aggregation and cleavage stability, then rejects candidates failing any hard threshold."""
         models = build_models(config.params)
         solvent = config.params.get("solubility_solvent", "Ultrapure water")
         # DRAMP_aggregate -> maps to mammalian cell
         cell_type = config.params.get("cytotoxicity_cell_type", "DRAMP_aggregate")
 
-        # Compute hemolysis for all candidates in one batched prediction,
-        # loading the model once for the whole stage.
+        # Batch hemolysis so the model loads once for the stage.
         sequences: list[str] = [
             candidate.sequence for candidate in candidates if candidate.sequence
         ]
@@ -207,8 +183,7 @@ class Stage8(CandidateStage):
             raise ValueError("Stage 8 received a candidate with no sequence")
 
         feature_extractor = ctx.feature_extractor
-        # Warm the shared ESM2 cache once for the whole stage instead of
-        # once per candidate inside compute_cytotoxicity/compute_solubility.
+        # Warm the shared ESM2 cache once for the whole stage.
         ctx.feature_extractor.get_esm2_embedding_batch(sequences)
 
         hemolysis_results = self.compute_hemolysis_batch(
@@ -271,20 +246,15 @@ class Stage8(CandidateStage):
     def release_models(self) -> None:
         release_stage_models(globals(), stage_name=self.name)
 
-    # ------------------------------------------------------------------
     # Individual model computations.
-    # ------------------------------------------------------------------
 
     def compute_hemolysis_batch(
         self,
         sequences: list[str],
-        model: ReplicatedHemoPI2Predictor,
+        model: ModifiedHemolyticPredictor,
         feature_extractor=None,
     ) -> list[dict]:
-        """Predict pHC50 for all candidates in one v1 batch.
-
-        Higher pHC50 means hemolysis at a lower concentration (worse).
-        """
+        """Predict pHC50 for all candidates in one v1 batch (higher = more hemolytic)."""
         if not sequences:
             return []
         phc50_values = model.predict_phc50_batch(sequences, feature_extractor)
@@ -323,24 +293,12 @@ class Stage8(CandidateStage):
         score = model.predict_aggregation(sequence, feature_extractor)
         return {"score": score, "status": "ok"}
 
-    # ------------------------------------------------------------------
     # Cleavage-site stability (steps 3-6).
-    # ------------------------------------------------------------------
 
     def compute_cleavage_stability(
         self, candidate: Candidate, model: CleavageSitePredictor, config_params: dict
     ) -> dict:
-        """Protease-cleavage stability score of a candidate, in (0, 1]; 1.0 = no predicted cleavage sites.
-
-        Predicts cleavage sites for each wound-relevant protease (the allowlist
-        intersected with the model's enzyme panel), using the Stage 7 Ca distance
-        matrix and per-residue exposure. Each site's severity is its cleavage
-        probability times the residue's exposure; the score is
-        exp(-decay_rate * total severity). Stage 8 rejects scores below
-        CLEAVAGE_STABILITY_REJECT_MIN, and Stage 11 uses the score as the stability
-        measurement. Returns score None with status "no_wound_relevant_enzymes_in_panel"
-        when no allowlisted enzyme is in the panel.
-        """
+        """Protease-cleavage stability score in (0, 1] (1.0 = no predicted sites); None if no allowlisted enzyme is in the panel."""
         sequence = candidate.sequence
         distance_matrix = self._get_distance_matrix(candidate)
         exposure_by_position = self._get_exposure_by_position(candidate, len(sequence))
@@ -385,12 +343,7 @@ class Stage8(CandidateStage):
     def _wound_relevant_accessions(
         self, model: CleavageSitePredictor, config_params: dict
     ) -> list[str]:
-        """Restricts the bundled enzyme panel to WOUND_PROTEASE_ACCESSIONS
-        (MMPs active in wound exudate, neutrophil elastase/cathepsin G,
-        plasmin, and the one bundled bacterial secreted protease), intersected
-        with what the panel actually contains. Overridable via
-        config.params["wound_protease_accessions"] for callers that want a
-        different explicit list."""
+        """Restricts the enzyme panel to WOUND_PROTEASE_ACCESSIONS; overridable via config.params["wound_protease_accessions"]."""
         override = config_params.get("wound_protease_accessions")
         allowlist = set(override) if override else WOUND_PROTEASE_ACCESSIONS
 
@@ -398,14 +351,7 @@ class Stage8(CandidateStage):
         return sorted(allowlist & available)
 
     def _get_distance_matrix(self, candidate: Candidate) -> np.ndarray:
-        """Ca-Ca distance matrix for the candidate, from Stage 7's structure
-        prediction, when Stage 7 ran.
-
-        WHEN IT DID NOT, this falls back to an idealized extended chain (Ca spacing
-        IDEALIZED_CA_STEP_ANGSTROM along a straight line), which is structurally wrong because
-        real peptides fold. That keeps the stage runnable with Stage 7 disabled, but any
-        distance-dependent number computed from it describes a straight line, not this peptide.
-        """
+        """Ca-Ca distance matrix from Stage 7, falling back to an idealized straight chain when it did not run."""
         structure = candidate.predictions.get("structure")
         if structure and "ca_distance_matrix" in structure:
             return np.asarray(structure["ca_distance_matrix"], dtype=np.float32)
@@ -417,13 +363,7 @@ class Stage8(CandidateStage):
     def _get_exposure_by_position(
         self, candidate: Candidate, length: int
     ) -> list[float]:
-        """Per-residue exposure/flexibility weight in [0, 1] (1.0 = fully
-        exposed, sites here count fully; 0.0 = fully buried, sites here are
-        ignored), from Stage 7 when it ran.
-
-        WHEN IT DID NOT, every position defaults to neutral weight 1.0, so no site is
-        up- or down-weighted by burial.
-        """
+        """Per-residue exposure weight in [0, 1] from Stage 7, defaulting to 1.0 when it did not run."""
         structure = candidate.predictions.get("structure")
         if structure and "exposure_by_position" in structure:
             exposure = structure["exposure_by_position"]
@@ -435,14 +375,10 @@ class Stage8(CandidateStage):
 
         return [1.0] * length
 
-    # ------------------------------------------------------------------
     # Verdict.
-    # ------------------------------------------------------------------
 
     def compute_safety_verdict(self, predictions: dict, config_params: dict) -> dict:
-        """Applies Stage 8's hard-reject / soft-flag thresholds. Overall is
-        "reject" if any property rejects, else "flag" if any flags, else "pass" --
-        same convention as Stage 5's compute_screening_verdict."""
+        """Applies the hard-reject / soft-flag thresholds: "reject" if any rejects, else "flag" if any flags, else "pass"."""
         t = {
             "hemolysis_phc50_reject_max": config_params.get(
                 "hemolysis_phc50_reject_max", HEMOLYSIS_PHC50_REJECT_MAX
@@ -475,11 +411,7 @@ class Stage8(CandidateStage):
             else "pass"
         )
 
-        # A screen that did not run is NOT a pass. This previously read `else "pass"`, which
-        # meant a null score -- a peptide too short for the model's features, or propy3 absent so
-        # the model could not run at all -- was recorded as having passed the aggregation check.
-        # "not_screened" rolls up as a flag below: the candidate is not silently cleared, and not
-        # killed either, because nothing was actually measured against it.
+        # A screen that did not run is not a pass; "not_screened" rolls up as a flag.
         aggregation = predictions["aggregation_tendency"]
         aggregation_score = aggregation["score"]
         if aggregation_score is None:
@@ -489,10 +421,7 @@ class Stage8(CandidateStage):
         else:
             properties["aggregation_tendency"] = "pass"
 
-        # Same rule as aggregation_tendency above, and it was missed here when that one was
-        # fixed: a null score meant the model did not run, and `is not None and ...` read it as a
-        # pass. cleavage_stability is the worse of the two, since a REJECT threshold that never
-        # ran cleared the candidate on a check nothing performed.
+        # Same rule as aggregation_tendency: a null score means the model did not run.
         solubility_score = predictions["solubility"]["score"]
         if solubility_score is None:
             properties["solubility"] = "not_screened"
@@ -512,8 +441,7 @@ class Stage8(CandidateStage):
         if "reject" in properties.values():
             overall = "reject"
         elif "flag" in properties.values() or "not_screened" in properties.values():
-            # An unrun screen makes the whole verdict a flag, never a pass. It does not reject:
-            # nothing was measured against this candidate, so there is no finding to reject it on.
+            # An unrun screen makes the verdict a flag, never a pass or a reject.
             overall = "flag"
         else:
             overall = "pass"

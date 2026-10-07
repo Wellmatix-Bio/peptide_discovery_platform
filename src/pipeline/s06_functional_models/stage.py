@@ -34,9 +34,7 @@ from model_store.anti_inflammatory_predictor_v1 import (
     AntiInflammatoryPredictor,
 )  # noqa: E402
 
-# MBIC's SVR+RF ensemble was trained on this species vocabulary
-# (model_card.json); an out-of-vocabulary species silently becomes an
-# all-zero one-hot, so only score species this model actually knows about.
+# MBIC's training species vocabulary; an unknown species becomes an all-zero one-hot, so only score known ones.
 MBIC_SUPPORTED_SPECIES = {
     "Acinetobacter baumannii",
     "Candida albicans",
@@ -113,19 +111,12 @@ STAGE6_THRESHOLDS = {
     "max_mbic": {"MRSA": 32.0, "Pseudomonas_aeruginosa": 32.0},
 }
 
-# Threshold keys whose value is itself a dict (per-pathogen) — overriding one
-# of these must merge per-pathogen, not replace the whole dict, or an
-# override of e.g. just MRSA would silently drop every other pathogen's
-# default threshold.
+# Threshold keys holding per-pathogen dicts; overrides merge per pathogen instead of replacing the dict.
 STAGE6_NESTED_THRESHOLD_KEYS = {"max_mic", "max_mbic"}
 
 
 def check_pathogen_vocabulary(pathogens: list[str]) -> dict[str, list[str]]:
-    """Pathogens the brief lists but neither MIC nor MBIC predictor supports.
-    These can never produce a real prediction (compute_mic/compute_mbic skip
-    them, filter_predictions logs them as missing_required_predictions) --
-    surfacing this up front avoids the failure mode where every candidate
-    ends up insufficient_evidence and it's unclear why."""
+    """Pathogens the brief lists that neither MIC nor MBIC supports; they never produce a prediction."""
     normalized_mic = {o.replace(" ", "_") for o in MIC_SUPPORTED_ORGANISMS}
     normalized_mbic = {s.replace(" ", "_") for s in MBIC_SUPPORTED_SPECIES}
     out_of_vocab = {
@@ -138,9 +129,7 @@ def check_pathogen_vocabulary(pathogens: list[str]) -> dict[str, list[str]]:
 
 
 def merge_stage6_thresholds(overrides: dict) -> dict:
-    """STAGE6_THRESHOLDS with `overrides` applied. Per-pathogen keys
-    (max_mic/max_mbic) are merged one pathogen at a time; every other key is
-    a plain top-level replace."""
+    """STAGE6_THRESHOLDS with `overrides` applied; per-pathogen keys merge one pathogen at a time."""
     merged = dict(STAGE6_THRESHOLDS)
     for key, value in overrides.items():
         if key in STAGE6_NESTED_THRESHOLD_KEYS and isinstance(value, dict):
@@ -217,9 +206,7 @@ def filter_predictions(
             value = output.get(field or "value") if isinstance(output, dict) else output
             check(key, value, thresholds.get(f"min_{key}"), reason, metadata=metadata)
 
-    # MIC/MBIC checks disabled: TODO re-enable once mic_predictor_v1 covers
-    # the brief's actual pathogens (MRSA gap)
-    # and mbic thresholds cover every brief pathogen.
+    # MIC/MBIC checks disabled: TODO re-enable once the models cover the brief's pathogens (MRSA gap).
     per_pathogen_checks: list[tuple[str, str, str]] = [
         ("antimicrobial", "mic", "log_mic_um"),
         ("antibiofilm", "mbic", "pmbic"),
@@ -249,11 +236,7 @@ def filter_predictions(
                 metadata=output,
             )
 
-    # Missing predictions (e.g. a pathogen outside the MIC/MBIC model's
-    # vocabulary, see check_pathogen_vocabulary) are surfaced but don't
-    # reject the candidate -- only an actual failed threshold does. Otherwise
-    # a single out-of-vocabulary pathogen like MRSA would silently reject
-    # every candidate regardless of its real predicted properties.
+    # Missing predictions (e.g. out-of-vocabulary pathogens) are surfaced but only a failed threshold rejects.
     status = "rejected" if failed else "insufficient_evidence" if missing else "passed"
     return {
         "status": status,
@@ -287,10 +270,7 @@ class Stage6(CandidateStage):
         survivors = []
 
         feature_extractor = ctx.feature_extractor
-        # Warm the shared ESM2 cache for every candidate in one batched
-        # forward pass, before amp/mic/mbic/angiogenic each ask for it
-        # individually below -- turns 4 separate per-sequence embeddings
-        # into 1 batched one for the whole stage.
+        # Warm the shared ESM2 cache in one batched forward pass for the whole stage.
         sequences = [
             candidate.sequence for candidate in candidates if candidate.sequence
         ]
@@ -346,25 +326,17 @@ class Stage6(CandidateStage):
             ModelRef(name="anti_inflammatory_predictor", version="v1"),
         ]
 
-    # ------------------------------------------------------------------
-    # Individual model computations — one method each.
-    # ------------------------------------------------------------------
+    # Individual model computations, one method each.
 
     def compute_amp_probability(self, sequence: str, feature_extractor) -> float:
-        """P(antimicrobial peptide) from amp_classifier_v1 (5-fold XGBoost +
-        meta-model ensemble over ESM2 + modlAMP descriptors). Supports the
-        antimicrobial-action target function."""
+        """P(antimicrobial peptide) from amp_classifier_v1; supports the antimicrobial-action function."""
         model = _get_amp_model()
         return model.predict_proba(sequence, feature_extractor)
 
     def compute_mic(
         self, sequence: str, pathogens: list[str], feature_extractor
     ) -> dict:
-        """log10(MIC, uM) per pathogen from mic_predictor_v1 (BiLSTM+CNN+RF
-        ensemble), restricted to the model's 3 ATCC reference organisms.
-        `pathogens` outside that vocabulary are skipped, not guessed at; if
-        none of the brief's pathogens match, scores all 3 supported organisms
-        so the prediction isn't silently empty."""
+        """log10(MIC, uM) per pathogen from mic_predictor_v1; unsupported pathogens are skipped, and if none match all 3 supported organisms are scored."""
         model = _get_mic_model()
         organisms = [
             p for p in pathogens if p in MIC_SUPPORTED_ORGANISMS
@@ -378,9 +350,7 @@ class Stage6(CandidateStage):
     def compute_mbic(
         self, sequence: str, pathogens: list[str], feature_extractor
     ) -> dict:
-        """pMBIC (biofilm-inhibition potency) per pathogen from mbic_predictor_v1
-        (SVR over ESM2 PCA + modlAMP physchem + species one-hot). Same
-        vocabulary-restriction/fallback behavior as compute_mic."""
+        """pMBIC (biofilm-inhibition potency) per pathogen from mbic_predictor_v1; same vocabulary fallback as compute_mic."""
         model = _get_mbic_model()
         species_list = [p for p in pathogens if p in MBIC_SUPPORTED_SPECIES] or sorted(
             MBIC_SUPPORTED_SPECIES
@@ -392,23 +362,16 @@ class Stage6(CandidateStage):
         return {"pmbic": per_species, "status": "ok"}
 
     def compute_proliferation_migration(self, sequence: str) -> dict:
-        """Migration-dominant / proliferation-dominant probabilities from
-        proliferation_migration_predictor_v1 (two VotingClassifier ensembles
-        over hand-built physchem descriptors). Supports the cell
-        proliferation/migration target function."""
+        """Migration- and proliferation-dominant probabilities from proliferation_migration_predictor_v1."""
         model = _get_proliferation_migration_model()
         return model.predict(sequence)
 
     def compute_angiogenic_activity(self, sequence: str, feature_extractor) -> dict:
-        """Angiogenic-dominant probability from angiogenic_activity_predictor_v1
-        (SVM+MLP ensemble over physchem + ESM2-PCA features). Supports the
-        angiogenesis target function."""
+        """Angiogenic-dominant probability from angiogenic_activity_predictor_v1."""
         model = _get_angiogenic_model()
         return model.predict(sequence, feature_extractor)
 
     def compute_anti_inflammatory_probability(self, sequence: str) -> float:
-        """P(anti-inflammatory peptide) from anti_inflammatory_predictor_v1
-        (DAC-AIPs variational-autoencoder + contrastive-learning classifier).
-        Supports the immunomodulation target function."""
+        """P(anti-inflammatory peptide) from anti_inflammatory_predictor_v1; supports the immunomodulation function."""
         model = _get_anti_inflammatory_model()
         return model.predict_proba(sequence)

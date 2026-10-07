@@ -1,8 +1,4 @@
-# Route B: de novo generation via a tag-conditioned ProtGPT2 + LoRA adapter.
-#
-# Generation only. Training (leakage-safe clustering split, tokenizer/tag setup,
-# 4-bit LoRA fine-tuning) lives in Generation Stage/route_B.ipynb and produced
-# the checkpoint this route loads from model_store/routeb_protgpt2_lora_v1.
+# Route B: de novo generation via a tag-conditioned ProtGPT2 + LoRA adapter (generation only; training lives in Generation Stage/route_B.ipynb).
 
 from __future__ import annotations
 
@@ -43,8 +39,7 @@ def _make_variant_id(sequence: str, tags: list[str]) -> str:
 
 
 class RouteB(Stage4Route):
-    """De novo candidate generation: tag-conditioned ProtGPT2 sampling
-    (Stage 4, route B). See CLAUDE.md's multi-route generation convention."""
+    """De novo candidate generation: tag-conditioned ProtGPT2 sampling (Stage 4, route B)."""
 
     def run(
         self,

@@ -47,15 +47,13 @@ def normalize_solvent_name(name: str) -> str:
 
 
 def esm_embedding_cached(sequence: str, feature_extractor: FeatureExtractor) -> np.ndarray:
-    # mean-pool cached per-token hidden states, excluding BOS/EOS (positions 0
-    # and -1 of the cache's already-trimmed tensor), matching source embed_sequences()
+    # Mean-pool cached hidden states excluding BOS/EOS, matching source embed_sequences().
     embedding = feature_extractor.get_esm2_embedding(sequence)
     return embedding.hidden_states[1:-1].mean(axis=0)
 
 
 class SolubilityPredictor:
-    """Lazy-loaded XGBoost classifier over ESM2 embeddings + solvent descriptors.
-    Returns P(soluble) in [0, 1] for a peptide in a given solvent. See README.md."""
+    """Lazy-loaded XGBoost classifier over ESM2 embeddings and solvent descriptors returning P(soluble); see README.md."""
 
     def __init__(self, model_dir: Path = MODEL_DIR):
         self.model_dir = Path(model_dir)

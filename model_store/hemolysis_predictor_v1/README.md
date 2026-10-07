@@ -3,25 +3,24 @@ tags:
   - peptide
   - hemolysis
   - random-forest
-  - hemopi2-reproduction
 license: mit
 ---
 
 # hemolysis-predictor-v3
 
 Default hemolysis predictor as of this version. Replaces `hemolysis_predictor_v1`
-(a BiLSTM+attention model over ESM2 embeddings, unrelated to HemoPI2, with
+(a BiLSTM+attention model over ESM2 embeddings, with
 an unbounded/uncalibrated pHC50 range) in both Stage 8 and Route A's GA
 fitness function.
 
 ## What this is
 
-An in-process, native Python/sklearn reproduction of HemoPI2's regression
+An in-process, native Python/sklearn hemolysis regression
 model (Random Forest over hand-computed sequence composition descriptors),
 ported verbatim from `Models/Hemolysis prediction/paper_replicated.ipynb`.
 Same underlying model family and feature set as `hemolysis_predictor_v2`
-(which subprocess-wraps the actual HemoPI2 CLI, GPL-3.0), but trained
-independently on HemoPI2's own published cross-validation/test splits —
+(which subprocess-wraps a GPL-3.0 command-line tool), but trained
+independently on the published cross-validation/test splits —
 no subprocess, no vendored GPL code, no Windows encoding/`python3`-shim
 workarounds.
 
@@ -34,7 +33,7 @@ R² = 0.543).
 `Pipeline([('imputer', SimpleImputer(strategy='median')), ('rf', RandomForestRegressor(n_estimators=800, max_depth=30, ...))])`,
 trained on 1167 hand-computed descriptors per sequence: molecular weight,
 length, AAC, DPC, ATC, BTC, PCP, RRI, PRI, DDR, SER, SEP, CTC, CeTD, PAAC,
-APAAC, QSO, SOC — the same descriptor groups HemoPI2's own feature-extraction
+APAAC, QSO, SOC — the same descriptor groups the original feature-extraction
 script computes.
 
 `predictor.py`'s `Extractor` class reimplements each descriptor group's exact
@@ -62,27 +61,27 @@ conversion. HIGH pHC50 = hemolytic at LOW concentration = worse.
   composition, physicochemical index, Schneider-Wrede and Grantham distance
   matrices), verbatim from the notebook.
 - `predictor.py` — `Extractor` (descriptor computation),
-  `normalize_sequences`, and `ReplicatedHemoPI2Predictor`
+  `normalize_sequences`, and `ModifiedHemolyticPredictor`
   (`predict_phc50(sequence)` / `predict_phc50_batch(sequences)`, matching
   every other hemolysis predictor's interface).
 
 ## Usage
 
 ```python
-from model_store.hemolysis_predictor_v3 import ReplicatedHemoPI2Predictor
+from model_store.hemolysis_predictor_v3 import ModifiedHemolyticPredictor
 
-predictor = ReplicatedHemoPI2Predictor()
+predictor = ModifiedHemolyticPredictor()
 phc50_values = predictor.predict_phc50_batch(sequences)  # one extraction pass + one model.predict() call
 ```
 
 Selected in Stage 8 via `hemolysis_predictor_version: "v3"` (the default —
 see `s08_safety_developability/stage.py`'s `DEFAULT_HEMOLYSIS_PREDICTOR_VERSION`)
-or `"v2"` for the actual HemoPI2 CLI subprocess.
+or `"v2"` for the command-line subprocess.
 
 ## Provenance
 
 - Source notebook: `Models/Hemolysis prediction/paper_replicated.ipynb`
-- Training data: HemoPI2's own `cross_val_dataset.csv` / `independent_dataset.csv`
+- Training data: the published `cross_val_dataset.csv` / `independent_dataset.csv`
   (see `model_store/hemolysis_predictor_v2/vendor/`)
 - Trained/cached 2026-09-18, scikit-learn 1.9.0, no unpickling version
   warnings (unlike `hemolysis_predictor_v1`'s fold checkpoints, which

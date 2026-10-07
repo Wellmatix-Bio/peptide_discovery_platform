@@ -1,6 +1,4 @@
-# # Route A: Genetic-Algorithm Peptide Optimizer v1
-#
-# Minimal DEAP-based loop: seed peptide -> population -> score -> select -> crossover/mutate -> repeat. The production predictor adapters are explicit placeholders; the mock predictors are for demo/tests only.
+# Route A: DEAP-based genetic-algorithm peptide optimizer; the production predictor adapters are placeholders and the mocks are for demo/tests only.
 
 from __future__ import annotations
 
@@ -19,7 +17,7 @@ from src.schemas.stage4_route import Stage4Route
 from schemas.candidate import Candidate
 from dataclasses import dataclass, field, fields
 from model_store.amp_classifier_v1 import AMPClassifier
-from model_store.hemolysis_predictor_v1 import ReplicatedHemoPI2Predictor
+from model_store.hemolysis_predictor_v1 import ModifiedHemolyticPredictor
 from modlamp.descriptors import GlobalDescriptor, PeptideDescriptor
 from pipeline.feature_extractor import FeatureExtractor
 
@@ -34,9 +32,7 @@ logger = get_logger(__name__)
 
 AMINO_ACID_SET = set("ACDEFGHIKLMNPQRSTVWY")
 
-# Kyte-Doolittle hydrophobicity scale, used for the aggregation-score sliding window
-# (modlAMP's own scales are normalized differently and built for the moment/global
-# hydrophobicity calculations below, not for a patch-detection heuristic).
+# Kyte-Doolittle hydrophobicity scale for the aggregation sliding window.
 KYTE_DOOLITTLE = {
     "A": 1.8,
     "R": -4.5,
@@ -80,13 +76,10 @@ REQUIRED_HISTORY_COLUMNS = [
 
 MAX_CONSTRAINT_RETRIES = 25  # bounded retry before falling back, so a pathological config.constraint_config can't hang the GA loop forever
 
-# Fitness floor assigned to a physicochemically-rejected candidate — well below any
-# achievable fitness (range (0, 1]) so it never wins selection, without breaking the
-# fixed-size population/history bookkeeping the GA loop assumes.
+# Fitness floor for a physicochemically-rejected candidate, below any achievable fitness (0, 1].
 REJECTED_FITNESS_FLOOR = -10.0
 
-# Rejected candidates are floored on fitness but still need a stand-in pHC50 for the
-# history record; a high value reads as "maximally hemolytic" alongside the floor.
+# Stand-in pHC50 for rejected candidates in the history record; high reads as maximally hemolytic.
 REJECTED_HEMOLYSIS_PHC50 = 10.0
 
 
@@ -100,10 +93,7 @@ _hemolysis_model_cache = None
 
 @dataclass(frozen=True)
 class ConstraintConfig:
-    """
-    Hard-reject thresholds.
-    TODO: Defaults are broad placeholders — tune per target class the way the rest of this pipeline's thresholds are tuned.
-    """
+    """Hard-reject thresholds; TODO: defaults are broad placeholders, tune per target class."""
 
     min_length: int
     max_length: int
@@ -116,11 +106,7 @@ class ConstraintConfig:
 
     @classmethod
     def from_params(cls, params: dict) -> "ConstraintConfig":
-        """Build from config.params. min_length/max_length have no dataclass
-        default (there's no sane universal peptide-length range) and must be
-        present in params -- Stage 4's _build_route_a always supplies them
-        (from config.params or its own 6/35 default) before this is called.
-        Every other field falls back to its own dataclass default."""
+        """Build from config.params; min_length/max_length must be present, every other field falls back to its dataclass default."""
         if "min_length" not in params or "max_length" not in params:
             raise ValueError(
                 "ConstraintConfig.from_params requires min_length and max_length in params."
@@ -150,10 +136,7 @@ class FilterResult:
 
 
 def compute_attributes_batch(sequences: list[str], ph: float = 7.4) -> list[dict]:
-    """Same descriptors as compute_attributes, computed for every sequence in
-    one modlAMP call per property instead of one call per sequence -- modlAMP's
-    descriptor classes natively accept a list of sequences and return one row
-    per sequence in `.descriptor`."""
+    """Same descriptors as compute_attributes, computed for every sequence in one modlAMP call per property."""
     if not sequences:
         return []
 
@@ -193,10 +176,7 @@ def compute_attributes_batch(sequences: list[str], ph: float = 7.4) -> list[dict
 
 
 def _aggregation_score(sequence: str) -> float:
-    """Simple hydrophobic-patch heuristic: the highest mean Kyte-Doolittle
-    hydrophobicity over any contiguous AGGREGATION_WINDOW-residue stretch.
-    Not a real Zyggregator run (that needs its own model/webserver) — a cheap
-    proxy for the same idea, that a hydrophobic patch drives aggregation risk."""
+    """Hydrophobic-patch heuristic: the highest mean Kyte-Doolittle hydrophobicity over any AGGREGATION_WINDOW-residue stretch."""
     if len(sequence) < AGGREGATION_WINDOW:
         window = (
             AGGREGATION_WINDOW if len(sequence) >= AGGREGATION_WINDOW else len(sequence)
@@ -214,8 +194,7 @@ def _aggregation_score(sequence: str) -> float:
 
 
 def _solubility_flag(net_charge: float, hydrophobicity: float) -> str:
-    """Heuristic from charge + hydrophobicity: a peptide near-neutral charge and
-    strongly hydrophobic is the classic low-solubility combination."""
+    """Heuristic low-solubility score from near-neutral charge plus strong hydrophobicity."""
     if abs(net_charge) < 1.0 and hydrophobicity > 0.5:
         return "very_low"
     if abs(net_charge) < 2.0 and hydrophobicity > 0.2:
@@ -226,8 +205,7 @@ def _solubility_flag(net_charge: float, hydrophobicity: float) -> str:
 
 
 def _attrs_fail_reasons(attrs: dict, config: ConstraintConfig) -> list[str]:
-    """Threshold checks shared by physicochemical_filter and
-    physicochemical_filter_batch, applied to an already-computed attrs dict."""
+    """Threshold checks shared by physicochemical_filter and physicochemical_filter_batch on an already-computed attrs dict."""
     fail_reasons = []
     if attrs["length"] < config.min_length or attrs["length"] > config.max_length:
         fail_reasons.append("length_out_of_range")
@@ -249,11 +227,7 @@ def physicochemical_filter(sequence: str, config: ConstraintConfig) -> FilterRes
 def physicochemical_filter_batch(
     sequences: list[str], config: ConstraintConfig
 ) -> list[FilterResult]:
-    """Same checks as physicochemical_filter, computed for every sequence in
-    one compute_attributes_batch call instead of one modlAMP call per
-    sequence. Invalid sequences (empty/non-standard residues) are filtered
-    out before that call since modlAMP can't score them, and reinserted into
-    the result in their original positions."""
+    """Same checks as physicochemical_filter in one batch call; invalid sequences are filtered out first and reinserted in place."""
     normalized = [s.strip().upper() for s in sequences]
 
     valid_indices = []
@@ -444,10 +418,7 @@ def hard_constrained_mutant(
     rng: random.Random,
     constraint_config: ConstraintConfig,
 ) -> str:
-    """GA hard-constraint: keep mutating until the result clears physicochemical_filter
-    (Stage 5's config.constraint_config), rather than adding a candidate that was never
-    going to be viable. Falls back to the last attempt if MAX_CONSTRAINT_RETRIES is
-    exhausted — record() will still fitness-floor it via the pre-predictor gate."""
+    """GA hard constraint: keep mutating until the result clears physicochemical_filter, falling back to the last attempt after MAX_CONSTRAINT_RETRIES."""
     candidate = mutate_sequence(
         seed_sequence, min_length, max_length, mutation_rate, rng
     )
@@ -527,8 +498,7 @@ def tournament_selection(
 
 
 def _hemolysis_safety_factor(hemolysis_phc50: float) -> float:
-    """10^(6-pHC50) / (10^(6-pHC50) + 100): -> 1 as pHC50 falls (safer), -> 0 as
-    pHC50 rises (more hemolytic at lower concentration)."""
+    """10^(6-pHC50) / (10^(6-pHC50) + 100): approaches 1 as pHC50 falls (safer), 0 as it rises."""
     numerator = 10 ** (6 - hemolysis_phc50)
     return numerator / (numerator + 100)
 
@@ -536,12 +506,7 @@ def _hemolysis_safety_factor(hemolysis_phc50: float) -> float:
 def _batch_from_scalar(
     predictor: Callable[[str], float],
 ) -> Callable[[list[str]], list[float]]:
-    """Adapts a scalar (sequence) -> value predictor into a batch-shaped one
-    (one call per sequence) for callers (mainly tests) that override the
-    scalar amp_predictor/hemolysis_predictor without providing a batch
-    version. Real usage goes through predict_amp_batch/
-    predict_hemolysis_phc50_batch instead, which make one model call for the
-    whole list."""
+    """Adapts a scalar (sequence) -> value predictor into a batch-shaped one for callers that override only the scalar predictor."""
 
     def _batched(sequences: list[str]) -> list[float]:
         return [predictor(sequence) for sequence in sequences]
@@ -556,15 +521,7 @@ def _evaluate_population(
     hemolysis_predictor_batch: Callable[[list[str]], list[float]],
     constraint_config: ConstraintConfig,
 ) -> None:
-    """Evaluate every not-yet-cached sequence in `sequences` and populate
-    `cache` for each, using one physicochemical_filter_batch call and (for
-    whatever survives that filter) one predictor-batch call each, instead of
-    one physicochemical_filter + predictor call per sequence.
-
-    Same cache contents and per-sequence gating/fitness rules as scoring one
-    sequence at a time would produce -- only the number of underlying model
-    calls differs.
-    """
+    """Evaluate every not-yet-cached sequence in one filter batch plus one predictor batch each, populating `cache` with the same results as one-at-a-time scoring."""
     to_score = [seq for seq in dict.fromkeys(sequences) if seq not in cache]
     if not to_score:
         return
@@ -638,10 +595,10 @@ def _real_amp_predictor() -> AMPClassifier:
     return _amp_model_cache
 
 
-def _real_hemolysis_predictor() -> ReplicatedHemoPI2Predictor:
+def _real_hemolysis_predictor() -> ModifiedHemolyticPredictor:
     global _hemolysis_model_cache
     if _hemolysis_model_cache is None:
-        _hemolysis_model_cache = ReplicatedHemoPI2Predictor()
+        _hemolysis_model_cache = ModifiedHemolyticPredictor()
     return _hemolysis_model_cache
 
 
@@ -660,11 +617,7 @@ def predict_hemolysis_phc50(
 def predict_amp_batch(
     sequences: list[str], feature_extractor: FeatureExtractor
 ) -> list[float]:
-    """Real AMP probabilities from amp_classifier_v1, one ESM2 forward pass
-    for the whole list instead of one pass per sequence. Warms the shared
-    FeatureExtractor for this batch first, so a sequence already embedded by
-    an earlier GA generation (or by this same run's later stages) is never
-    re-embedded."""
+    """Real AMP probabilities from amp_classifier_v1 in one ESM2 pass, warming the shared FeatureExtractor first."""
     if sequences:
         feature_extractor.get_esm2_embedding_batch(sequences)
     return _real_amp_predictor().predict_proba_batch(sequences, feature_extractor)
@@ -673,8 +626,7 @@ def predict_amp_batch(
 def predict_hemolysis_phc50_batch(
     sequences: list[str], feature_extractor: FeatureExtractor
 ) -> list[float]:
-    """Real hemolysis pHC50 values from hemolysis_predictor_v1, one
-    descriptor-extraction pass for the whole list instead of one per sequence."""
+    """Real hemolysis pHC50 values from hemolysis_predictor_v1 in one descriptor-extraction pass."""
     return _real_hemolysis_predictor().predict_phc50_batch(sequences, feature_extractor)
 
 
@@ -713,10 +665,7 @@ def run_ga(
     )
     if tournsize < 2:
         raise ValueError("tournsize must be >= 2.")
-    # Batch predictors take priority when given explicitly; otherwise prefer
-    # the real batched models, falling back to wrapping a scalar predictor
-    # (real or a test's mock) one call per sequence so callers that only
-    # override the scalar amp_predictor/hemolysis_predictor keep working.
+    # Explicit batch predictors win; otherwise use the real batched models, wrapping a scalar override per sequence.
     if amp_predictor_batch is None:
         amp_predictor_batch = (
             (lambda sequences: predict_amp_batch(sequences, feature_extractor))
@@ -749,10 +698,7 @@ def run_ga(
     ordinal = 0
 
     def record_batch(individuals: List) -> None:
-        """Evaluate every individual's sequence in one batched pass (see
-        _evaluate_population), then append one history row per individual --
-        same per-individual outcome as calling record(individual) in a loop,
-        fewer underlying model calls."""
+        """Evaluate every individual in one batched pass, then append one history row per individual."""
         sequences = ["".join(individual) for individual in individuals]
         _evaluate_population(
             sequences,
@@ -827,9 +773,7 @@ def run_ga(
         record_batch(offsprings)
         population = offsprings
         if not population:
-            # Every pair this generation exhausted MAX_CONSTRAINT_RETRIES with no
-            # passing offspring -- nothing to select parents from next generation,
-            # so stop here rather than crashing on hall_of_fame.update's max([]).
+            # Every pair exhausted MAX_CONSTRAINT_RETRIES, so stop rather than crash on hall_of_fame.update's max([]).
             logger.warning(
                 "ga.generation_collapsed",
                 extra={"generation": generation},
@@ -861,10 +805,7 @@ def run_ga(
 
 
 def _is_valid_sequence(sequence: str | None, min_length: int, max_length: int) -> bool:
-    """A non-empty string of only standard amino acids -- guards against
-    malformed entry candidates (e.g. a data-curation note left in place of
-    a sequence) silently riding through Stage 4 unvalidated, since Stage 4
-    passes incoming candidates straight into its output otherwise."""
+    """A non-empty string of only standard amino acids; guards against malformed entry candidates passing through Stage 4."""
     return (
         bool(sequence)
         and set(sequence.strip()) <= AMINO_ACID_SET
@@ -874,8 +815,7 @@ def _is_valid_sequence(sequence: str | None, min_length: int, max_length: int) -
 
 
 class RouteA(Stage4Route):
-    """Reference-guided candidate generation: GA optimization of a seed peptide
-    (Stage 4, route A). See CLAUDE.md's multi-route generation convention."""
+    """Reference-guided candidate generation: GA optimization of a seed peptide (Stage 4, route A)."""
 
     def __init__(self, config: dict[str, Any] = {}):
         super().__init__(config)
@@ -932,9 +872,7 @@ class RouteA(Stage4Route):
                     },
                 )
                 continue
-            # `population` holds DEAP individuals (variant_id/parent_id/generation
-            # as attributes, fitness via .fitness.values[0]); amp_prob and
-            # hemolysis_phc50 only live in `history`, keyed by variant_id.
+            # amp_prob and hemolysis_phc50 live only in `history`, keyed by variant_id.
             history_by_variant = result["history"].set_index("variant_id")
             for individual in result["population"]:
                 history_row = history_by_variant.loc[individual.variant_id]

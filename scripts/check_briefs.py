@@ -1,9 +1,4 @@
-"""How many of data/briefs/*.json are valid API requests? Reports which, and why the rest fail.
-
-The answer has been 0 or 1 for the life of this repository; see docs/BRIEF_VALIDITY.md. This
-script exists so the number is measured rather than quoted, because the vocabularies in
-src/schemas/stage_configs.py change and a figure in a document does not.
-"""
+"""Reports how many data/briefs/*.json are valid API requests and why the rest fail"""
 
 from __future__ import annotations
 

@@ -28,9 +28,7 @@ DOTENV_KEYS = _load_dotenv(_ENV_PATH)
 
 
 def _env_bool(name: str, default: bool = False) -> bool:
-    """os.environ.get(name) is always a string (or missing) -- "False"/"0"
-    are truthy as Python objects, so this parses the value instead of just
-    checking it's set."""
+    """Parses an environment value as a bool, since "False" and "0" are truthy strings."""
     raw = os.environ.get(name)
     if raw is None:
         return default

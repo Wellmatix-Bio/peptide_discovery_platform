@@ -11,8 +11,6 @@ from modlamp.descriptors import GlobalDescriptor, PeptideDescriptor
 
 from common.model_sync import sync_model_weights, weights_dir_for
 
-# weights_dir_for takes this predictor's own directory (its name is the GCS
-# model key); the actual weights live one level down, in model/.
 CODE_DIR = Path(__file__).resolve().parent
 MODEL_DIR = weights_dir_for(CODE_DIR) / "model"
 

@@ -132,6 +132,7 @@ slash-separated resource path; some generated clients require custom path handli
   "status": "running",
   "stage": "s06_functional_models",
   "vertex_state": "JOB_STATE_RUNNING",
+  "run_state": "running",
   "error": null
 }
 ```
@@ -139,19 +140,32 @@ slash-separated resource path; some generated clients require custom path handli
 | Field | Meaning |
 |---|---|
 | `job_id` | Full Vertex job resource name |
-| `status` | From the worker's `results.json` (`"pending"` if not yet written): `running`, `success`, or `failed` |
+| `status` | The worker's own last word, from its `results.json` (`"pending"` if not yet written): `running`, `success`, or `failed`. **It can be stale** — see `run_state` |
 | `stage` | From `results.json`: the stage the worker was on at its last progress write, or `"pending"` if not yet written or null. Typed `string \| null` in the schema, but the handler always substitutes `"pending"`, so clients should not see null |
 | `vertex_state` | Real Vertex `CustomJob.state` enum name, queried live (e.g. `JOB_STATE_RUNNING`, `JOB_STATE_SUCCEEDED`, `JOB_STATE_FAILED`) |
+| `run_state` | `status` and `vertex_state` reconciled: `submitted`, `running`, `succeeded`, `failed`, `cancelled` or `abandoned`. **This is the field to show a user** |
 | `error` | Vertex error message, or null |
 
-`vertex_state` is the ground truth for whether the underlying Custom Job is
-still running, succeeded, or failed at the infrastructure level. `status`/
-`stage` reflect the worker's own last self-reported progress and can lag
-behind `vertex_state` — in particular, a job that failed hard (crashed,
-OOM-killed, cancelled) before writing a final `results.json` can leave
-`status` stuck at `"running"` and `stage` at an earlier value even though
-`vertex_state` already shows a terminal state. Treat `vertex_state` as
-authoritative for whether the job is still executing.
+### Why there are three fields and which to read
+
+`status` is the worker's **self-report** and `vertex_state` is the **observed** job state. They
+disagree whenever a worker dies without a final write: a container that is OOM-killed, pre-empted
+or cancelled leaves `status` reading `"running"` — or `"pending"`, if it died before writing
+anything — while `vertex_state` has already gone terminal. Both fields are individually honest and
+neither answers "is this run over".
+
+**`run_state` answers it.** The precedence:
+
+1. A worker that wrote `success` or `failed` wins: a first-hand report about the run is more
+   specific than the job's exit code.
+2. Then Vertex's terminal states, because they are observed rather than self-reported.
+   `cancelled` is kept distinct from `failed` — somebody chose to stop it.
+3. A job Vertex finished with no successful result is **`abandoned`**: the container exited
+   cleanly and produced nothing. Neither `pending` nor `succeeded` is true of it.
+4. Otherwise the worker's `running`, or `submitted` when it has said nothing yet.
+
+`status` and `stage` are unchanged and still mean exactly what they did, so a client reading them
+keeps working. They are the worker's words; `run_state` is the answer.
 
 ## Read job results
 

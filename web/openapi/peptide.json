@@ -653,6 +653,11 @@
             "title": "Job Id",
             "type": "string"
           },
+          "run_state": {
+            "default": "submitted",
+            "title": "Run State",
+            "type": "string"
+          },
           "stage": {
             "anyOf": [
               {

@@ -46,7 +46,7 @@ cd web && npm ci && npm test
 
 ### The backend suite does not pass, on purpose
 
-It is **304 passed / 3 failed / 0 errors**, and that exact result is the baseline. CI compares
+It is **310 passed / 3 failed / 0 errors**, and that exact result is the baseline. CI compares
 against it with `.github/check_baseline.py`, which fails on *any* movement — more failures mean a
 regression, more passes mean the baseline is stale and must be updated in the same change.
 

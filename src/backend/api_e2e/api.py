@@ -71,11 +71,60 @@ class CreateJobResponse(BaseModel):
     result_path: str
 
 
+#: Vertex states meaning the job will not progress any further. Kept in step with
+#: services/accounts/accounts/history.py and web/src/api/peptide.ts, which list the same four.
+TERMINAL_VERTEX_STATES = frozenset(
+    {"JOB_STATE_SUCCEEDED", "JOB_STATE_FAILED", "JOB_STATE_CANCELLED", "JOB_STATE_EXPIRED"}
+)
+
+
+def run_state(worker_status: str | None, vertex_state: str | None) -> str:
+    """Reconcile what the worker last said with what Vertex says, into one honest answer.
+
+    `status` on its own cannot be trusted and never could: it is read from the worker's
+    results.json, so a worker that is killed -- OOM, pre-emption, a crash before the final write
+    -- leaves it reading "running", or "pending" if it died before writing anything at all. The
+    job is over; the field says it is not. Clients were each expected to notice this and combine
+    the two fields themselves, which means every client either duplicates this function or gets
+    it wrong.
+
+    Precedence, and why:
+
+    1. **A worker that finished wins.** If it wrote `success` or `failed`, that is a first-hand
+       report about the run and nothing Vertex says is more specific.
+    2. **Then Vertex's terminal states**, because they are observed rather than self-reported.
+       `cancelled` is kept distinct from `failed`: someone chose to stop it.
+    3. **A job Vertex finished with no successful result is `abandoned`**, not `pending` and not
+       `succeeded`. The container exited cleanly without producing results -- the single case
+       this whole function exists for.
+    4. Otherwise the worker's own `running`, or `submitted` when it has said nothing yet.
+    """
+    terminal = vertex_state in TERMINAL_VERTEX_STATES
+    if worker_status == "success":
+        return "succeeded"
+    if worker_status in ("failed", "fail"):
+        return "failed"
+    if vertex_state == "JOB_STATE_CANCELLED":
+        return "cancelled"
+    if vertex_state in ("JOB_STATE_FAILED", "JOB_STATE_EXPIRED"):
+        return "failed"
+    if terminal:
+        return "abandoned"
+    if worker_status == "running":
+        return "running"
+    return "submitted"
+
+
 class JobStatusResponse(BaseModel):
     job_id: str
+    #: THE WORKER'S OWN LAST WORD, unchanged and deliberately so: "pending" until it writes
+    #: anything, then "running" / "success" / "failed". It can be stale, because a worker that
+    #: dies writes nothing further. Read `run_state` for the reconciled answer.
     status: str
     stage: str | None = "pending"
     vertex_state: str
+    #: `status` and `vertex_state` reconciled, so a client does not have to. See run_state().
+    run_state: str = "submitted"
     error: str | None = None
 
 
@@ -218,11 +267,13 @@ def get_job_status(job_id: str):
         else None
     )
 
+    worker_status = (results.get("status") if results else None) or None
     return JobStatusResponse(
         job_id=job.name,
-        status=(results.get("status") if results else None) or "pending",
+        status=worker_status or "pending",
         stage=(results.get("stage") if results else None) or "pending",
         vertex_state=vertex_state,
+        run_state=run_state(worker_status, vertex_state),
         error=job.error.message or None,
     )
 

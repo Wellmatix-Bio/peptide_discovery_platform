@@ -316,6 +316,11 @@ export interface components {
             /** Job Id */
             job_id: string;
             /**
+             * Run State
+             * @default submitted
+             */
+            run_state: string;
+            /**
              * Stage
              * @default pending
              */

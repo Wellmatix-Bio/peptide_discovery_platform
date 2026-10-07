@@ -1,0 +1,15 @@
+# Build the job API image from deploy/api.Dockerfile and push it to Artifact
+# Registry. Submit from the repository root, supplying _IMAGE_URI:
+#   gcloud builds submit . --config=deploy/cloudbuild.api.yaml \
+#     --substitutions=_IMAGE_URI=REGION-docker.pkg.dev/PROJECT/REPO/peptide-api:TAG
+steps:
+  - name: gcr.io/cloud-builders/docker
+    args:
+      - build
+      - -f
+      - deploy/api.Dockerfile
+      - -t
+      - ${_IMAGE_URI}
+      - .
+images:
+  - ${_IMAGE_URI}

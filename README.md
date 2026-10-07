@@ -81,9 +81,8 @@ Both copyleft packages are optional on purpose. See [docs/LICENSING.md](docs/LIC
 `VERTEX_MODEL_STORE` points.
 
 How outside users obtain them is **not yet settled**. Weights carry their own terms, including
-those of the upstream models they derive from (ESM-2, ESMFold, ProtGPT2), and **8 of the 16
-predictors have only a placeholder model card**, so their training data and applicability
-domain are undocumented; the API's `model_card_status` says which.
+those of the upstream models they derive from (ESM-2, ESMFold, ProtGPT2). **All 16 predictors now
+ship a model card** describing architecture, features and test metrics.
 Tracked in [docs/LICENSING.md](docs/LICENSING.md).
 
 ---
@@ -117,8 +116,8 @@ Open and documented rather than discovered later:
 - Stage 7's pathway model reports **P(activator)**, not P(involved), and at the shipped threshold
   of 0.5 the activated and inhibited bands meet — so every pathway gets a direction and a 0.501
   coin flip reads as a definite call — [docs/BASELINE.md](docs/BASELINE.md)
-- The unimplemented stage directories (s10, s12–s14) have no tests, and nor do s01–s03. Every
-  implemented scoring stage — s04 through s09 and s11 — now does
+- The unimplemented stage directories (s10, s12–s14) have no tests. Every implemented stage —
+  s01 through s09 and s11 — now does
 
 ---
 

@@ -127,7 +127,8 @@ Re-run the audit after any dependency change:
 - [x] No secrets, project ids or bucket names in the repository **or its git history** — verified
       with `git log --all -S`, not just the working tree
 - [x] Copyleft dependencies optional and documented
-- [ ] Per-predictor weight licences stated — **8 of 16 cards are placeholders** (amp_classifier_v1, anti_inflammatory_predictor_v1, cytotoxicity_predictor_v1, esmfold_v1, hemolysis_predictor_v1, pathway_mapping_predictor_v1, pathway_mapping_predictor_v2, routeb_protgpt2_lora_v1)
+- [x] Per-predictor model cards written — **all 16**, covering architecture, features and test metrics
+- [ ] Per-predictor weight *licences* stated — the cards describe the models, not the terms their weights are distributed under
 - [ ] **LEGAL REVIEW NEEDED** — a lawyer has not reviewed the above. Deferred deliberately, not
       overlooked: it is a non-technical task and does not block development. It should be done
       before the repository is published, because publishing is the irreversible step and the

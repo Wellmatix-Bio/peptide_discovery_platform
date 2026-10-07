@@ -46,7 +46,7 @@ cd web && npm ci && npm test
 
 ### The backend suite does not pass, on purpose
 
-It is **267 passed / 3 failed / 0 errors**, and that exact result is the baseline. CI compares
+It is **304 passed / 3 failed / 0 errors**, and that exact result is the baseline. CI compares
 against it with `.github/check_baseline.py`, which fails on *any* movement — more failures mean a
 regression, more passes mean the baseline is stale and must be updated in the same change.
 
@@ -163,8 +163,9 @@ neither.
 **Prefer the API's own words.** Error text, refusal reasons and caveats come from the service that
 produced them, rendered rather than paraphrased.
 
-**Say what is not known.** Eight predictors carry only a placeholder model card, and the UI says
-which — `model_card_status`, not mere presence. That is
+**Say what is not known.** Every predictor ships a model card now, but the UI reports
+`model_card_status` rather than mere presence, so a card that only records its own absence could
+never read as documentation. That is
 better than a page implying all fifteen are documented.
 
 ---

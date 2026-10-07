@@ -24,7 +24,6 @@
           "turn_propensity": "CHOP780203",
           "volume_zamyatnin": "ZIMJ680104"
         },
-        "data_source": "data/adt5111_data_files_s1_to_s7.xlsx (sheet SD_2)",
         "feature_cols": "see feature_columns.json (300 features, top-300 of ~1490 raw descriptors selected by XGBoost gain importance)",
         "feature_selection": {
           "method": "XGBoost gain importance ranking",
@@ -478,7 +477,7 @@
     {
       "model_card": {
         "architecture": "sklearn Pipeline: SimpleImputer(strategy='median') + RandomForestRegressor(n_estimators=800, max_depth=30, random_state=42)",
-        "description": "Native Python reproduction of HemoPI2's regression model, trained on HemoPI2's own published cross-validation/test splits; no subprocess or vendored GPL code",
+        "description": "Native Python hemolysis regression model",
         "features": "1167 hand-computed descriptors: MW, length, AAC, DPC, ATC, BTC, PCP, RRI, PRI, DDR, SER, SEP, CTC, CeTD, PAAC, APAAC, QSO, SOC (see predictor.py Extractor and property_tables.py)",
         "hyperparameter_search": {
           "best_params": {
@@ -508,7 +507,6 @@
         "trained_with": "scikit-learn 1.9.0 (loading under 1.6.1 emits InconsistentVersionWarning)",
         "training_data": {
           "rows": 1540,
-          "source": "HemoPI2 cross_val_dataset.csv / independent_dataset.csv",
           "test_rows": 386
         },
         "valid_sequence_length": [

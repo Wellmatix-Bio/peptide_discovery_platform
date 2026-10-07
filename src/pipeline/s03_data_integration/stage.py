@@ -17,10 +17,7 @@ class Stage3(SetupStage):
         return self.integrate_data(ctx)
 
     def integrate_data(self, ctx: RunContext) -> list[dict[str, Any]]:
-        """Standardize records from the knowledge base into Stage 3 record format.
-
-        Placeholder implementation; replace with real source integration.
-        """
+        """Standardize knowledge-base records into Stage 3 record format; placeholder implementation."""
         if ctx.knowledge_base is None:
             return []
         return [{"source_path": ctx.knowledge_base.source_path}]

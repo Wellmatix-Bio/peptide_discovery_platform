@@ -1,7 +1,4 @@
-"""Loader/inference wrapper for the Route B conditional ProtGPT2 generator.
-
-Generation only — no training. Loads the frozen ProtGPT2 base in 4-bit and
-attaches this package's pre-trained LoRA adapter (see README.md)."""
+"""Loader/inference wrapper for the Route B ProtGPT2 generator (frozen 4-bit base plus pre-trained LoRA adapter, generation only)"""
 
 from __future__ import annotations
 
@@ -23,8 +20,7 @@ VALID_RESIDUE_RE = re.compile(r"^[ACDEFGHIKLMNPQRSTVWY]+$")
 
 
 class ProtGPT2Generator:
-    """Lazy-loaded ProtGPT2 (4-bit NF4) + LoRA adapter. Samples peptides
-    conditioned on a subset of TAG_TOKENS. See README.md for architecture."""
+    """Lazy-loaded ProtGPT2 (4-bit NF4) + LoRA adapter sampling peptides conditioned on TAG_TOKENS"""
 
     def __init__(self, model_dir: Path = MODEL_DIR, base_model_name: str = BASE_MODEL_NAME):
         self.model_dir = Path(model_dir)
@@ -45,8 +41,7 @@ class ProtGPT2Generator:
         bnb_config = BitsAndBytesConfig(
             load_in_4bit=True,
             bnb_4bit_quant_type="nf4",
-            # float16, not bfloat16 -- bfloat16 has no native hardware support
-            # on T4 (Turing, compute capability 7.5; bfloat16 needs Ampere+).
+            # float16, not bfloat16, which T4 (compute capability 7.5) lacks.
             bnb_4bit_compute_dtype=torch.float16,
             bnb_4bit_use_double_quant=True,
         )
@@ -63,11 +58,7 @@ class ProtGPT2Generator:
 
     @staticmethod
     def _extract_sequence(decoded: str, min_length: int, max_length: int) -> str | None:
-        # decoded looks like "<|endoftext|><AMP> M K ... K<|endoftext|><|endoftext|>...".
-        # The leading EOT is the prompt's own start-of-sequence marker, not a
-        # generated stop -- split it off first, then take the chunk up to the
-        # *next* EOT (the one the model actually generated, or all remaining
-        # text if it ran out of max_new_tokens without emitting one).
+        # The leading EOT is the prompt's start marker; take the chunk up to the next EOT the model generated.
         segments = decoded.split(EOT)
         body = segments[1] if segments and segments[0] == "" else segments[0]
         for tag in TAG_TOKENS:
@@ -93,8 +84,7 @@ class ProtGPT2Generator:
         temperature: float = 1.0,
         repetition_penalty: float = 1.2,
     ) -> list[str]:
-        """Sample up to n_peptides unique, validated peptide sequences
-        conditioned on `tags` (a subset of TAG_TOKENS, e.g. ["<AMP>"])."""
+        """Sample up to n_peptides unique, validated peptides conditioned on `tags` (a subset of TAG_TOKENS)."""
         self._load()
         torch = self.torch
         tags = tags or ["<AMP>"]

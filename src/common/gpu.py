@@ -1,10 +1,4 @@
-# Dev-mode GPU memory release between stages.
-#
-# Every stage module lazy-loads its models into module-level globals and
-# never frees them (see s05-s08 stage.py `_get_*_model()` helpers), so on an
-# 8GB dev GPU, later stages OOM once earlier stages' models are still
-# resident. Production runs on hardware with enough VRAM to keep everything
-# loaded and skip the reload cost, so this only runs under DEV_MODE.
+# Dev-mode GPU memory release between stages, since stages never free their lazy-loaded models; runs only under DEV_MODE.
 from __future__ import annotations
 
 import inspect
@@ -18,14 +12,7 @@ logger = get_logger(__name__)
 
 
 def release_stage_models(stage_globals: dict[str, Any], *, stage_name: str) -> None:
-    """Clear a stage module's cached `_*_model`/`_*_cache` globals and free
-    GPU memory. Only clears plain data (model instances), never functions —
-    the `_get_*_model()` loaders live in the same namespace and also match
-    the name pattern.
-
-    Call with `globals()` from the stage module after its models are no
-    longer needed. No-op unless DEV_MODE is set.
-    """
+    """Clear a stage module's cached `_*_model`/`_*_cache` globals (data only, not loader functions) and free GPU memory; call with `globals()`, no-op unless DEV_MODE."""
     if not DEV_MODE:
         return
 

@@ -38,9 +38,7 @@ class CloudStorageUnavailable(RuntimeError):
 
 @functools.lru_cache(maxsize=1)
 def _gcs_client():
-    # Local imports: OPTIONAL dependency, gs:// paths only. Everything in this module works
-    # against local paths with none of these installed, which is what makes the `gcp` extra
-    # genuinely optional rather than nominally so.
+    # Local imports keep the optional `gcp` extra optional; only gs:// paths need them.
     try:
         import google.auth
         import google.auth.transport.requests
@@ -55,11 +53,7 @@ def _gcs_client():
             f"({problem})"
         ) from problem
 
-    # Cached (not one-per-call) so concurrent downloads in download_dir share
-    # a single client/credentials/session instead of each thread making its
-    # own -- the default session's connection pool (10) is smaller than
-    # _DOWNLOAD_WORKERS, so without this, concurrent requests exceed it and
-    # get logged as "Connection pool is full, discarding connection".
+    # Cached so concurrent downloads share one client; the default pool (10) is smaller than _DOWNLOAD_WORKERS.
     credentials, project = google.auth.default()
     session = google.auth.transport.requests.AuthorizedSession(credentials)
     adapter = HTTPAdapter(pool_maxsize=_DOWNLOAD_WORKERS)
@@ -139,19 +133,15 @@ def join(base: str | Path, *parts: str) -> str:
 
 
 def list_blobs(prefix: str) -> list[str]:
-    """Every gs:// object under `prefix`, as full gs:// paths. Local-only
-    callers have no use for this -- GCS-only."""
+    """Every gs:// object under `prefix` as full gs:// paths; GCS-only."""
     bucket_name, blob_prefix = _split_gcs_uri(prefix)
     blobs = _gcs_client().bucket(bucket_name).list_blobs(prefix=blob_prefix)
     return [f"{_GCS_PREFIX}{bucket_name}/{blob.name}" for blob in blobs]
 
 
 def download_dir(gcs_prefix: str, local_dir: str | Path) -> None:
-    """Download every object under `gcs_prefix` into `local_dir`, preserving
-    the path structure below the prefix (e.g. gs://.../weights/model.bin ->
-    local_dir/weights/model.bin). Fetches blobs concurrently -- this is
-    network-latency bound, not throughput bound, so it matters most for
-    models stored as many small files (e.g. per-label/per-bag joblib dumps)."""
+    """Download every object under `gcs_prefix` into `local_dir`, preserving the path structure and fetching blobs concurrently."""
+    
     local_dir = Path(local_dir)
     _, blob_prefix = _split_gcs_uri(gcs_prefix)
 

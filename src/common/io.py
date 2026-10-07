@@ -10,9 +10,7 @@ from schemas.candidate import Candidate
 
 
 class BoundaryWriter:
-    """Writes each stage's surviving candidates to
-    `run_dir/candidates/<stage_name>.jsonl`, one JSON object per line —
-    a full per-stage snapshot for debugging and provenance."""
+    """Writes each stage's surviving candidates to `run_dir/candidates/<stage_name>.jsonl` as a per-stage snapshot."""
 
     def __init__(self, run_dir: str) -> None:
         self.run_dir = run_dir
@@ -28,14 +26,7 @@ class BoundaryWriter:
 
 
 def load_candidates_fasta(path: str | Path, *, schema_version: int) -> list[Candidate]:
-    """
-    Load candidates from a FASTA file (local path or gs://... URI). The
-    fasta format is:
-    >candidate_id_1
-    SEQUENCE_1
-    >candidate_id_2
-    SEQUENCE_2
-    """
+    """Load candidates from a FASTA file (local path or gs:// URI), one `>candidate_id` header per sequence."""
     if not storage.exists(path):
         raise FileNotFoundError(f"FASTA file not found: {path}")
     candidates: list[Candidate] = []
@@ -65,9 +56,7 @@ def load_candidates_jsonl(path: str, *, schema_version: int) -> list[Candidate]:
 
 
 def _rank_sort_key(candidate: Candidate) -> tuple[int, int]:
-    """Ranked candidates first (by rank ascending), then everything else
-    (rejected / insufficient_evidence / never reached Stage 11) in their
-    existing order."""
+    """Ranked candidates first (by rank), then the rest in their existing order."""
     ranking = candidate.predictions.get("ranking")
     rank = ranking.get("rank") if ranking else None
     if rank is None:
@@ -76,9 +65,7 @@ def _rank_sort_key(candidate: Candidate) -> tuple[int, int]:
 
 
 def write_final_candidates(run_dir: str | Path, candidates: list[Candidate]) -> str | Path:
-    """Write the run's final candidates to `run_dir/candidates_final.json`,
-    sorted by Stage 11 rank when present (unranked candidates keep their
-    incoming order, appended after all ranked ones)."""
+    """Write the run's final candidates to `run_dir/candidates_final.json`, sorted by Stage 11 rank with unranked ones after."""
     path = storage.join(run_dir, "candidates_final.json")
 
     ordered = sorted(enumerate(candidates), key=lambda pair: (*_rank_sort_key(pair[1]), pair[0]))

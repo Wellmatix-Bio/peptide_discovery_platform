@@ -31,19 +31,15 @@ def _validate_sequence(sequence: str) -> None:
 
 
 def esm_embedding_cached(sequence: str, feature_extractor: FeatureExtractor) -> np.ndarray:
-    """Mean-pooled ESM2-150M embedding, excluding CLS/EOS special tokens
-    (positions 0 and -1 of the cache's already-trimmed per-sequence tensor --
-    equivalent to the original get_special_tokens_mask exclusion for this
-    tokenizer, which has exactly one BOS and one EOS and no other specials)."""
+    """Mean-pooled ESM2-150M embedding excluding the CLS/EOS special tokens."""
     embedding = feature_extractor.get_esm2_embedding(sequence)
     mean_pooled = embedding.hidden_states[1:-1].mean(axis=0, keepdims=True)
     return mean_pooled
 
 
 class SynthesisFeasibilityEnsemble:
-    """Lazy-loaded soft-voting ensemble of Logistic Regression, SVM, and
-    Random Forest over ESM2 embeddings. Returns a synthesis-feasibility
-    probability in [0, 1]. See README.md for weak-generalization caveat."""
+    """Lazy-loaded soft-voting LogReg + SVM + RandomForest ensemble over ESM2 embeddings returning a synthesis-feasibility probability"""
+    
 
     def __init__(self, model_dir: Path = MODEL_DIR):
         self.model_dir = Path(model_dir)

@@ -7,13 +7,10 @@ import yaml
 from common import storage
 from common.env import DEV_MODE
 
-#: Internal candidate-file schema version. Not a client-facing knob -- there
-#: is only ever one version in play at a time.
+#: Internal candidate-file schema version, not a client-facing knob.
 SCHEMA_VERSION = 1
 
-# TODO: production run_id should be set by the caller (e.g. the Vertex job
-# id) after job creation, not read from client config. Replace this
-# placeholder once that wiring is in place.
+# TODO: production run_id should be set by the caller (e.g. the Vertex job id) after job creation.
 _PLACEHOLDER_RUN_ID = "<your_run_id>"
 
 
@@ -24,8 +21,7 @@ class StageConfig(BaseModel):
 
 class RunConfig(BaseModel):
 
-    #: Only read from client config in DEV_MODE; production runs must set
-    #: this themselves after construction (see _PLACEHOLDER_RUN_ID above).
+    #: Only read from client config in DEV_MODE; production runs set it after construction.
     run_id: str = _PLACEHOLDER_RUN_ID
     seed: int = 42
     seed_candidates_path: str

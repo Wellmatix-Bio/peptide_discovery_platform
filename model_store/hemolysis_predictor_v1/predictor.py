@@ -35,12 +35,6 @@ def _validate_sequence(sequence: str) -> None:
 
 
 class Extractor:
-    """In-process reimplementation of the author's composition_calculate_hemopi2_2.py.
-
-    Each ``_feature_*`` method reproduces one descriptor group's exact arithmetic
-    from the original script, but operates on in-memory sequences/DataFrames
-    instead of round-tripping through stdout-redirected CSV files.
-    """
 
     STD = "ACDEFGHIKLMNPQRSTVWY"
 
@@ -274,11 +268,7 @@ class Extractor:
             for ch in s:
                 row = atom_index.get(ch)
                 if row is not None:
-                    # The author script builds these DataFrame columns in the order
-                    # C_atom, O_atom, H_atom, N_atom, S_atom but then reads them back
-                    # by fixed position as if the order were C, H, N, O, S. That
-                    # off-by-one column shift is preserved here since the released
-                    # model was trained on its (mislabeled) output.
+                    # Author script reads C/O/H/N/S columns by position as C/H/N/O/S; the shift is preserved to match the trained model.
                     totals["C"] += row.C_atom
                     totals["H"] += row.O_atom
                     totals["N"] += row.H_atom
@@ -325,10 +315,7 @@ class Extractor:
         return pd.DataFrame(rows, columns=self.PCP_HEADERS)
 
     def _feature_rri(self, sequences):
-        # The author script's `count` and `x` counters are never reset across amino
-        # acids or sequences (only re-initialized once, before the outermost loop),
-        # so their leftover values leak into the next iteration. That stateful bug
-        # is preserved here since the released model was trained on its output.
+        # Author script's `count` and `x` counters are never reset and leak between iterations; preserved to match the trained model.
         columns = [f"RRI_{i}" for i in self.STD]
         rows = []
         count = 0
@@ -451,10 +438,7 @@ class Extractor:
 
     def _feature_cetd(self, sequences):
         attr = self.attr
-        # The author script matches residues by scanning each raw category string
-        # character-by-character (not splitting on commas), so build the lookup the
-        # same way: some rows have stray formatting (e.g. a space instead of a comma)
-        # that only ever collides with non-residue characters and is otherwise inert.
+        # Author script scans raw category strings character-by-character, so the lookup is built the same way.
         group_of = []  # group_of[attribute_index]: residue char -> group code (1,2,3)
         for i in range(len(attr)):
             groups_by_cat = {}
@@ -488,11 +472,7 @@ class Extractor:
 
         comp_rows, trans_rows, dist_rows = [], [], []
         for s in sequences:
-            # One category table row is missing a residue in its source data
-            # (e.g. 'C' absent from every group of "normalized vander Waals
-            # volume"); the author script's matching loop simply finds no
-            # match and appends nothing for that residue at that row, so the
-            # per-attribute code list can be shorter than the sequence.
+            # A category table row lacks a residue in its source data, so the per-attribute code list can be shorter than the sequence.
             per_attr_codes = [
                 [group_of[i][ch] for ch in s if ch in group_of[i]]
                 for i in range(len(attr))
@@ -685,17 +665,12 @@ def normalize_sequences(values):
 
 
 def _y_to_phc50(y_pred: np.ndarray) -> np.ndarray:
-    """Model output is -log10(HC50 in uM). Convert to this codebase's
-    pHC50 = -log10(HC50 in M) convention: HC50_M = HC50_uM * 1e-6, so
-    -log10(HC50_M) = -log10(HC50_uM) + 6 = y_pred + 6. Same convention and
-    offset as hemolysis_predictor_v2's HC50(uM) -> pHC50 conversion."""
+    """Model output is -log10(HC50 in uM); adding 6 gives this codebase's pHC50 = -log10(HC50 in M)."""
     return y_pred + 6.0
 
 
-class ReplicatedHemoPI2Predictor:
-    """Lazy-loaded sklearn Pipeline (imputer + RandomForestRegressor),
-    trained offline from HemoPI2's own published cross-validation/test
-    splits. Returns pHC50 in this codebase's convention (see _y_to_phc50)."""
+class ModifiedHemolyticPredictor:
+    """Lazy-loaded sklearn Pipeline (imputer + RandomForestRegressor) returning pHC50 (see _y_to_phc50)."""
 
     def __init__(self, model_path: Path = MODEL_PATH):
         self.model_path = Path(model_path)
@@ -715,7 +690,9 @@ class ReplicatedHemoPI2Predictor:
         rows = feature_extractor.get_hemolysis_v1_descriptors_batch(normalized)
         return pd.DataFrame(rows)
 
-    def predict_phc50(self, sequence: str, feature_extractor: "FeatureExtractor") -> float:
+    def predict_phc50(
+        self, sequence: str, feature_extractor: "FeatureExtractor"
+    ) -> float:
         _validate_sequence(sequence)
         self._load()
         X = self._extract_cached([sequence], feature_extractor)
@@ -727,10 +704,7 @@ class ReplicatedHemoPI2Predictor:
         sequences: list[str],
         feature_extractor: "FeatureExtractor",
     ) -> list[float]:
-        """Batched predict_phc50: one descriptor-extraction pass and one
-        model.predict() call for every sequence, instead of one call per
-        sequence -- same batching benefit as hemolysis_predictor_v2, without
-        the subprocess overhead."""
+        """Batched predict_phc50: one descriptor-extraction pass and one model.predict() call for every sequence."""
         for i, sequence in enumerate(sequences):
             try:
                 _validate_sequence(sequence)

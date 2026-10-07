@@ -1,10 +1,4 @@
-"""Loader/inference wrapper for the MBIC (biofilm inhibition) SVR+RF ensemble.
-
-Predicts pMBIC = 6 - log10(activity_uM), a pIC50-style log-scale potency
-value against biofilm, NOT a raw concentration and NOT a [0, 1] probability.
-To recover the concentration: activity_uM = 10 ** (6 - pMBIC). Higher pMBIC
-means a lower (more potent) MBIC concentration. See README.md.
-"""
+"""Loader/inference wrapper for the MBIC SVR+RF ensemble predicting pMBIC = 6 - log10(activity_uM), a log-scale potency (not a probability); see README.md."""
 
 from __future__ import annotations
 
@@ -47,9 +41,7 @@ def _validate_sequence(sequence: str) -> None:
 def esm_embedding_cached_batch(
     sequences: list[str], feature_extractor: FeatureExtractor
 ) -> np.ndarray:
-    """Mean-pool over cached per-token hidden states, excluding the BOS/EOS
-    special tokens (positions 0 and -1 of the cached, already-trimmed
-    per-sequence tensor) and any padding (already stripped by the cache)."""
+    """Mean-pool over cached hidden states excluding BOS/EOS."""
     seqs = [s.strip().upper() for s in sequences]
     embeddings = feature_extractor.get_esm2_embedding_batch(seqs)
     pooled = np.stack([e.hidden_states[1:-1].mean(axis=0) for e in embeddings])
@@ -77,11 +69,7 @@ def physchem_descriptors_batch(sequences: list[str], ph: float = 7.4, amide: boo
     # Eisenberg hydrophobic moment <uH>, max over an alpha-helical (100deg) window.
     moment = _scaled("eisenberg", "calculate_moment", window=window, angle=angle, modality="max")
 
-    # Amphipathicity = <uH> normalized by mean |H|; distinguishes a genuinely
-    # faced helix from a peptide that is merely uniformly hydrophobic. When
-    # mean |H| is ~0 the ratio is undefined -- fall back to mean_h itself
-    # (already ~0 there) rather than NaN, which would otherwise reach the
-    # SVR/RF models undefined and crash sklearn's input validation.
+    # Amphipathicity = <uH> / mean |H|; falls back to mean_h when mean |H| is ~0 to avoid NaN.
     p_abs = PeptideDescriptor(seqs, "eisenberg")
     p_abs.calculate_global(modality="mean")
     mean_h = np.abs(p_abs.descriptor.ravel())
@@ -121,12 +109,7 @@ def physchem_descriptors_batch(sequences: list[str], ph: float = 7.4, amide: boo
 
 
 class MBICPredictor:
-    """Lazy-loaded SVR+RandomForest ensemble over ESM2 embeddings + modlAMP
-    physchem descriptors + one-hot species. Returns pMBIC (log-scale potency),
-    not a probability or raw concentration — see README.md for the inverse
-    transform. Each regressor carries its own preprocessing bundle (species
-    one-hot encoder, physchem/ESM2 scalers, ESM2 PCA) as fit in the source
-    notebook, applied independently before averaging the two predictions."""
+    """Lazy-loaded SVR + RandomForest ensemble over ESM2, modlAMP physchem and species one-hot returning pMBIC; see README.md."""
 
     def __init__(self, model_dir: Path = MODEL_DIR):
         self.model_dir = Path(model_dir)
@@ -169,17 +152,7 @@ class MBICPredictor:
     def predict_pmbic(
         self, sequence: str, species: str, feature_extractor: FeatureExtractor
     ) -> float:
-        """Predict pMBIC = 6 - log10(activity_uM) for `sequence` against `species`,
-        averaged over the SVR + RandomForest ensemble.
-
-        `species` should match a training-set organism name (see README.md /
-        model_card.json for the vocabulary, e.g. "Pseudomonas aeruginosa").
-        An unrecognized species is NOT an error: the underlying OneHotEncoder
-        was fit with handle_unknown="ignore", so it silently becomes an
-        all-zero species vector (equivalent to "no species signal") rather
-        than raising or matching any specific organism. Treat predictions for
-        out-of-vocabulary species with extra caution.
-        """
+        """Predict pMBIC for `sequence` against `species`, averaged over the ensemble; unknown species silently become an all-zero one-hot, so treat them with caution."""
         return self.predict_pmbic_batch([sequence], species, feature_extractor)[0]
 
     def predict_pmbic_batch(
@@ -188,9 +161,7 @@ class MBICPredictor:
         species: str,
         feature_extractor: FeatureExtractor,
     ) -> list[float]:
-        """Batched predict_pmbic: one ESM2 forward pass for the whole batch,
-        against one fixed `species` applied to every sequence (matches how
-        Stage 6 scores per organism across all candidates)."""
+        """Batched predict_pmbic: one ESM2 forward pass with one fixed `species` for every sequence."""
         for i, sequence in enumerate(sequences):
             try:
                 _validate_sequence(sequence)

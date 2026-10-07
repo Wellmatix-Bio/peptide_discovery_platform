@@ -1,12 +1,4 @@
-"""
-Build a binary dataset: peptide treatment of inflammatory cells -> secreted IL-6.
-Label 1 = IL-6 decreased; Label 0 = increased / no change / unclear.
-
-Source: Europe PMC REST API (abstracts). Run locally:
-    pip install requests pandas
-    python build_peptide_il6_dataset.py
-Output: peptide_il6_dataset.csv  (REVIEW the `needs_review` rows by hand)
-"""
+"""Build a binary dataset (peptide treatment of inflammatory cells -> secreted IL-6 decreased) from Europe PMC abstracts; review `needs_review` rows by hand."""
 
 import re, time, requests, pandas as pd
 

@@ -14,9 +14,7 @@ def _now() -> str:
 
 
 class AuditWriter:
-    """Appends one JSONL record per setup stage, candidate stage, and
-    failure to `path`, so a run's full provenance trail lives in one file.
-    Truncates any existing file at `path` first."""
+    """Appends one JSONL record per setup stage, candidate stage and failure to `path`, truncating any existing file first."""
 
     def __init__(self, path: str) -> None:
         self.path = path

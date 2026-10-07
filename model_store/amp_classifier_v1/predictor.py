@@ -29,9 +29,7 @@ def esm_features_cached(sequence: str, feature_extractor: FeatureExtractor, norm
 def esm_features_cached_batch(
     sequences: list[str], feature_extractor: FeatureExtractor, normalize_amino: bool
 ) -> pd.DataFrame:
-    """Mean-pool over every cached token INCLUDING BOS/EOS -- this model's
-    trained convention (verified: its pooling never zeroes special-token
-    positions, unlike mbic/angiogenic/solubility/synthesis_feasibility)."""
+    """Mean-pool over every cached token including BOS/EOS, this model's trained convention."""
     model_sequences = [s.upper() if normalize_amino else s for s in sequences]
     embeddings = feature_extractor.get_esm2_embedding_batch(model_sequences)
     values = np.stack([e.hidden_states.mean(axis=0) for e in embeddings])
@@ -76,8 +74,7 @@ def _validate_sequence(sequence: str) -> None:
 
 
 class AMPClassifier:
-    """Lazy-loaded 5-fold XGBoost + meta-model ensemble. Returns a calibrated
-    AMP probability in [0, 1]. See README.md for architecture details."""
+    """Lazy-loaded 5-fold XGBoost + meta-model ensemble returning a calibrated AMP probability; see README.md."""
 
     def __init__(self, model_dir: Path = MODEL_DIR):
         self.model_dir = Path(model_dir)
@@ -144,22 +141,7 @@ class AMPClassifier:
         return [float(v) for v in np.clip(calibrated, 0.0, 1.0)]
 
     def _predict_fold_proba(self, model: xgb.XGBClassifier, X: np.ndarray) -> np.ndarray:
-        """P(class=1) for one fold model. Builds a DMatrix explicitly instead
-        of calling model.predict_proba(X) directly: when the booster is
-        device="cuda" (this env has a GPU) and X is a plain host-memory
-        ndarray, predict_proba's inplace-predict path detects the mismatch
-        and silently falls back to a DMatrix internally anyway, but not
-        before emitting a UserWarning on every call. Doing the DMatrix
-        construction ourselves gets XGBoost's own CPU<->GPU handling with no
-        warning.
-
-        iteration_range must be capped at best_iteration + 1 to match
-        predict_proba(): these fold models were trained with early stopping
-        (best_iteration < total boosted rounds), and the sklearn wrapper
-        silently restricts prediction to the best iteration -- the raw
-        booster does not, and calling booster.predict() without this range
-        verifiably returns different (wrong) probabilities from every round
-        past the early-stopping point."""
+        """P(class=1) for one fold model via an explicit DMatrix (avoids a CUDA UserWarning) capped at best_iteration + 1 to match predict_proba()."""
         booster = model.get_booster()
         best_iteration = getattr(model, "best_iteration", None)
         iteration_range = (

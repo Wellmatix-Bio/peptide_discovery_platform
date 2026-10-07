@@ -1,22 +1,9 @@
-"""UniZyme joint model: enzyme/substrate encoders, active-site head, cleavage-site head.
-
-Copied verbatim from the source project's model.py (itself extracted from
-unizyme.ipynb's `encoder-code`, `enzyme-encoder-code`, `active-site-head-code`,
-`substrate-encoder-code`, `cleavage-head-code`, `cleavage-model-code` cells).
-Kept structurally identical so `joint_model_best.pt` (written by
-`unizyme.ipynb`'s `train_joint()`) loads here without any state_dict remapping.
-See predictor.py for the inference wrapper and README.md for provenance.
-"""
-
 from pathlib import Path
 
 import torch
 import torch.nn as nn
 from torch.utils.checkpoint import checkpoint
 
-# Defaults match unizyme.ipynb's encoder-code cell. PCA_TARGET_DIM there is
-# set at runtime from the fitted PCA model (pca_model.n_components_); 128 is
-# that model's actual component count, used here only as the default.
 PCA_TARGET_DIM = 128
 ENCODER_HIDDEN_DIM = PCA_TARGET_DIM
 ENCODER_NUM_HEADS = 4
@@ -30,10 +17,7 @@ CLEAVAGE_WINDOW_RADIUS = 15  # +/-15 around candidate position t -> a 31-residue
 
 
 class DistanceBias(nn.Module):
-    """Projects a (B, L, L) C-alpha distance matrix to a per-head additive
-    attention bias (B, num_heads, L, L) via a Gaussian-kernel (RBF) + small
-    MLP. Computed once per protein and reused identically at every encoder
-    layer."""
+    """Projects a (B, L, L) distance matrix to a per-head additive attention bias (B, num_heads, L, L) via an RBF kernel + small MLP."""
 
     def __init__(self, num_heads, num_rbf=DISTANCE_NUM_RBF, max_distance=50.0):
         super().__init__()
@@ -56,22 +40,22 @@ class DistanceBias(nn.Module):
 
 
 def local_attention_band(length, span, device, dtype):
-    """(L, L) boolean mask, True where |i - j| <= span -- the local window
-    every residue is allowed to attend within, before any distance-bias
-    reweighting is applied on top of it."""
+    """(L, L) boolean mask, True where |i - j| <= span."""
     idx = torch.arange(length, device=device)
     band = (idx[:, None] - idx[None, :]).abs() <= span
     return band
 
 
-def build_combined_bias(distance_bias_module, distance_matrices, mask, local_span=LOCAL_ATTN_SPAN):
-    """One (B, num_heads, L, L) additive bias: Phi_dist, masked to the local
-    attention band and to real (non-padded) key positions. Computed once per
-    forward pass and passed unchanged into every encoder layer."""
+def build_combined_bias(
+    distance_bias_module, distance_matrices, mask, local_span=LOCAL_ATTN_SPAN
+):
+    """One (B, num_heads, L, L) additive bias, masked to the local band and real key positions; shared by every encoder layer."""
     B, L, _ = distance_matrices.shape
     dist_bias = distance_bias_module(distance_matrices)  # (B, H, L, L)
 
-    band = local_attention_band(L, local_span, distance_matrices.device, dist_bias.dtype)  # (L, L) bool
+    band = local_attention_band(
+        L, local_span, distance_matrices.device, dist_bias.dtype
+    )  # (L, L) bool
     outside_band = ~band  # True where attention is disallowed by the span cap
 
     pad_key = ~mask  # (B, L) True where padded
@@ -83,15 +67,15 @@ def build_combined_bias(distance_bias_module, distance_matrices, mask, local_spa
 
 
 class LocalDistanceBiasedEncoderLayer(nn.Module):
-    """One pre-norm transformer block. Takes the already-computed combined
-    (distance + local-span) bias as an argument -- never derives anything
-    positional itself, so every layer shares the identical bias tensor."""
+    """One pre-norm transformer block taking the shared precomputed attention bias."""
 
     def __init__(self, hidden_dim, num_heads, ffn_dim, dropout):
         super().__init__()
         self.num_heads = num_heads
         self.norm1 = nn.LayerNorm(hidden_dim)
-        self.attn = nn.MultiheadAttention(hidden_dim, num_heads, dropout=dropout, batch_first=True)
+        self.attn = nn.MultiheadAttention(
+            hidden_dim, num_heads, dropout=dropout, batch_first=True
+        )
         self.norm2 = nn.LayerNorm(hidden_dim)
         self.ffn = nn.Sequential(
             nn.Linear(hidden_dim, ffn_dim),
@@ -102,8 +86,7 @@ class LocalDistanceBiasedEncoderLayer(nn.Module):
         self.dropout = nn.Dropout(dropout)
 
     def forward(self, x, attn_bias):
-        """attn_bias: (B, num_heads, L, L) additive bias, already including
-        -inf outside the local attention band and at padded key positions."""
+        """attn_bias: (B, num_heads, L, L) additive bias, -inf outside the local band and at padded keys."""
         B, L, _ = x.shape
         h = self.norm1(x)
         bias_flat = attn_bias.reshape(B * self.num_heads, L, L)
@@ -114,9 +97,7 @@ class LocalDistanceBiasedEncoderLayer(nn.Module):
 
 
 class EnzymeEncoder(nn.Module):
-    """PCA-reduced ESM-2 embedding (frozen, precomputed) -> project to
-    hidden_dim -> N local-attention, distance-biased transformer layers ->
-    per-residue hidden states."""
+    """PCA-reduced ESM-2 embedding projected to hidden_dim, then local-attention distance-biased transformer layers to per-residue states."""
 
     def __init__(
         self,
@@ -132,23 +113,22 @@ class EnzymeEncoder(nn.Module):
         super().__init__()
         self.input_proj = nn.Linear(embed_dim, hidden_dim)
         self.distance_bias = DistanceBias(num_heads)
-        self.layers = nn.ModuleList([
-            LocalDistanceBiasedEncoderLayer(hidden_dim, num_heads, ffn_dim, dropout)
-            for _ in range(num_layers)
-        ])
+        self.layers = nn.ModuleList(
+            [
+                LocalDistanceBiasedEncoderLayer(hidden_dim, num_heads, ffn_dim, dropout)
+                for _ in range(num_layers)
+            ]
+        )
         self.num_heads = num_heads
         self.local_span = local_span
         self.use_gradient_checkpointing = use_gradient_checkpointing
 
     def forward(self, embeddings, distance_matrices, mask):
-        """
-        embeddings:        (B, L, embed_dim) float
-        distance_matrices: (B, L, L) float
-        mask:               (B, L) bool, True = real residue
-        returns:            (B, L, hidden_dim) per-residue hidden states
-        """
+        """embeddings (B, L, embed_dim), distance_matrices (B, L, L), mask (B, L) -> per-residue states (B, L, hidden_dim)."""
         x = self.input_proj(embeddings)
-        attn_bias = build_combined_bias(self.distance_bias, distance_matrices, mask, self.local_span)
+        attn_bias = build_combined_bias(
+            self.distance_bias, distance_matrices, mask, self.local_span
+        )
 
         for layer in self.layers:
             if self.use_gradient_checkpointing and self.training:
@@ -160,11 +140,7 @@ class EnzymeEncoder(nn.Module):
 
 
 class SubstrateEncoder(nn.Module):
-    """Same architecture family as EnzymeEncoder: PCA-reduced ESM-2
-    embedding -> project to hidden_dim -> N local-attention,
-    distance-biased transformer layers -> per-residue hidden states H^s.
-    No head/pooling -- consumed downstream as a per-residue window, not a
-    single pooled vector."""
+    """Same architecture as EnzymeEncoder, returning per-residue states H^s with no pooling."""
 
     def __init__(
         self,
@@ -180,23 +156,22 @@ class SubstrateEncoder(nn.Module):
         super().__init__()
         self.input_proj = nn.Linear(embed_dim, hidden_dim)
         self.distance_bias = DistanceBias(num_heads)
-        self.layers = nn.ModuleList([
-            LocalDistanceBiasedEncoderLayer(hidden_dim, num_heads, ffn_dim, dropout)
-            for _ in range(num_layers)
-        ])
+        self.layers = nn.ModuleList(
+            [
+                LocalDistanceBiasedEncoderLayer(hidden_dim, num_heads, ffn_dim, dropout)
+                for _ in range(num_layers)
+            ]
+        )
         self.num_heads = num_heads
         self.local_span = local_span
         self.use_gradient_checkpointing = use_gradient_checkpointing
 
     def forward(self, embeddings, distance_matrices, mask):
-        """
-        embeddings:        (B, L, embed_dim) float
-        distance_matrices: (B, L, L) float
-        mask:               (B, L) bool, True = real residue
-        returns:            (B, L, hidden_dim) per-residue hidden states H^s
-        """
+        """embeddings (B, L, embed_dim), distance_matrices (B, L, L), mask (B, L) -> per-residue states H^s (B, L, hidden_dim)."""
         x = self.input_proj(embeddings)
-        attn_bias = build_combined_bias(self.distance_bias, distance_matrices, mask, self.local_span)
+        attn_bias = build_combined_bias(
+            self.distance_bias, distance_matrices, mask, self.local_span
+        )
 
         for layer in self.layers:
             if self.use_gradient_checkpointing and self.training:
@@ -208,15 +183,15 @@ class SubstrateEncoder(nn.Module):
 
 
 class ActiveSiteHead(nn.Module):
-    """Per-residue active-site logit (the L_a loss target), plus a small
-    separate Gaussian-kernel + MLP f(.) that reshapes the predicted
-    active-site probability into an attention-pooling score, matching the
-    paper's h_i -> sigma(.) = a_hat_i -> f(a_hat_i) -> softmax. One set of
-    head weights for the logit; f(.) is a distinct, tiny module reusing the
-    head's output, not a second head."""
+    """Per-residue active-site logit plus a small Gaussian-kernel + MLP f(.) that turns the active-site probability into an attention-pooling score."""
 
-    def __init__(self, hidden_dim=ENCODER_HIDDEN_DIM, num_rbf=POOL_NUM_RBF,
-                 min_prob=0.0, max_prob=1.0):
+    def __init__(
+        self,
+        hidden_dim=ENCODER_HIDDEN_DIM,
+        num_rbf=POOL_NUM_RBF,
+        min_prob=0.0,
+        max_prob=1.0,
+    ):
         super().__init__()
         self.site_logit = nn.Linear(hidden_dim, 1)
 
@@ -230,19 +205,14 @@ class ActiveSiteHead(nn.Module):
         )
 
     def forward(self, hidden_states, mask):
-        """
-        hidden_states: (B, L, hidden_dim)
-        mask:          (B, L) bool, True = real residue
-        returns:
-          site_logits:   (B, L)      -- raw logit, the BCE loss target
-          pooled:        (B, hidden_dim) -- whole-enzyme representation h^e
-          pool_weights:  (B, L)      -- attention weights used for pooling
-        """
+        """hidden_states (B, L, hidden_dim), mask (B, L) -> (site_logits (B, L), pooled h^e (B, hidden_dim), pool_weights (B, L))."""
         site_logits = self.site_logit(hidden_states).squeeze(-1)  # (B, L)
         site_probs = torch.sigmoid(site_logits)  # a_hat_i, the paper's pooling input
 
         clamped = site_probs.clamp(self.rbf_centers.min(), self.rbf_centers.max())
-        rbf = torch.exp(-self.rbf_gamma * (clamped.unsqueeze(-1) - self.rbf_centers) ** 2)  # (B, L, num_rbf)
+        rbf = torch.exp(
+            -self.rbf_gamma * (clamped.unsqueeze(-1) - self.rbf_centers) ** 2
+        )  # (B, L, num_rbf)
         pool_scores = self.pool_score_fn(rbf).squeeze(-1)  # (B, L)
         pool_scores = pool_scores.masked_fill(~mask, torch.finfo(pool_scores.dtype).min)
         pool_weights = torch.softmax(pool_scores, dim=-1)  # (B, L)
@@ -253,11 +223,14 @@ class ActiveSiteHead(nn.Module):
 
 
 class CleavageSiteHead(nn.Module):
-    """Concatenates a (2*window_radius + 1)-residue window of substrate
-    hidden states H^s (centered on a candidate cleavage position t) with the
-    enzyme's pooled representation h^e, then an MLP to a cleavage logit."""
+    """Concatenates a (2*window_radius + 1)-residue window of H^s around position t with the pooled enzyme h^e, then an MLP to a cleavage logit."""
 
-    def __init__(self, hidden_dim=ENCODER_HIDDEN_DIM, window_radius=CLEAVAGE_WINDOW_RADIUS, mlp_hidden=128):
+    def __init__(
+        self,
+        hidden_dim=ENCODER_HIDDEN_DIM,
+        window_radius=CLEAVAGE_WINDOW_RADIUS,
+        mlp_hidden=128,
+    ):
         super().__init__()
         self.window_radius = window_radius
         window_len = 2 * window_radius + 1
@@ -272,13 +245,7 @@ class CleavageSiteHead(nn.Module):
         )
 
     def _gather_window(self, H_s, substrate_mask, idx):
-        """
-        H_s:            (B, L_s, hidden_dim)
-        substrate_mask: (B, L_s) bool, True = real residue
-        idx:            (B, N, window_len) long, already-offset (unclamped) indices
-        returns:        (B, N, window_len, hidden_dim) gathered + zeroed outside
-                         validity, and (B, N, window_len) bool validity mask
-        """
+        """H_s (B, L_s, hidden_dim), substrate_mask, idx (B, N, window_len) -> gathered windows (zeroed outside validity) and a validity mask."""
         B, L_s, H = H_s.shape
         N, window_len = idx.shape[1], idx.shape[2]
 
@@ -290,102 +257,123 @@ class CleavageSiteHead(nn.Module):
             H_s, 1, idx_flat.unsqueeze(-1).expand(-1, -1, H)
         ).reshape(B, N, window_len, H)
 
-        real_residue = torch.gather(substrate_mask, 1, idx_flat).reshape(B, N, window_len)
+        real_residue = torch.gather(substrate_mask, 1, idx_flat).reshape(
+            B, N, window_len
+        )
         valid = in_bounds & real_residue
 
         gathered = gathered * valid.unsqueeze(-1).float()
         return gathered, valid
 
     def substrate_window(self, H_s, substrate_mask, positions):
-        """
-        positions: (B,) long, 0-indexed candidate cleavage position t per batch item
-        returns:   (B, window_len, hidden_dim), (B, window_len) bool validity mask
-        """
-        offsets = torch.arange(-self.window_radius, self.window_radius + 1, device=H_s.device)
+        """positions (B,) 0-indexed -> (B, window_len, hidden_dim) window and (B, window_len) validity mask."""
+        offsets = torch.arange(
+            -self.window_radius, self.window_radius + 1, device=H_s.device
+        )
         idx = (positions[:, None] + offsets[None, :]).unsqueeze(1)  # (B, 1, window_len)
         gathered, valid = self._gather_window(H_s, substrate_mask, idx)
         return gathered.squeeze(1), valid.squeeze(1)
 
     def forward(self, H_s, substrate_mask, positions, h_e):
-        """
-        H_s:            (B, L_s, hidden_dim)
-        substrate_mask: (B, L_s) bool
-        positions:      (B,) long, 0-indexed candidate cleavage position t
-        h_e:            (B, hidden_dim) pooled enzyme representation
-        returns:        (B,) raw cleavage logit per candidate position
-        """
-        window, _valid = self.substrate_window(H_s, substrate_mask, positions)  # (B, window_len, H)
+        """H_s, substrate_mask, positions (B,), h_e (B, hidden_dim) -> (B,) raw cleavage logit per candidate position."""
+        window, _valid = self.substrate_window(
+            H_s, substrate_mask, positions
+        )  # (B, window_len, H)
         B = window.shape[0]
         combined = torch.cat([window.reshape(B, -1), h_e], dim=-1)
         return self.mlp(combined).squeeze(-1)
 
     def forward_all_positions(self, H_s, substrate_mask, h_e):
-        """
-        H_s:            (B, L_s, hidden_dim)
-        substrate_mask: (B, L_s) bool
-        h_e:            (B, hidden_dim) pooled enzyme representation
-        returns:        (B, L_s) raw cleavage logit at every substrate position
-                         (padded positions hold a real, finite number but are
-                         meaningless -- caller must mask with substrate_mask)
-        """
+        """H_s, substrate_mask, h_e -> (B, L_s) raw cleavage logits at every position"""
         B, L_s, H = H_s.shape
-        offsets = torch.arange(-self.window_radius, self.window_radius + 1, device=H_s.device)  # (window_len,)
+        offsets = torch.arange(
+            -self.window_radius, self.window_radius + 1, device=H_s.device
+        )  # (window_len,)
         all_positions = torch.arange(L_s, device=H_s.device)  # (L_s,)
-        idx = (all_positions[None, :, None] + offsets[None, None, :]).expand(B, -1, -1)  # (B, L_s, window_len)
+        idx = (all_positions[None, :, None] + offsets[None, None, :]).expand(
+            B, -1, -1
+        )  # (B, L_s, window_len)
 
-        window, _valid = self._gather_window(H_s, substrate_mask, idx)  # (B, L_s, window_len, H)
+        window, _valid = self._gather_window(
+            H_s, substrate_mask, idx
+        )  # (B, L_s, window_len, H)
         window_flat = window.reshape(B, L_s, -1)
         h_e_expanded = h_e.unsqueeze(1).expand(-1, L_s, -1)  # (B, L_s, H)
-        combined = torch.cat([window_flat, h_e_expanded], dim=-1)  # (B, L_s, window_len*H + H)
+        combined = torch.cat(
+            [window_flat, h_e_expanded], dim=-1
+        )  # (B, L_s, window_len*H + H)
         return self.mlp(combined).squeeze(-1)  # (B, L_s)
 
 
 class JointModel(nn.Module):
-    """Enzyme side (EnzymeEncoder + ActiveSiteHead) shared between both
-    losses; substrate side (SubstrateEncoder + CleavageSiteHead) used only
-    for L_c. L_a and L_c use separate forward methods even though they
-    share the enzyme encoder's weights."""
+    """Shared enzyme side (EnzymeEncoder + ActiveSiteHead) plus substrate side (SubstrateEncoder + CleavageSiteHead) used only for L_c."""
 
     def __init__(self, init_from_active_site_model=None, **encoder_kwargs):
         super().__init__()
         self.enzyme_encoder = EnzymeEncoder(**encoder_kwargs)
-        self.active_site_head = ActiveSiteHead(hidden_dim=encoder_kwargs.get("hidden_dim", ENCODER_HIDDEN_DIM))
+        self.active_site_head = ActiveSiteHead(
+            hidden_dim=encoder_kwargs.get("hidden_dim", ENCODER_HIDDEN_DIM)
+        )
         self.substrate_encoder = SubstrateEncoder(**encoder_kwargs)
-        self.cleavage_head = CleavageSiteHead(hidden_dim=encoder_kwargs.get("hidden_dim", ENCODER_HIDDEN_DIM))
+        self.cleavage_head = CleavageSiteHead(
+            hidden_dim=encoder_kwargs.get("hidden_dim", ENCODER_HIDDEN_DIM)
+        )
 
         if init_from_active_site_model is not None:
-            self.enzyme_encoder.load_state_dict(init_from_active_site_model.encoder.state_dict())
-            self.active_site_head.load_state_dict(init_from_active_site_model.head.state_dict())
+            self.enzyme_encoder.load_state_dict(
+                init_from_active_site_model.encoder.state_dict()
+            )
+            self.active_site_head.load_state_dict(
+                init_from_active_site_model.head.state_dict()
+            )
 
     def forward_active_site(self, enzyme_embeddings, enzyme_distances, enzyme_mask):
         """L_a path: one enzyme batch -> per-residue active-site logits."""
-        enzyme_hidden = self.enzyme_encoder(enzyme_embeddings, enzyme_distances, enzyme_mask)
-        site_logits, h_e, pool_weights = self.active_site_head(enzyme_hidden, enzyme_mask)
+        enzyme_hidden = self.enzyme_encoder(
+            enzyme_embeddings, enzyme_distances, enzyme_mask
+        )
+        site_logits, h_e, pool_weights = self.active_site_head(
+            enzyme_hidden, enzyme_mask
+        )
         return {"site_logits": site_logits, "h_e": h_e, "pool_weights": pool_weights}
 
-    def forward_cleavage(self, enzyme_embeddings, enzyme_distances, enzyme_mask,
-                          substrate_embeddings, substrate_distances, substrate_mask):
-        """L_c path: one (enzyme, substrate) pair batch -> per-substrate-residue
-        cleavage logits, using h^e from the same shared enzyme side."""
-        enzyme_hidden = self.enzyme_encoder(enzyme_embeddings, enzyme_distances, enzyme_mask)
-        _site_logits, h_e, _pool_weights = self.active_site_head(enzyme_hidden, enzyme_mask)
+    def forward_cleavage(
+        self,
+        enzyme_embeddings,
+        enzyme_distances,
+        enzyme_mask,
+        substrate_embeddings,
+        substrate_distances,
+        substrate_mask,
+    ):
+        """L_c path: one (enzyme, substrate) pair batch to per-substrate-residue cleavage logits."""
+        enzyme_hidden = self.enzyme_encoder(
+            enzyme_embeddings, enzyme_distances, enzyme_mask
+        )
+        _site_logits, h_e, _pool_weights = self.active_site_head(
+            enzyme_hidden, enzyme_mask
+        )
 
-        H_s = self.substrate_encoder(substrate_embeddings, substrate_distances, substrate_mask)
-        cleavage_logits = self.cleavage_head.forward_all_positions(H_s, substrate_mask, h_e)
+        H_s = self.substrate_encoder(
+            substrate_embeddings, substrate_distances, substrate_mask
+        )
+        cleavage_logits = self.cleavage_head.forward_all_positions(
+            H_s, substrate_mask, h_e
+        )
 
         return {"cleavage_logits": cleavage_logits, "h_e": h_e, "H_s": H_s}
 
     @classmethod
     def load_pretrained(cls, checkpoint_path, device="cpu", **encoder_kwargs):
-        """Build a JointModel and load weights from a checkpoint written by
-        unizyme.ipynb's save_checkpoint() (a dict with a "model_state_dict"
-        key), or from a raw state_dict saved directly via torch.save.
-        Returns the model in eval() mode, moved to `device`."""
         checkpoint_path = Path(checkpoint_path)
         model = cls(**encoder_kwargs).to(device)
 
         ckpt = torch.load(checkpoint_path, map_location=device)
-        state_dict = ckpt["model_state_dict"] if isinstance(ckpt, dict) and "model_state_dict" in ckpt else ckpt
+        state_dict = (
+            ckpt["model_state_dict"]
+            if isinstance(ckpt, dict) and "model_state_dict" in ckpt
+            else ckpt
+        )
         model.load_state_dict(state_dict)
 
         model.eval()

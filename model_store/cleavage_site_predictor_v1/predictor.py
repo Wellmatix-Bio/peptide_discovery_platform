@@ -1,10 +1,4 @@
-"""Loader/inference wrapper for the UniZyme joint enzyme-active-site /
-substrate-cleavage-site model, scoped to protease susceptibility scoring
-for candidate peptides (the "substrate" side).
-
-Requires a Cα distance matrix for the candidate peptide -- unlike the other
-model_store predictors, sequence alone is not enough. See README.md.
-"""
+"""Loader/inference wrapper for the joint model scoring a candidate peptide's protease susceptibility; needs a Ca distance matrix"""
 
 from __future__ import annotations
 
@@ -30,8 +24,7 @@ AMINO_ACID_SET = set("ACDEFGHIKLMNPQRSTVWY")
 ESM_MODEL_NAME = "facebook/esm2_t30_150M_UR50D"
 ESM_RAW_EMBED_DIM = 640
 
-# Cleavage logit -> probability, per substrate residue; P1 cleavage site at
-# residue t means the peptide bond C-terminal to t is cut by this enzyme.
+# Cleavage logit to probability per substrate residue; a P1 site at t means the bond C-terminal to t is cut.
 CLEAVAGE_PROB_THRESHOLD = 0.5
 
 
@@ -54,8 +47,7 @@ def _validate_distance_matrix(distance_matrix: np.ndarray, sequence: str) -> Non
 
 
 def compute_esm_embedding(sequence: str, tokenizer, esm_model, device: str) -> np.ndarray:
-    """(L, ESM_RAW_EMBED_DIM) float32 array, BOS/EOS stripped via the
-    tokenizer's own special_tokens_mask. Matches source pipeline.py exactly."""
+    """(L, ESM_RAW_EMBED_DIM) float32 array with BOS/EOS stripped via special_tokens_mask, matching source pipeline.py."""
     enc = tokenizer(sequence, return_tensors="pt", return_special_tokens_mask=True)
     special_mask = enc.pop("special_tokens_mask")[0].bool()
     enc = {k: v.to(device) for k, v in enc.items()}
@@ -77,16 +69,7 @@ def _load_enzyme_catalog() -> list[dict]:
 
 
 class CleavageSitePredictor:
-    """Lazy-loaded UniZyme JointModel. Scores a candidate peptide (as
-    substrate) against a bundled panel of 118 wound-relevant proteases
-    (cathepsins, MMPs/collagenases/gelatinases/stromelysins, elastases,
-    plasminogen activators) for P1 cleavage-site probability at every
-    residue. See README.md for the enzyme panel, architecture, and the
-    human-MMP/human-neutrophil-elastase coverage gap.
-
-    Unlike the platform's other model_store predictors, this one needs a
-    Cα distance matrix for the peptide, not just its sequence -- the caller
-    must supply one from a predicted or resolved structure."""
+    """Lazy-loaded JointModel scoring a peptide as substrate against 118 wound-relevant proteases per residue; needs a Ca distance matrix (see README.md)."""
 
     def __init__(self, model_dir: Path = MODEL_DIR):
         self.model_dir = Path(model_dir)
@@ -110,17 +93,14 @@ class CleavageSitePredictor:
         self.loaded = True
 
     def available_enzymes(self) -> list[dict]:
-        """Returns the bundled enzyme panel's catalog rows (accession, name,
-        family, EC, etc.) -- call after the first predict()/_load(), or
-        directly (it lazy-loads only the catalog, not the ESM2/PCA/model)."""
+        """The bundled enzyme panel's catalog rows; lazy-loads only the catalog."""
         if not self.loaded:
             sync_model_weights(CODE_DIR)
             self.enzyme_catalog = _load_enzyme_catalog()
         return self.enzyme_catalog
 
     def _enzyme_tensors(self, accession: str) -> tuple[torch.Tensor, torch.Tensor]:
-        """PCA-reduced embedding + distance matrix for a bundled enzyme,
-        loaded from disk once and cached for the life of this predictor."""
+        """PCA-reduced embedding and distance matrix for a bundled enzyme, cached for the predictor's life."""
         if accession not in self.enzyme_by_accession:
             raise ValueError(
                 f"Unknown enzyme accession {accession!r}. Call available_enzymes() "
@@ -150,12 +130,7 @@ class CleavageSitePredictor:
     def predict_one(
         self, sequence: str, distance_matrix: np.ndarray, enzyme_accession: str
     ) -> dict:
-        """Cleavage-site probability at every residue of `sequence`, for one
-        bundled enzyme (`enzyme_accession`, see available_enzymes()).
-
-        `distance_matrix` is a (len(sequence), len(sequence)) Cα distance
-        matrix in Angstroms, from a resolved or predicted structure of the
-        candidate peptide -- the caller's responsibility to supply."""
+        """Cleavage-site probability at every residue for one bundled enzyme; `distance_matrix` is the caller's (L, L) Ca matrix in Angstroms."""
         _validate_sequence(sequence)
         _validate_distance_matrix(distance_matrix, sequence)
         self._load()
@@ -187,10 +162,7 @@ class CleavageSitePredictor:
     def predict(
         self, sequence: str, distance_matrix: np.ndarray, enzyme_accessions: list[str] | None = None
     ) -> dict:
-        """Runs predict_one() against every enzyme in `enzyme_accessions`
-        (default: the full bundled 118-enzyme panel) and returns a summary:
-        per-enzyme results plus an overall susceptibility flag (any bundled
-        enzyme predicts >=1 cleavage site)."""
+        """Runs predict_one() against each enzyme (default: the full panel) and returns per-enzyme results plus an overall susceptibility flag."""
         self._load()
         accessions = enzyme_accessions or [row["enzyme_uniprot"] for row in self.enzyme_catalog]
 

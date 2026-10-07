@@ -30,7 +30,9 @@ try:
 
     PROPY_AVAILABLE = True
     PROPY_UNAVAILABLE_REASON = None
-except Exception as problem:  # noqa: BLE001 - any import failure means "not installed here"
+except (
+    Exception
+) as problem:  # noqa: BLE001 - any import failure means "not installed here"
     GetProDes = None  # type: ignore[assignment]
     PROPY_AVAILABLE = False
     PROPY_UNAVAILABLE_REASON = (
@@ -141,10 +143,7 @@ def _propy_features(seq: str) -> dict[str, float]:
 
 @dataclass(frozen=True)
 class ESM2Embedding:
-    """One sequence's raw ESM2 output. `hidden_states` includes BOS/EOS (and
-    any padding, trimmed to this sequence's own length) -- callers slice out
-    whatever special-token convention their own pooling needs; this class
-    makes no assumption about which positions matter to a given model."""
+    """One sequence's raw ESM2 output; `hidden_states` includes BOS/EOS and is trimmed to this sequence's length."""
 
     hidden_states: np.ndarray  # (seq_len_with_specials, hidden_dim), float32
     input_ids: np.ndarray  # (seq_len_with_specials,), token ids incl. BOS/EOS
@@ -158,16 +157,7 @@ def _sequence_cache_key(sequence: str, fingerprint: str) -> str:
 
 
 class FeatureExtractor:
-    """Pipeline-run-scoped cache of raw per-sequence feature representations.
-
-    One instance lives on RunContext for the whole run (see
-    PipelineRunner._build_context). Entries are memoized by a hash of the
-    sequence plus a fingerprint identifying which extractor/checkpoint
-    produced them, so a checkpoint change can never silently serve a stale
-    value under an unchanged-looking key. There is no explicit eviction: a
-    candidate dropped by some stage's reject simply never triggers another
-    lookup, so its entry becomes unreachable on its own.
-    """
+    """Run-scoped cache of raw per-sequence features, keyed by sequence hash plus an extractor/checkpoint fingerprint."""
 
     def __init__(
         self,
@@ -187,9 +177,7 @@ class FeatureExtractor:
         self._esm2_device: str | None = None
         self._hemolysis_v1_extractor: _HemolysisV1Extractor | None = None
 
-    # ------------------------------------------------------------------
     # Persistence: round-trips the four cache dicts through feature_cache/.
-    # ------------------------------------------------------------------
 
     def save(self, dir: str) -> None:
         storage.ensure_dir(dir)
@@ -258,9 +246,7 @@ class FeatureExtractor:
 
         return extractor
 
-    # ------------------------------------------------------------------
     # ESM2
-    # ------------------------------------------------------------------
 
     def _load_esm2(self) -> None:
         if self._esm2_model is not None:
@@ -277,14 +263,7 @@ class FeatureExtractor:
         return self.get_esm2_embedding_batch([sequence])[0]
 
     def get_esm2_embedding_batch(self, sequences: list[str]) -> list[ESM2Embedding]:
-        """Raw per-token ESM2 hidden states for a batch, memoized per sequence.
-
-        Only sequences not already cached are sent through the tokenizer and
-        model, split into chunks of at most `self.esm2_batch_size` to bound
-        peak GPU memory regardless of how many sequences are missing; cached
-        entries are returned as-is. Results are returned in the same order
-        as `sequences`.
-        """
+        """Raw per-token ESM2 hidden states for a batch, memoized per sequence and returned in input order."""
         keys = [_sequence_cache_key(s, self._esm2_fingerprint) for s in sequences]
         missing_indices = [i for i, k in enumerate(keys) if k not in self._esm2_cache]
 
@@ -320,14 +299,10 @@ class FeatureExtractor:
 
         return [self._esm2_cache[k] for k in keys]
 
-    # ------------------------------------------------------------------
     # modlAMP physicochemical descriptors
-    # ------------------------------------------------------------------
 
     def get_modlamp_descriptors(self, sequence: str) -> dict[str, float]:
-        """GlobalDescriptor (all) + per-scale global/moment PeptideDescriptor
-        features, matching amp_classifier_v1/mbic_predictor_v1's own
-        modlamp_features_batch column layout. Memoized per sequence."""
+        """GlobalDescriptor plus per-scale PeptideDescriptor features in the layout amp_classifier_v1/mbic_predictor_v1 expect; memoized per sequence."""
         return self.get_modlamp_descriptors_batch([sequence])[0]
 
     def get_modlamp_descriptors_batch(
@@ -372,18 +347,10 @@ class FeatureExtractor:
 
         return [self._modlamp_cache[k] for k in keys]
 
-    # ------------------------------------------------------------------
     # biopython / propy descriptors
-    # ------------------------------------------------------------------
 
     def get_propy_biopython_descriptors(self, sequence: str) -> dict[str, float]:
-        """biopython ProteinAnalysis + propy GetProDes (AAComp, DPComp, CTD,
-        Moran/Geary/Moreau-Broto autocorrelation, QSO, SOCN, PAAC, APAAC)
-        features, matching aggregation_predictor_v1's own biopython_features/
-        pybiomed_features column layout. Does not include the AAindex1
-        ProtScale pass -- that needs a per-model scale table the extractor
-        doesn't own, so aggregation_predictor_v1 still computes it itself.
-        Memoized per sequence."""
+        """biopython ProteinAnalysis + propy GetProDes features in aggregation_predictor_v1's layout (excluding its own AAindex1 pass); memoized per sequence."""
         return self.get_propy_biopython_descriptors_batch([sequence])[0]
 
     def get_propy_biopython_descriptors_batch(
@@ -404,10 +371,6 @@ class FeatureExtractor:
 
         return [self._propy_biopython_cache[k] for k in keys]
 
-    # ------------------------------------------------------------------
-    # hemolysis_predictor_v1's 1167-descriptor HemoPI2 reproduction
-    # ------------------------------------------------------------------
-
     def _get_hemolysis_v1_extractor(self) -> _HemolysisV1Extractor:
         if self._hemolysis_v1_extractor is None:
             self._hemolysis_v1_extractor = _HemolysisV1Extractor(
@@ -416,14 +379,7 @@ class FeatureExtractor:
         return self._hemolysis_v1_extractor
 
     def get_hemolysis_v1_descriptors(self, sequence: str) -> dict[str, float]:
-        """hemolysis_predictor_v1's full descriptor row (AAC, DPC, ATC, BTC,
-        PCP, RRI, PRI, DDR, SER, SEP, CTC, CeTD, PAAC, APAAC, QSO, SOC),
-        matching Extractor.extract's own column layout. Memoized per
-        sequence -- this is a single-consumer feature set (nothing else in
-        model_store/ uses HemoPI2's descriptor scheme), so caching it only
-        helps when the same sequence is scored more than once in a run
-        (e.g. Stage 4's GA re-evaluating an unchanged parent, or Stage 4 and
-        Stage 8 both scoring the same surviving candidate)."""
+        """hemolysis_predictor_v1's full descriptor row in Extractor.extract's column layout; memoized per sequence."""
         return self.get_hemolysis_v1_descriptors_batch([sequence])[0]
 
     def get_hemolysis_v1_descriptors_batch(

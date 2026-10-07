@@ -1,10 +1,4 @@
-# Typed per-stage params, one model per stage, mirroring each stage's own
-# config.params.get(key, default) reads. Deployment only: src/worker/worker.py
-# resolves each stage's raw params dict through resolve_params() before
-# building its StageConfig, merging over these defaults rather than reading
-# raw. main.py's local runs (RunConfig.for_stage) are untouched by this --
-# configs/runs/<run_id>.yaml stays the source of truth there. Unknown keys
-# are ignored, not rejected: a stale/leftover key must not block a run.
+# Typed per-stage params mirroring each stage's config.params reads; resolve_params() merges them over defaults and ignores unknown keys.
 from __future__ import annotations
 
 from typing import Any, Literal
@@ -13,8 +7,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 class BaseStageParams(BaseModel):
-    """Extra keys in a run config are ignored (not an error) -- this is a
-    defaults-merge model, not a strict schema."""
+    """Extra keys in a run config are ignored; this is a defaults-merge model, not a strict schema."""
 
     model_config = ConfigDict(extra="ignore")
 
@@ -49,17 +42,7 @@ DesiredFunction = Literal[
     "keratinocyte_migration",
 ]
 
-#: MIC_SUPPORTED_ORGANISMS from model_store/mic_predictor_v1/predictor.py
-#: (3 species), underscore-normalized to match what check_pathogen_vocabulary
-#: actually compares against (and what every existing data/briefs/*.json
-#: already uses, e.g. "Escherichia_coli") -- NOT the space-separated
-#: ATCC-suffixed strings the raw model constant uses internally. Narrower
-#: than MBIC_SUPPORTED_SPECIES (13 species, s06_functional_models/stage.py),
-#: which recognizes several species MIC doesn't (e.g. Candida_albicans,
-#: Klebsiella_pneumoniae) -- MIC is the stricter of the two models sharing
-#: this field, so it's the one this restriction is scoped to. A pathogen
-#: outside this list is silently skipped by both predictors
-#: (out-of-vocabulary, not an error) rather than scored.
+#: MIC_SUPPORTED_ORGANISMS from mic_predictor_v1, underscore-normalized; pathogens outside it are skipped, not errors.
 Pathogens = Literal[
     "Escherichia_coli",
     "Staphylococcus_aureus",
@@ -69,14 +52,7 @@ Pathogens = Literal[
 
 # Manufacturing inputs are unused by the pipeline; disabled for now.
 # class ManufacturingFields(BaseModel):
-#     """Every existing data/briefs/*.json uses "solid_phase_synthesis" (the
-#     one exception, "ribosomal_expression", is TC-20's deliberately-invalid
-#     edge case) -- hardwired to that single value rather than left as an
-#     open string. max_cost_per_gram_usd remains the one real, adjustable
-#     input; the 4 other manufacturing sub-keys seen in brief data
-#     (protease_resistance_required, ambient_stability_required,
-#     sterile_filterable, electrospinning_compatible) stay unmodeled/ignored,
-#     same as today."""
+#     """Hardwired to solid_phase_synthesis; max_cost_per_gram_usd is the one adjustable input."""
 #
 #     method: Literal["solid_phase_synthesis"] = "solid_phase_synthesis"
 #     max_cost_per_gram_usd: float | None = None
@@ -216,10 +192,7 @@ class Stage11Params(BaseStageParams):
     model_config = ConfigDict(extra="forbid")
 
 
-#: Stage name -> its typed params model, for RunConfig.for_stage to
-#: validate/default a run config's raw params dict against. A stage with no
-#: entry here (s03, and s10/s12-s14 once implemented) keeps params as a
-#: raw passthrough dict.
+#: Stage name -> typed params model; stages without an entry keep raw passthrough params.
 STAGE_PARAMS_MODELS: dict[str, type[BaseStageParams]] = {
     "s01_therapeutic_product_brief": Stage1Params,
     "s02_wound_biology_and_targets": Stage2Params,
@@ -233,9 +206,7 @@ STAGE_PARAMS_MODELS: dict[str, type[BaseStageParams]] = {
 }
 
 
-#: Stricter than the Stage*Params they wrap: a client request rejects an
-#: unrecognized key outright (e.g. a typo, or the internal {"params": {...}}
-#: shape) instead of silently dropping it the way a defaults-merge does.
+#: Stricter than the Stage*Params they wrap: unrecognized keys are rejected instead of dropped.
 class Stage1Request(Stage1Params):
     model_config = ConfigDict(extra="forbid")
     enabled: bool = True
@@ -272,16 +243,7 @@ class Stage9Request(Stage9Params):
 
 
 class E2ERequest(BaseModel):
-    """The public e2e job request shape: one field per client-configurable
-    stage, each stage's own params flattened together with its `enabled`
-    flag (no {"params": {...}} wrapper). Every field is required to be
-    present (a bare {} accepts that stage's defaults) so the OpenAPI schema
-    and pydantic validation reflect the real per-stage shape directly,
-    instead of a generic dict a stage name could otherwise be mismatched
-    against. s02_wound_biology_and_targets, s03_data_integration, and
-    s11_ranking are deliberately absent -- e2e_config.py always overrides
-    them itself (s02/s03 force-disabled, s11 force-default), so nothing a
-    client sends for them would ever be used."""
+    """The public e2e job request shape: each client-configurable stage's params flattened with its `enabled` flag; s02, s03 and s11 are absent because e2e_config.py overrides them."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -295,9 +257,8 @@ class E2ERequest(BaseModel):
 
 
 def resolve_params(stage_name: str, raw_params: dict[str, Any]) -> dict[str, Any]:
-    """Merge a run config's raw params for `stage_name` over that stage's
-    defaults, dropping unknown keys. Stages with no registered model pass
-    their raw params through unchanged."""
+    """Merge a run config's raw params for `stage_name` over the stage defaults, dropping unknown keys; unregistered stages pass through."""
+    
     model = STAGE_PARAMS_MODELS.get(stage_name)
     if model is None:
         return raw_params

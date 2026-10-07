@@ -260,16 +260,7 @@ export interface components {
         };
         /**
          * E2ERequest
-         * @description The public e2e job request shape: one field per client-configurable
-         *     stage, each stage's own params flattened together with its `enabled`
-         *     flag (no {"params": {...}} wrapper). Every field is required to be
-         *     present (a bare {} accepts that stage's defaults) so the OpenAPI schema
-         *     and pydantic validation reflect the real per-stage shape directly,
-         *     instead of a generic dict a stage name could otherwise be mismatched
-         *     against. s02_wound_biology_and_targets, s03_data_integration, and
-         *     s11_ranking are deliberately absent -- e2e_config.py always overrides
-         *     them itself (s02/s03 force-disabled, s11 force-default), so nothing a
-         *     client sends for them would ever be used.
+         * @description The public e2e job request shape: each client-configurable stage's params flattened with its `enabled` flag; s02, s03 and s11 are absent because e2e_config.py overrides them.
          */
         E2ERequest: {
             s01_therapeutic_product_brief: components["schemas"]["Stage1Request"];

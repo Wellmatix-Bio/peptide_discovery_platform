@@ -1,14 +1,56 @@
 {
   "model_name": "amp_classifier_v1",
-  "status": "placeholder",
-  "note": "PLACEHOLDER. This predictor's training data, features and applicability domain are not yet documented. The card exists so the gap is visible and addressable, not to imply the model is described. To be completed by the model's author.",
-  "documented": {
-    "task": null,
-    "target": null,
-    "training_data": null,
-    "features": null,
-    "applicability_domain": null,
-    "evaluation": null
+  "task": "binary classification: antimicrobial-peptide (AMP) probability in [0, 1]",
+  "architecture": "5-fold XGBoost ensemble stacked through a meta-model (meta_model.joblib) that calibrates the fold-averaged raw score into a probability",
+  "esm_model_name": "facebook/esm2_t30_150M_UR50D",
+  "n_esm2_features": 640,
+  "n_modlamp_features": 21,
+  "n_features": 661,
+  "feature_cols": "esm2_0..esm2_639 (mean-pooled ESM2 embedding) followed by 21 modlAMP global/moment descriptors (modlamp_Length, MW, Charge, ChargeDensity, pI, InstabilityInd, Aromaticity, AliphaticInd, BomanInd, HydrophRatio, eisenberg/gravy/flexibility/aasi global+moment, z3, z5, abhprk); the full ordered list is in the weights-side model_card.json that predictor.py loads",
+  "normalize_amino": true,
+  "n_folds": 5,
+  "xgb_params": {
+    "objective": "binary:logistic",
+    "eval_metric": "aucpr",
+    "max_depth": 5,
+    "learning_rate": 0.08,
+    "subsample": 0.8,
+    "colsample_bytree": 0.7,
+    "scale_pos_weight": 0.8905622489959839,
+    "n_estimators": 1000,
+    "early_stopping_rounds": 30,
+    "random_state": 42
   },
-  "placeholder_added": "2026-10-06"
+  "metrics": "see cv_metrics and locked_test_metrics",
+  "weights_dir": "model_store/model_weights/amp_classifier_v1",
+  "training_data": {
+    "train_val": "3766 peptides in 3056 identity clusters (CD-HIT 90%)",
+    "locked_test": "651 peptides (338 pos / 313 neg) in 539 clusters; zero cluster overlap with train/val",
+    "sources": "DRAMP general/patent (tested negatives)",
+    "cv": "5-fold GroupKFold on cluster_id"
+  },
+  "cv_metrics": {
+    "mean_auroc": 0.8921,
+    "std_auroc": 0.026,
+    "mean_auprc": 0.9067,
+    "std_auprc": 0.0253,
+    "per_fold_auroc": [
+      0.9054,
+      0.9042,
+      0.8736,
+      0.9204,
+      0.8569
+    ]
+  },
+  "locked_test_metrics": {
+    "auroc": 0.8703,
+    "auprc": 0.8957,
+    "f1_at_0.5": 0.7867,
+    "precision_at_50": 1.0,
+    "macrel_baseline": {
+      "auroc": 0.7614,
+      "auprc": 0.839,
+      "f1_at_0.5": 0.6237
+    }
+  }
 }

@@ -1,14 +1,40 @@
 {
   "model_name": "hemolysis_predictor_v1",
-  "status": "placeholder",
-  "note": "PLACEHOLDER. This predictor's training data, features and applicability domain are not yet documented. The card exists so the gap is visible and addressable, not to imply the model is described. To be completed by the model's author.",
-  "documented": {
-    "task": null,
-    "target": null,
-    "training_data": null,
-    "features": null,
-    "applicability_domain": null,
-    "evaluation": null
+  "task": "regression: pHC50 (= -log10(HC50 in M)) for a peptide; high pHC50 = hemolytic at low concentration = worse",
+  "architecture": "sklearn Pipeline: SimpleImputer(strategy='median') + RandomForestRegressor(n_estimators=800, max_depth=30, random_state=42)",
+  "description": "Native Python reproduction of HemoPI2's regression model, trained on HemoPI2's own published cross-validation/test splits; no subprocess or vendored GPL code",
+  "features": "1167 hand-computed descriptors: MW, length, AAC, DPC, ATC, BTC, PCP, RRI, PRI, DDR, SER, SEP, CTC, CeTD, PAAC, APAAC, QSO, SOC (see predictor.py Extractor and property_tables.py)",
+  "target_transform": "model predicts y = -log10(HC50 in uM); pHC50 = y_pred + 6.0",
+  "valid_sequence_length": [
+    6,
+    50
+  ],
+  "independent_test_metrics": {
+    "pearson_r": 0.7397,
+    "r2": 0.544,
+    "mae": 0.3184,
+    "mse": 0.1848,
+    "rmse": 0.4299,
+    "hc50_um_mae": 103.65,
+    "hc50_um_rmse": 190.73,
+    "paper_reported": {
+      "pearson_r": 0.739,
+      "r2": 0.543
+    },
+    "note": "metrics are on -log10(HC50 uM)"
   },
-  "placeholder_added": "2026-10-06"
+  "training_data": {
+    "rows": 1540,
+    "test_rows": 386,
+    "source": "HemoPI2 cross_val_dataset.csv / independent_dataset.csv"
+  },
+  "trained_with": "scikit-learn 1.9.0 (loading under 1.6.1 emits InconsistentVersionWarning)",
+  "hyperparameter_search": {
+    "method": "5-fold grid search, training only",
+    "candidates": 3,
+    "best_params": {
+      "rf__max_features": 1.0
+    },
+    "cv_mse": 0.2185
+  }
 }

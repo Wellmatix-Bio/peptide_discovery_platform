@@ -1,14 +1,16 @@
 {
   "model_name": "routeb_protgpt2_lora_v1",
-  "status": "placeholder",
-  "note": "PLACEHOLDER. This predictor's training data, features and applicability domain are not yet documented. The card exists so the gap is visible and addressable, not to imply the model is described. To be completed by the model's author.",
-  "documented": {
-    "task": null,
-    "target": null,
-    "training_data": null,
-    "features": null,
-    "applicability_domain": null,
-    "evaluation": null
+  "task": "conditional peptide generation (Stage 4 Route B), conditioned on tag tokens",
+  "base_model": "nferruz/ProtGPT2",
+  "base_model_params": "738M",
+  "base_model_loading": "4-bit NF4, frozen; base weights are downloaded from the Hugging Face Hub on first load and are not stored here",
+  "adapter": "LoRA r=16, alpha=32, dropout=0.05 on c_attn; wte and lm_head also trained",
+  "condition_tags": "<AMP>, <ANTIBACTERIAL>, <ANTIBIOFILM>",
+  "training_data": "24172 sequences (DRAMP, ESCAPE, BAAMP, DBAASP) in 10385 identity clusters (>0.7 similarity); 21466 train / 2706 val, split by cluster",
+  "checkpoint": {
+    "epoch": 12,
+    "train_loss": 1.1851765131215177,
+    "val_loss": 1.2221991942763504
   },
-  "placeholder_added": "2026-10-06"
+  "training_hyperparameters": "lr 2e-4, effective batch 32, max_length 128; trained to epoch 12"
 }

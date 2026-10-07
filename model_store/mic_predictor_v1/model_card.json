@@ -1,13 +1,17 @@
 {
   "task": "regression: log10(MIC, uM) for a peptide against one of 3 ATCC reference organisms",
   "target_transform": "log10(MIC_uM). Inverse: MIC_uM = 10 ** prediction",
-  "supported_organisms": ["Escherichia coli", "Staphylococcus aureus", "Pseudomonas aeruginosa"],
+  "supported_organisms": [
+    "Escherichia coli",
+    "Staphylococcus aureus",
+    "Pseudomonas aeruginosa"
+  ],
   "organism_source_strains": {
     "Escherichia coli": "ATCC 25922",
     "Staphylococcus aureus": "ATCC 25923",
     "Pseudomonas aeruginosa": "ATCC 27853"
   },
-  "ensemble_method": "simple unweighted mean of BiLSTM, CNN, and Random Forest predictions (not computed by the source notebook; combined here per export instructions)",
+  "ensemble_method": "simple unweighted mean of BiLSTM, CNN, and Random Forest predictions",
   "esm_model_name": "facebook/esm2_t30_150M_UR50D",
   "esm_embedding_dim": 640,
   "esm_embedding_type": "per-residue (last_hidden_state), BOS/EOS dropped, left-aligned into a fixed MAX_SEQ_LEN=50 slot with zero padding",
@@ -66,7 +70,5 @@
     "n_unique_sequences": 2812,
     "split": "75/12.5/12.5 train/val/test by CD-HIT 90%-identity cluster (whole clusters assigned to one split, greedy balance of split size + per-split species mix)",
     "sequence_length_filter": "<=50 aa, standard amino acids only"
-  },
-  "source_notebook": "mic_prediction_pipelineC_35M_embedding.ipynb",
-  "source_artifact_dir": "saved_models/"
+  }
 }

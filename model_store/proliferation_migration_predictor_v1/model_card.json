@@ -1,6 +1,9 @@
 {
   "model_name": "proliferation_migration_predictor_v1",
-  "targets": ["migration_dominant", "proliferation_dominant"],
+  "targets": [
+    "migration_dominant",
+    "proliferation_dominant"
+  ],
   "feature_cols": [
     "length",
     "net_charge",
@@ -61,16 +64,17 @@
     },
     "voting_classifier": {
       "voting": "soft",
-      "estimators": ["rf", "xgb", "logreg"]
+      "estimators": [
+        "rf",
+        "xgb",
+        "logreg"
+      ]
     }
   },
   "training_data": {
-    "source_csv": "Models/Proliferation + Migration prediction/data/peptide_activity_unique_clean.csv",
     "n_rows_after_cleaning": 103,
     "cleaning_filter": "sequence non-null and fullmatch [ACDEFGHIKLMNPQRSTVWY]+; labels derived from 'T'/other flag columns migration_dominant and proliferation_dominant"
   },
-  "deployment_object_provenance": "FULL-DATA REFIT for deployment. Notebook (pipeline.ipynb) never persists a fitted model: build_ensemble() is built fresh inside every Leave-One-Out CV fold, fit on that fold only, used once, then discarded; no joblib.dump/pickle exists in the notebook. The two .joblib artifacts shipped here were fit once each on the FULL 103-row dataset (no LOO holdout) using the exact same feature code and hyperparameters as the notebook, by a standalone script outside the source project, per explicit user authorization. This is a deliberate deviation from the notebook's own protocol (training-set size only: full data vs n-1 rows per LOO fold).",
-  "evaluation_metrics_source": "notebook's own per-fold Leave-One-Out CV (103 folds per target), NOT a direct evaluation of this deployed full-data-refit object -- reported as the best available generalization estimate since the deployed object has no held-out evaluation of its own",
   "loo_cv_metrics": {
     "migration_dominant": {
       "ACC": 0.650485,

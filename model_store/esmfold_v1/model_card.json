@@ -1,14 +1,18 @@
 {
   "model_name": "esmfold_v1",
-  "status": "placeholder",
-  "note": "PLACEHOLDER. This predictor's training data, features and applicability domain are not yet documented. The card exists so the gap is visible and addressable, not to imply the model is described. To be completed by the model's author.",
-  "documented": {
-    "task": null,
-    "target": null,
-    "training_data": null,
-    "features": null,
-    "applicability_domain": null,
-    "evaluation": null
-  },
-  "placeholder_added": "2026-10-06"
+  "task": "single-sequence protein/peptide structure prediction (no MSA)",
+  "architecture": "facebook/esmfold_v1 via transformers.EsmForProteinFolding: ESM2-650M language-model backbone (fp16 on GPU) feeding a folding trunk (fp32) that outputs atom37 coordinates and pLDDT",
+  "base_model": "facebook/esmfold_v1",
+  "fine_tuned": false,
+  "outputs": [
+    "pdb_str",
+    "mean_plddt",
+    "per_residue_plddt",
+    "ca_coordinates",
+    "ca_distance_matrix"
+  ],
+  "plddt_scale": "0-1 fraction (not 0-100); mean_plddt ~0.69 on the reference defensin-like peptide",
+  "downstream_use": "ca_distance_matrix feeds cleavage_site_predictor_v1.predict_one(distance_matrix=...)",
+  "weights": "full facebook/esmfold_v1 snapshot (~7.9GB) in model_store/model_weights/esmfold_v1/weights, vendored unmodified via huggingface_hub.snapshot_download",
+  "metrics": "none; third-party pretrained model with no platform-side evaluation"
 }

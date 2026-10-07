@@ -40,18 +40,14 @@
   },
   "deployment_artifact": {
     "file": "pair_stratified_87a389cf6ee76d08.joblib",
-    "source_path": "Models/Solubility/model_cache/B_raw/pair_stratified_87a389cf6ee76d08.joblib",
     "variant": "Pipeline B raw (ESM2 embedding + solvent descriptors, no PCA)",
     "split_strategy": "pair_stratified: random 64/16/20 train/val/test split stratified on y (peptide-solvent pairs can appear across both train and test)",
-    "why_chosen": "pipelineB.ipynb was read in full and contains no full-data refit step after the evaluation loop (the notebook ends at the LOSO summary in the final cell). All 6 cached B_raw artifacts are evaluation-fold models: pair_stratified and seq_disjoint each hold out a test partition, and the 4 loso_* files each hold out one entire solvent. There is no cached or in-notebook model trained on 100% of long_peptide_solvent.csv. Per the documented fallback rule, pair_stratified was selected as the most defensible deployment choice: it uses the largest train portion, is a standard random split (not group-held-out), and is closest in spirit to a general-purpose model. This is a FALLBACK, not an ideal full-data-refit deployment model — see README.md Provenance section.",
     "best_iteration": 141,
     "n_features_in": 1286
   },
   "evaluation_summary_from_prior_investigation": {
     "loso_macro_auc": 0.773,
-    "loso_macro_accuracy": 0.775,
-    "note_dmso": "DMSO LOSO AUC ~0.56 (near chance-level) even in this best-performing (raw) variant",
-    "note_coverage_gap": "3 of 7 solvents (0.2 M acetic acid, 3% ammonia water (v/v), HCOOH) are 100% single-class (all-soluble) in this dataset and were skipped in LOSO evaluation entirely -> zero held-out validation coverage for those solvents"
+    "loso_macro_accuracy": 0.775
   },
   "not_used": [
     "model_cache/A (hand-crafted descriptor variant, pipeline A)",

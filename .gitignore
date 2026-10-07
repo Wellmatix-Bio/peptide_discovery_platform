@@ -129,6 +129,15 @@ graphify-out/
 # ---------- Docs build ----------
 docs/_build/
 site/
+docs/brief_field_vocabulary_contract.json
+docs/config_reference.md
+docs/gpu_visibility_troubleshooting.md
+docs/parameter_usage.md
+docs/schema_changelog.md
+docs/stage_contracts.md
+docs/structure_model_evaluation.md
+docs/TODO.md
+
 
 # ---------- Reports ----------
 *.pdf
@@ -154,6 +163,7 @@ src/backend/api_stage/Dockerfile
 
 # --------- Miscellaneous ----------
 src/backend/worker_e2e/example_run.json
+pipeline_compare_out/
 # example_request.json was listed here, and that is why it was missing from a fresh clone.
 # It is now TRACKED instead: three test modules, README.md and API_SPECIFICATION.md all require
 # it, so ignoring it meant the test suite could not pass on a clean checkout. See docs/BASELINE.md.
@@ -179,3 +189,11 @@ deploy/.env
 # pull it is exactly what keeping it optional avoids -- CONTRIBUTING.md has the setup for anyone
 # who wants that screen. Ignored so a local copy placed here is never committed by accident.
 src/pipeline/s05_physchem_screening/s4pred/
+scripts/copy_weights.sh
+scripts/run_test_cases.sh
+scripts/smoke_test_model_sync.py
+scripts/gpu_smoke/local_test_run.json
+scripts/smoke/
+structure_benchmark_out/
+tests/benchmark/
+tests/fixtures/

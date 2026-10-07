@@ -1,14 +1,40 @@
 {
   "model_name": "anti_inflammatory_predictor_v1",
-  "status": "placeholder",
-  "note": "PLACEHOLDER. This predictor's training data, features and applicability domain are not yet documented. The card exists so the gap is visible and addressable, not to imply the model is described. To be completed by the model's author.",
-  "documented": {
-    "task": null,
-    "target": null,
-    "training_data": null,
-    "features": null,
-    "applicability_domain": null,
-    "evaluation": null
+  "task": "binary classification: anti-inflammatory peptide (AIP) probability, softmax(logits)[:, 1]",
+  "architecture": "Conv1d/MaxPool1d variational-autoencoder encoder (208-dim latent mu/logvar) + 2-layer classification head; decoder and triplet contrastive loss are training-only",
+  "input_encoding": "fused one-hot (k=1) + multi-hot (k=2) + multi-hot (k=3) sliding window, 60 channels x seq_len, no ESM2",
+  "seq_len": 25,
+  "latent_dim": 208,
+  "training_config": {
+    "alpha": 1.0,
+    "beta_start": 0.01,
+    "beta_target": 0.0075,
+    "kl_hold_epochs": 5,
+    "kl_warmup_epochs": 20,
+    "gamma": 1.0,
+    "margin": 1.0,
+    "num_epochs": 30,
+    "patience": 5,
+    "recon_pos_weight": 15.590259552001953,
+    "class_weight": [
+      0.8313645124435425,
+      1.2544561624526978
+    ]
   },
-  "placeholder_added": "2026-10-06"
+  "independent_test_metrics": {
+    "ACC": 0.6968541468064824,
+    "Sn": 0.6523809523809524,
+    "Sp": 0.7265500794912559,
+    "AUC": 0.7342569460216519,
+    "MCC": 0.37556408566290816
+  },
+  "checkpoint": "dac_aips_final.pt",
+  "training_data": {
+    "benchmarking": "3145 sequences (1258 pos / 1887 neg), CD-HIT deduplicated then split into train 2506 (997 pos / 1509 neg) and val 627 (250 / 377)",
+    "independent_test": "1049 sequences (420 pos / 629 neg)",
+    "augmentation": "random interception, sequence reversal, noise addition (training split only)",
+    "extra_source": "IEDB T-cell assay export evaluated as an additional benchmark"
+  },
+  "loss": "reconstruction (BCE-with-logits, pos_weight) + KL (free bits 0.02 nats/dim) + triplet contrastive + class-weighted cross-entropy",
+  "selection": "best validation MCC with early stopping (patience 5)"
 }

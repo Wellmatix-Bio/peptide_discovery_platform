@@ -1,14 +1,36 @@
 {
   "model_name": "cytotoxicity_predictor_v1",
-  "status": "placeholder",
-  "note": "PLACEHOLDER. This predictor's training data, features and applicability domain are not yet documented. The card exists so the gap is visible and addressable, not to imply the model is described. To be completed by the model's author.",
-  "documented": {
-    "task": null,
-    "target": null,
-    "training_data": null,
-    "features": null,
-    "applicability_domain": null,
-    "evaluation": null
+  "task": "binary classification: mammalian-cell cytotoxicity probability in [0, 1], conditioned on assay cell type",
+  "architecture": "4-fold ensemble (mean of sigmoid outputs); BiLSTM + self-attention over per-residue ESM2 embeddings, cross-attended against a global sequence embedding, plus nn.Embedding(7, 16) over cell_type concatenated with the length feature before the head",
+  "esm_model_name": "facebook/esm2_t30_150M_UR50D",
+  "esm_embedding_dim": 640,
+  "max_sequence_length": 50,
+  "n_folds": 4,
+  "config": {
+    "hidden_dim": 400,
+    "d_model": 120,
+    "n_heads": 1,
+    "dropout": 0.2,
+    "lr": 0.001,
+    "pos_weight": 1.0
   },
-  "placeholder_added": "2026-10-06"
+  "loss": "BCEWithLogitsLoss",
+  "cell_type_to_id": "7 cell types: DBAASP_no_cytotoxicity_hit, DRAMP_aggregate (default), Human PBMC, HEK, HaCat, HMEC-1, skin fibroblasts",
+  "default_cell_type": "DRAMP_aggregate",
+  "per_fold_test_metrics": {
+    "AUROC": [
+      0.7283,
+      0.7713,
+      0.8162,
+      0.827
+    ],
+    "AUPRC": [
+      0.6612,
+      0.6626,
+      0.7451,
+      0.7164
+    ]
+  },
+  "training_data": "21028 peptides -> 14560 after CD-HIT 90%; 161 cytotoxic (119 DRAMP_aggregate, 31 HaCaT, 11 other) downsampled to a balanced 322; 64-row held-out test, 4-fold StratifiedGroupKFold",
+  "hyperparameter_search": "32 configs x 4 folds, best mean val AUPRC 0.9138"
 }

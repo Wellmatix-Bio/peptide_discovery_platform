@@ -1,14 +1,21 @@
 {
   "model_name": "pathway_mapping_predictor_v2",
-  "status": "placeholder",
-  "note": "PLACEHOLDER. This predictor's training data, features and applicability domain are not yet documented. The card exists so the gap is visible and addressable, not to imply the model is described. To be completed by the model's author.",
-  "documented": {
-    "task": null,
-    "target": null,
-    "training_data": null,
-    "features": null,
-    "applicability_domain": null,
-    "evaluation": null
+  "task": "per-pathway activator (+1) vs inhibitor (-1) classification; output is P(activator), so a low value means inhibitor, not uninvolved",
+  "pathways": "MAPK, ERK, PI3K_AKT_MTOR, TGFB_SMAD, NF_KB, WNT_BCATENIN, FGFR_JAK2_STAT3, VEGF_ANGIOGENESIS, CYTOKINE_MACROPHAGE",
+  "architecture": "per pathway, an unweighted mean of two models' P(activator): LDA and RF",
+  "models": {
+    "LDA": "StandardScaler + LinearDiscriminantAnalysis(solver='lsqr', shrinkage='auto')",
+    "RF": "RandomForestClassifier(n_estimators=300, max_depth=5, class_weight='balanced')"
   },
-  "placeholder_added": "2026-10-06"
+  "n_model_files": 18,
+  "features": "11 modlAMP descriptors: MW, Charge, ChargeDensity, pI, InstabilityInd, Aromaticity, AliphaticInd, BomanInd, HydrophRatio, Hydrophobicity, HydrophobicMoment",
+  "label_handling": "label-0 rows dropped before training",
+  "training_signature": "sha1 d29b5d9155851c9d9daa0f04d9810b5902893ff5 (model/signature.txt: hash of the train split + feature list)",
+  "training_data": "training_dataset_long.csv + train_ready_dataset_v3.csv; 11-40 training rows per pathway (3-10 curated test peptides), 80/20 split by family_group",
+  "heldout_test_metrics_mean_over_pathways": {
+    "ACC": 0.591,
+    "MCC": 0.146,
+    "F1": 0.638,
+    "AUCROC": 0.632
+  }
 }

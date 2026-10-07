@@ -1,14 +1,34 @@
 {
   "model_name": "pathway_mapping_predictor_v1",
-  "status": "placeholder",
-  "note": "PLACEHOLDER. This predictor's training data, features and applicability domain are not yet documented. The card exists so the gap is visible and addressable, not to imply the model is described. To be completed by the model's author.",
-  "documented": {
-    "task": null,
-    "target": null,
-    "training_data": null,
-    "features": null,
-    "applicability_domain": null,
-    "evaluation": null
-  },
-  "placeholder_added": "2026-10-06"
+  "task": "multi-label pathway engagement: per-pathway probability that a peptide engages the pathway",
+  "pathways": [
+    "MAPK",
+    "ERK",
+    "PI3K_AKT_MTOR",
+    "TGFB_SMAD",
+    "NF_KB",
+    "WNT_BCATENIN",
+    "FGFR_JAK2_STAT3",
+    "VEGF_ANGIOGENESIS",
+    "CYTOKINE_MACROPHAGE"
+  ],
+  "architecture": "per pathway, a 100-model PU (positive-unlabeled) bagging ensemble of RandomForestClassifier(n_estimators=100, max_depth=5); each bag trains on all known positives plus an equal-sized random sample of the unlabeled set; probability = mean predict_proba over bags",
+  "n_bags_per_pathway": 100,
+  "n_model_files": 900,
+  "features": [
+    "MW",
+    "Charge",
+    "ChargeDensity",
+    "pI",
+    "InstabilityInd",
+    "Aromaticity",
+    "AliphaticInd",
+    "BomanInd",
+    "HydrophRatio",
+    "Hydrophobicity",
+    "HydrophobicMoment"
+  ],
+  "feature_source": "modlAMP GlobalDescriptor; Hydrophobicity/HydrophobicMoment from the Eisenberg scale",
+  "metrics": "not recorded in the export",
+  "trained_with": "scikit-learn 1.9.0 (loading under 1.6.1 emits InconsistentVersionWarning)"
 }

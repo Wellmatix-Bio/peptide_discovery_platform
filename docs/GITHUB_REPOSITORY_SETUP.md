@@ -154,6 +154,36 @@ administrators and say when it may be used.
 
 ## 6. Security features
 
+> ### Some of this cannot be done before you publish
+>
+> On GitHub Free, several of the settings below exist only on **public** repositories, so a
+> private repo cannot be hardened first and then opened. Check your own screens rather than
+> trusting this table — plan features move — but expect the shape of it:
+>
+> | Setting | Private repo, Free plan |
+> |---|---|
+> | Dependency graph, Dependabot alerts and security updates | available |
+> | Actions workflow permissions (§5) | available |
+> | General settings: auto-delete branches, merge strategy (§3) | available |
+> | **Branch protection / rulesets (§4)** | public only, or a paid plan |
+> | **Secret scanning and push protection** | public only, or GitHub Advanced Security |
+> | **Code scanning (CodeQL)** | public only, or GHAS |
+> | **Private vulnerability reporting** | public only |
+> | **Pages** | public only, or a paid plan |
+>
+> **The uncomfortable part: the protections you most want in place before publishing are the ones
+> publishing switches on.** There is no order that avoids the window. Two things narrow it:
+>
+> 1. **Do §1's history scan first and finish it.** Secret scanning's first run scans all history,
+>    so it finds what you would have found anyway — only later, and in public. Its value from the
+>    moment you publish is stopping the NEXT accident, not the last one.
+> 2. **Apply §4 and the rest of this section immediately after flipping visibility, before the URL
+>    is shared anywhere.** Minutes, not days.
+>
+> So the practical order is: everything available while private → publish → protections → Pages →
+> discoverability. Do not announce the repository until the ruleset is on, or the first external
+> contributor meets an unprotected default branch.
+
 **Settings → Code security**
 
 | Feature | Notes |
@@ -232,12 +262,25 @@ releases, and gives you the text to paste into them.
 ## Quick checklist
 
 ```
-Before publishing
+Before publishing  (this is the irreversible half -- see section 1)
   [ ] git log --all -S scan for secrets, project ids, internal names
+  [ ] Scan for developer machine paths, which leak usernames and no scanner flags
   [ ] Secrets rotated if anything was ever committed
   [ ] LICENSE present and compatible with every dependency
+  [ ] Legal review, if the project needs one, is DONE rather than deferred
   [ ] Rights to publish all third-party code, data and weights confirmed
   [ ] README states what it does NOT do
+
+While still private  (everything here that your plan allows)
+  [ ] General: auto-delete head branches, one merge strategy, Features chosen
+  [ ] Actions: workflow permissions read-only
+  [ ] Dependency graph + Dependabot alerts and security updates
+
+Immediately AFTER publishing, before sharing the URL
+  [ ] Ruleset on the default branch, with a documented bypass actor
+  [ ] Secret scanning + push protection
+  [ ] Private vulnerability reporting
+  [ ] Code scanning
 
 Repository
   [ ] README, LICENSE, CONTRIBUTING, SECURITY, CODE_OF_CONDUCT

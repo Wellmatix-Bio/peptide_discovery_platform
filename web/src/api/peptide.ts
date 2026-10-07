@@ -21,6 +21,15 @@ export const TERMINAL_VERTEX_STATES = [
   "JOB_STATE_EXPIRED",
 ] as const;
 
+export const RUN_STATES = [
+  "submitted",
+  "running",
+  "succeeded",
+  "failed",
+  "cancelled",
+  "abandoned",
+] as const;
+
 export type RunState =
   | "submitted"
   | "running"
@@ -35,13 +44,34 @@ export type RunState =
  *  writing it reports "pending" forever while Vertex says JOB_STATE_FAILED (docs/BASELINE.md).
  *  "abandoned" is that case, and it exists so no view can render a dead run as still working.
  *  This is a classification of two returned fields, not a computed result. */
+/** The API now returns `run_state` itself, reconciled server-side. Prefer it: this function is
+ *  the fallback for a response from an older API that does not carry the field, and the two are
+ *  held to agree by web/src/test/runstate.test.ts. Two implementations of one rule is a thing to
+ *  remove, not to keep -- this one goes when no deployed API predates the field. */
+export function serverRunState(body: {
+  run_state?: string | null;
+  status?: string | null;
+  vertex_state?: string | null;
+}): RunState {
+  const given = body.run_state;
+  if (given && (RUN_STATES as readonly string[]).includes(given)) return given as RunState;
+  return runState(body.status ?? null, body.vertex_state ?? null);
+}
+
 export function runState(status: string | null, vertexState: string | null): RunState {
+  /* The order matters and mirrors run_state() in src/backend/api_e2e/api.py exactly.
+   *
+   * An earlier version checked `terminal && (status === null || status === "pending")` for
+   * `abandoned`, and `status === "running"` below it. A worker that reported progress and was
+   * then killed leaves status at "running" forever, so that pair sent it to `running` -- the UI
+   * showing a finished job as still working, which is the defect run_state was added to end.
+   * The terminal check now has no status condition at all. */
   const terminal = vertexState !== null && (TERMINAL_VERTEX_STATES as readonly string[]).includes(vertexState);
-  if (vertexState === "JOB_STATE_CANCELLED") return "cancelled";
-  if (vertexState === "JOB_STATE_FAILED" || vertexState === "JOB_STATE_EXPIRED") return "failed";
   if (status === "success") return "succeeded";
   if (status === "failed" || status === "fail") return "failed";
-  if (terminal && (status === null || status === "pending")) return "abandoned";
+  if (vertexState === "JOB_STATE_CANCELLED") return "cancelled";
+  if (vertexState === "JOB_STATE_FAILED" || vertexState === "JOB_STATE_EXPIRED") return "failed";
+  if (terminal) return "abandoned";
   if (status === "running") return "running";
   return "submitted";
 }

@@ -501,3 +501,38 @@ All seven sabotages were caught: the DEV_MODE fork falling back, a missing brief
 in either path, an unknown operator silently never firing, the cap going unapplied, every
 contribution being reported as a driver, and an absent knowledge base returning `None` instead of
 an empty list.
+
+
+---
+
+# Update: `status` no longer has to be read alone
+
+The defect recorded throughout this document — a worker that dies leaves `status` reading
+`"running"` or `"pending"` indefinitely, while `vertex_state` has gone terminal — is addressed,
+though not by changing `status`.
+
+**`status` still means what it always did**, and deliberately: it is the worker's own last word,
+and a stale self-report is not a lie about the worker. Redefining it would break every client
+reading it, for a field whose documented meaning was never wrong.
+
+**The API now also returns `run_state`**, the two reconciled, with the precedence set out in
+`API_SPECIFICATION.md`. The case the field exists for is `abandoned`: Vertex finished the job and
+the worker produced no successful result, which is neither `pending` nor `succeeded`.
+
+## This was duplicated in the client, and the client had it wrong
+
+`web/src/api/peptide.ts` already reconciled the two fields, so the web app was never as misleading
+as the raw API — but writing a test that holds the two implementations to the same answer showed
+they disagreed on one pair. The client asked for `status in (null, "pending")` before answering
+`abandoned`, and checked `status === "running"` below it, so **a worker that reported progress and
+was then killed came out as `running`** — a finished job displayed as still working, the same
+defect in the other codebase.
+
+`web/src/test/runstate.test.ts` enumerates all 16 reachable pairs and asserts both implementations
+agree, and a sabotage pass showed the Python tests did not cover the one that mattered
+(`running` + `JOB_STATE_SUCCEEDED`) until a test was added for it. The client rule now mirrors the
+server's line for line, and `serverRunState()` prefers the server's answer, falling back only for
+an API that predates the field.
+
+Baseline 304 → 310 — the API tests replaced one that documented the defect with six
+that pin the fix. Web 109 → 145.

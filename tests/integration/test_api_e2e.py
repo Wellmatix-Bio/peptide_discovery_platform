@@ -130,28 +130,93 @@ def test_status_is_pending_before_worker_writes_results(service):
 
 
 @pytest.mark.parametrize(
-    "state", ["JOB_STATE_FAILED", "JOB_STATE_CANCELLED", "JOB_STATE_EXPIRED"]
+    "state,expected",
+    [
+        ("JOB_STATE_FAILED", "failed"),
+        ("JOB_STATE_CANCELLED", "cancelled"),
+        ("JOB_STATE_EXPIRED", "failed"),
+        ("JOB_STATE_SUCCEEDED", "abandoned"),
+    ],
 )
-def test_a_dead_worker_still_reports_pending_and_only_vertex_state_tells_the_truth(
-    service, state
-):
-    """THIS TEST DOCUMENTS A DEFECT, it does not endorse it.
+def test_a_dead_worker_is_reported_as_over_not_as_pending(service, state, expected):
+    """The defect this endpoint used to have, now fixed and pinned.
 
-    `status` is derived only from the worker's results.json. A worker that dies without writing
-    one leaves no file, so the API answers "pending" -- indefinitely, for a job Vertex has
-    already given up on. The test above pins the benign case (no results yet, early in a healthy
-    run); this pins the case that actually misleads a reader, so that the day `status` learns
-    about `vertex_state` this test fails and has to be rewritten deliberately.
+    A worker killed before writing results.json leaves no file, so `status` reads "pending" --
+    indefinitely, for a job Vertex has already given up on. That field still says "pending",
+    because it is documented as the worker's own last word and a stale self-report is not a lie
+    about the worker. `run_state` is the reconciled answer, and it says the run is over.
 
-    Until then, `vertex_state` is the only field that tells the truth. See docs/BASELINE.md.
+    JOB_STATE_SUCCEEDED with no results is `abandoned`: the container exited cleanly and produced
+    nothing. Neither "pending" nor "succeeded" would be true of it.
     """
     client, sdk, job, *_ = service
     job.state.name = state
     body = client.get(f"/api/v1/jobs/{JOB}/status").json()
     assert body["vertex_state"] == state
-    assert body["status"] == "pending", (
-        "status now reflects the Vertex state -- good. Update this test and docs/BASELINE.md."
+    assert body["status"] == "pending", "status remains the worker's own word"
+    assert body["run_state"] == expected
+
+
+def test_a_worker_that_finished_outranks_the_vertex_state(service):
+    """A first-hand report from the worker is more specific than the job's exit. A results.json
+    saying success stays `succeeded` even though Vertex is merely SUCCEEDED too -- and would stay
+    `succeeded` if Vertex had been slow to update."""
+    client, sdk, job, objects, *_ = service
+    job.state.name = "JOB_STATE_RUNNING"
+    objects["gs://test/artifacts/runs/456/results.json"] = json.dumps(
+        {"status": "success", "stage": None}
     )
+    body = client.get(f"/api/v1/jobs/{JOB}/status").json()
+    assert body["run_state"] == "succeeded"
+
+
+def test_a_worker_reporting_progress_on_a_live_job_is_running(service):
+    client, sdk, job, objects, *_ = service
+    job.state.name = "JOB_STATE_RUNNING"
+    objects["gs://test/artifacts/runs/456/results.json"] = json.dumps(
+        {"status": "running", "stage": "s06_functional_models"}
+    )
+    body = client.get(f"/api/v1/jobs/{JOB}/status").json()
+    assert body["run_state"] == "running" and body["status"] == "running"
+
+
+def test_a_queued_job_with_no_worker_output_is_submitted(service):
+    client, sdk, job, *_ = service
+    job.state.name = "JOB_STATE_QUEUED"
+    body = client.get(f"/api/v1/jobs/{JOB}/status").json()
+    assert body["run_state"] == "submitted" and body["status"] == "pending"
+
+
+def test_a_worker_that_exited_cleanly_without_results_is_abandoned(service):
+    """The case the whole field exists for, and the one a sabotage pass showed was untested.
+
+    results.json says `running`; Vertex says SUCCEEDED. The container exited 0 without writing a
+    final result, so the worker's last word is stale and there is nothing to show. It is neither
+    `running` -- the job is over -- nor `succeeded` -- there are no results. An earlier version of
+    this rule asked for `status in (None, "pending")` before answering `abandoned`, which sent
+    exactly this pair to `running` and left the UI reporting a finished job as still working.
+    """
+    client, sdk, job, objects, *_ = service
+    job.state.name = "JOB_STATE_SUCCEEDED"
+    objects["gs://test/artifacts/runs/456/results.json"] = json.dumps(
+        {"status": "running", "stage": "s07_structure_mechanism"}
+    )
+    body = client.get(f"/api/v1/jobs/{JOB}/status").json()
+    assert body["status"] == "running", "still the worker's own word"
+    assert body["run_state"] == "abandoned"
+
+
+def test_a_worker_that_died_mid_stage_is_not_reported_as_still_running(service):
+    """The case the field exists for: results.json says `running`, Vertex says FAILED. The
+    worker's last word is stale and `run_state` must not repeat it."""
+    client, sdk, job, objects, *_ = service
+    job.state.name = "JOB_STATE_FAILED"
+    objects["gs://test/artifacts/runs/456/results.json"] = json.dumps(
+        {"status": "running", "stage": "s07_structure_mechanism"}
+    )
+    body = client.get(f"/api/v1/jobs/{JOB}/status").json()
+    assert body["status"] == "running", "still the worker's own word"
+    assert body["run_state"] == "failed"
 
 
 def test_invalid_input_does_not_submit(service):

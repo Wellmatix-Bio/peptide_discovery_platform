@@ -516,7 +516,7 @@
       },
       "E2ERequest": {
         "additionalProperties": false,
-        "description": "The public e2e job request shape: one field per client-configurable\nstage, each stage's own params flattened together with its `enabled`\nflag (no {\"params\": {...}} wrapper). Every field is required to be\npresent (a bare {} accepts that stage's defaults) so the OpenAPI schema\nand pydantic validation reflect the real per-stage shape directly,\ninstead of a generic dict a stage name could otherwise be mismatched\nagainst. s02_wound_biology_and_targets, s03_data_integration, and\ns11_ranking are deliberately absent -- e2e_config.py always overrides\nthem itself (s02/s03 force-disabled, s11 force-default), so nothing a\nclient sends for them would ever be used.",
+        "description": "The public e2e job request shape: each client-configurable stage's params flattened with its `enabled` flag; s02, s03 and s11 are absent because e2e_config.py overrides them.",
         "properties": {
           "s01_therapeutic_product_brief": {
             "$ref": "#/components/schemas/Stage1Request"
@@ -651,6 +651,11 @@
           },
           "job_id": {
             "title": "Job Id",
+            "type": "string"
+          },
+          "run_state": {
+            "default": "submitted",
+            "title": "Run State",
             "type": "string"
           },
           "stage": {

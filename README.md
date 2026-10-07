@@ -108,8 +108,10 @@ Open and documented rather than discovered later:
 
 - The biofilm model scores 13 pathogens while a brief may request 3, and `antibiofilm` is a valid
   generation tag but not a valid desired function — [docs/BRIEF_VALIDITY.md](docs/BRIEF_VALIDITY.md)
-- `status` never reflects the Vertex job state; a dead worker reports `"pending"` forever —
-  [docs/BASELINE.md](docs/BASELINE.md)
+- `status` is the worker's own self-report and can be stale — a dead worker leaves it reading
+  `"running"` or `"pending"`. The API now also returns **`run_state`**, which reconciles it with
+  the live Vertex state; that is the field to show a user —
+  [API_SPECIFICATION.md](API_SPECIFICATION.md)
 - `s4pred` is optional and not vendored (GPL-3.0). The screen it powers reports itself
   unavailable; [CONTRIBUTING.md](CONTRIBUTING.md#setting-up-s4pred-optional-gpl-30) has the setup
   if you want it

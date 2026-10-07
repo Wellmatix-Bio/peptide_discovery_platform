@@ -6,7 +6,7 @@ import {
   isFinished,
   jobResults,
   jobStatus,
-  runState,
+  serverRunState,
   type RunState,
 } from "../api/peptide";
 import type { CandidateResponse, JobResultsResponse, JobStatusResponse } from "../api/types";
@@ -16,7 +16,8 @@ import { lastRun } from "../workspace";
 /* One run: what it is doing, and what it produced.
  *
  * The §7 rules this page exists to keep:
- * - Nothing is computed here that the API did not return. runState() classifies two returned
+ * - Nothing is computed here that the API did not return. The API returns run_state itself;
+ *   serverRunState() prefers it and only classifies the two older fields
  *   fields; every number shown is a field of a response.
  * - Withheld is not zero. A missing prediction renders "No value", never a dash and never 0 --
  *   a dash reads as "about zero", which for a cytotoxicity score is the opposite of the truth.
@@ -382,7 +383,7 @@ export function RunView() {
         if (stale()) return null;
         setStatus(body);
         setCheckedAt(new Date().toISOString());
-        const state = runState(body.status, body.vertex_state);
+        const state = serverRunState(body);
         if (state === "succeeded") {
           const { status: code, body: got } = await jobResults(mine, signal);
           if (stale()) return null;
@@ -448,7 +449,7 @@ export function RunView() {
     );
   }
 
-  const state = runState(status.status, status.vertex_state);
+  const state = serverRunState(status);
   /* `candidates` is the list; `ranked_candidates` and `insufficient_evidence_candidates` are the
      API's own COUNTS (api.py computes them from each candidate's ranking.status). The grouping
      below is for display; the counts shown are always the API's, never re-derived here. */

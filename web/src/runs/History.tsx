@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { hideHistoryEntry, history, runState } from "../api/peptide";
+import { hideHistoryEntry, history, serverRunState } from "../api/peptide";
 import type { HistoryPage } from "../api/types";
 import { ErrorBox, Hero, Loading, Pill, words } from "../components/ui";
 
@@ -67,7 +67,7 @@ export function History() {
             </thead>
             <tbody>
               {page.entries.map((entry) => {
-                const state = runState(entry.status, entry.vertex_state);
+                const state = serverRunState(entry);
                 const tone =
                   state === "succeeded"
                     ? "good"

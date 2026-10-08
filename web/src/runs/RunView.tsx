@@ -344,10 +344,47 @@ function Candidate({
 export function RunView() {
   const { jobId = "" } = useParams();
   const decoded = decodeURIComponent(jobId);
-  const [status, setStatus] = useState<JobStatusResponse | null>(null);
-  const [results, setResults] = useState<JobResultsResponse | null>(null);
-  const [notYet, setNotYet] = useState(false);
-  const [error, setError] = useState<unknown>(null);
+  /* EVERY PIECE OF FETCHED STATE CARRIES THE RUN IT BELONGS TO, and is read back only when that
+     run is the one in the URL. Clearing state in an effect is not enough: react-router wraps a
+     navigation in startTransition, so the component renders with the NEW route parameter before
+     the clearing effect has committed, and that render pairs the new run's id with the previous
+     run's stage and results -- exactly the mismatch review reported. Tying the data to its run
+     makes the pairing impossible to express, rather than merely unlikely to be observed. */
+  const [held, setHeld] = useState<{
+    run: string;
+    status: JobStatusResponse | null;
+    results: JobResultsResponse | null;
+    notYet: boolean;
+    error: unknown;
+  }>({ run: decoded, status: null, results: null, notYet: false, error: null });
+
+  const mine = held.run === decoded ? held : null;
+  const status = mine?.status ?? null;
+  const results = mine?.results ?? null;
+  const notYet = mine?.notYet ?? false;
+  const error = mine?.error ?? null;
+
+  /** Apply a change only if the run it is for is still the one on screen. */
+  const update = useCallback(
+    (run: string, change: Partial<Omit<typeof held, "run">>) =>
+      setHeld((prev) =>
+        prev.run === run
+          ? { ...prev, ...change }
+          : { run, status: null, results: null, notYet: false, error: null, ...change },
+      ),
+    [],
+  );
+
+  const setStatus = useCallback(
+    (run: string, body: JobStatusResponse | null) => update(run, { status: body }),
+    [update],
+  );
+  const setResults = useCallback(
+    (run: string, body: JobResultsResponse | null) => update(run, { results: body }),
+    [update],
+  );
+  const setNotYet = useCallback((run: string, v: boolean) => update(run, { notYet: v }), [update]);
+  const setError = useCallback((run: string, v: unknown) => update(run, { error: v }), [update]);
   const [cancelling, setCancelling] = useState(false);
   const [cancelNote, setCancelNote] = useState<string | null>(null);
   const [checkedAt, setCheckedAt] = useState<string | null>(null);
@@ -363,14 +400,12 @@ export function RunView() {
      reproduced in src/test/runview-switch.test.tsx. */
   const showing = useRef(decoded);
 
-  /* The route parameter changes without remounting, so state from the previous run would
-     otherwise still be on screen while the new one loads. */
+  /* The route parameter changes without remounting. `held` is keyed by run so a stale value can
+     never be READ, and this effect discards it so it is not retained either. The guard above is
+     what makes correctness independent of when this runs. */
   useEffect(() => {
     showing.current = decoded;
-    setStatus(null);
-    setResults(null);
-    setNotYet(false);
-    setError(null);
+    setHeld({ run: decoded, status: null, results: null, notYet: false, error: null });
     setCheckedAt(null);
   }, [decoded]);
 
@@ -381,20 +416,20 @@ export function RunView() {
       try {
         const { body } = await jobStatus(mine, signal);
         if (stale()) return null;
-        setStatus(body);
+        setStatus(mine, body);
         setCheckedAt(new Date().toISOString());
         const state = serverRunState(body);
         if (state === "succeeded") {
           const { status: code, body: got } = await jobResults(mine, signal);
           if (stale()) return null;
-          if (code === 404) setNotYet(true);
-          else setResults(got);
+          if (code === 404) setNotYet(mine, true);
+          else setResults(mine, got);
         }
         return state;
       } catch (problem) {
         /* An abort is this component tidying up, not something to show the reader. */
         if (stale() || (problem as Error)?.name === "AbortError") return null;
-        setError(problem);
+        setError(mine, problem);
         return null;
       }
     },
@@ -511,7 +546,7 @@ export function RunView() {
                      cancelled by the loop's cleanup or cancel the loop's request. */
                   await poll(new AbortController().signal);
                 } catch (problem) {
-                  setError(problem);
+                  setError(decoded, problem);
                 } finally {
                   setCancelling(false);
                 }

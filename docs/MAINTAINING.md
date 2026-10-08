@@ -57,6 +57,37 @@ You can push to `main` directly — you are on the ruleset's bypass list. That e
 job cannot lock you out. It is not a general-purpose shortcut; using it routinely means the
 ruleset only constrains other people.
 
+## You cannot approve your own pull request
+
+The ruleset requires one approving review, and GitHub does not let an author approve their own
+PR. With a single maintainer that means **every change you make is blocked on a review that
+cannot arrive**. This is not a misconfiguration; it is what requiring review means.
+
+The escape hatch is the checkbox on the merge box — *"Merge without waiting for requirements to
+be met (bypass rules)"* — which appears only for actors on the ruleset's bypass list.
+
+**Why the rule is kept at one approval anyway.** The threat it defends against is unreviewed
+code from someone else. An outside contributor's PR you *can* approve, because you are not its
+author, so the rule works exactly as intended for the case that matters. Dropping required
+approvals to zero would remove review for strangers' PRs too, and would quietly disable the Code
+Owners rule on `LICENSE`, `NOTICE`, `docs/LICENSING.md` and `tests/test_licensing.py` — that rule
+needs at least one required approval to mean anything.
+
+So the cost is one checkbox on your own PRs, and the benefit is real review on everybody else's.
+
+**Each bypass is a decision, not a step.** Before ticking it, it is worth half a second of "would
+a reviewer have objected to this?". The box exists so that a red CI job or an unreviewable
+emergency cannot trap you. If you find yourself ticking it without reading, that is the signal to
+add a second maintainer — not to loosen the rule.
+
+**The proper fix is a second pair of eyes.** `.github/CODEOWNERS` already points at
+`@Wellmatix-Bio/maintainers`; once that team has another member you can review each other's
+changes and the bypass stops being part of the routine. Until then, note in the PR that it was
+self-merged, so the history says so.
+
+Related: the bypass also lets you push to `main` directly. Same reasoning applies — it exists so
+a broken `main` can be fixed, not as a shortcut past the process.
+
 ## Reviewing a change
 
 Beyond the obvious, three things specific to this project:

@@ -105,6 +105,28 @@ migrations (React 18→19, TypeScript 5→7 with Vite 5→8, a Node base image) 
 turn green. Majors are migrations, not bumps. Leaving them at the top of a queue trains everyone
 to ignore the queue.
 
+## Templates — what a contributor is handed
+
+These are files in the repository, not settings, so they travel with a fork and need no
+configuration.
+
+| File | Effect |
+|---|---|
+| `.github/ISSUE_TEMPLATE/bug_report.yml` | A form, not free text. Required fields are the ones that make a report reproducible: what happened, what was expected, how to reproduce, which part, version, environment |
+| `.github/ISSUE_TEMPLATE/feature_request.yml` | |
+| `.github/ISSUE_TEMPLATE/documentation.yml` | A separate route, because a doc fix should not have to answer a bug form |
+| `.github/ISSUE_TEMPLATE/config.yml` | `blank_issues_enabled: false`, so every issue arrives through a form. Contact links send **security reports to private advisories** and **questions to Discussions**, which is what keeps the issue count meaningful |
+| `.github/DISCUSSION_TEMPLATE/q-a.yml` | **Filename must match the category slug.** Renaming a category in the UI without renaming the file silently disables the form |
+| `.github/DISCUSSION_TEMPLATE/ideas.yml` | Asks for the cost of an idea, not only the idea |
+| `.github/pull_request_template.md` | Prefills the PR body with the checklist, including the two CI traps that have actually broken `main` |
+
+**Forms over free text** is the point: a required field is how you stop receiving "it doesn't
+work". Keep them short, though — every required field costs you some reports.
+
+**Keep the templates current with the code.** The bug form asked for two status fields until the
+API grew a third; a form that asks for the wrong thing is worse than none, because the reporter
+believes they have given you what you need.
+
 ## Settings → Pages
 
 **Deploy from a branch**, `main`, `/docs`.

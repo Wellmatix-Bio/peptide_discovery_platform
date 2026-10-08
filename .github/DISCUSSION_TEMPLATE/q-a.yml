@@ -1,0 +1,55 @@
+# Form for the Q&A discussion category. The filename must match the category slug: a category
+# renamed in the UI needs this file renamed too, or the form is silently ignored.
+title: "[Q&A] "
+labels: []
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **Before asking:** a surprising number of questions here are answered by the project
+        saying what it deliberately does *not* do.
+
+        - [What this platform will not answer](https://github.com/Wellmatix-Bio/peptide_discovery_platform#what-this-platform-will-not-answer)
+        - [Known issues](https://github.com/Wellmatix-Bio/peptide_discovery_platform#known-issues)
+        - [Things that will trip you up](https://github.com/Wellmatix-Bio/peptide_discovery_platform/blob/main/CONTRIBUTING.md#things-that-will-trip-you-up)
+
+        If you have found something that behaves differently from what it says it does, that is a
+        bug — please open an issue instead, so it does not get lost in a thread.
+  - type: textarea
+    id: question
+    attributes:
+      label: What are you trying to do
+      description: The goal, not only the step you are stuck on. The best answer is often a
+        different approach.
+    validations:
+      required: true
+  - type: textarea
+    id: tried
+    attributes:
+      label: What you have tried
+      description: Commands, config or requests, and what came back. Paste the actual output
+        rather than describing it.
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Which part
+      options:
+        - Running the pipeline locally
+        - The job API or Vertex AI
+        - The accounts service or proxy
+        - The web app
+        - Models, weights or model cards
+        - Deployment and Docker
+        - Something else
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      placeholder: |
+        OS, Python version, CPU or GPU
+        Local run or the compose stack?
+        Are model weights present? Are propy3 or s4pred installed?

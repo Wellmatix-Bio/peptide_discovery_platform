@@ -55,12 +55,21 @@ body:
   - type: textarea
     id: run-state
     attributes:
-      label: If this involves a run, both status fields
+      label: If this involves a run, all three status fields
       description: |
-        `status` and `vertex_state` can disagree, and the difference is usually the answer.
-        A run showing `status: pending` with a terminal `vertex_state` means the worker died
-        without writing a result — that is expected behaviour, not a bug in the UI.
-      placeholder: "status: pending / vertex_state: JOB_STATE_FAILED"
+        `GET /api/v1/jobs/{job_id}/status` returns three, and the difference between them is
+        usually the answer:
+
+        - `status` — the worker's own last word. It can be stale: a worker that dies writes
+          nothing further, so it stays on `running`, or `pending` if it died before writing.
+        - `vertex_state` — the observed job state, from Vertex.
+        - `run_state` — the two reconciled. **This is the one to read.**
+
+        `status: pending` with a terminal `vertex_state` is expected — that is a dead worker,
+        not a UI bug. But `run_state` should then say `failed`, `cancelled` or `abandoned`.
+        **If `run_state` claims a run is still going when Vertex says it is over, that is a bug
+        and worth reporting.**
+      placeholder: "status: pending / vertex_state: JOB_STATE_FAILED / run_state: abandoned"
   - type: textarea
     id: environment
     attributes:

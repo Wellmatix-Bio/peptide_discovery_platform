@@ -16,6 +16,12 @@
 - [ ] No copyleft dependency added to `requirements.txt` or pyproject's core dependencies
       (`tests/test_licensing.py` enforces this — see `docs/LICENSING.md`)
 - [ ] A check that cannot run reports itself as not run, never as a pass
+- [ ] If `api.py` changed **at all, including a docstring**: OpenAPI snapshot regenerated
+      (`python web/scripts/openapi.py peptide`) **and** types rebuilt
+      (`cd web && npm run api:types`). FastAPI puts docstrings in the schema, so a comment-only
+      edit changes the contract file — this has broken `main` twice
+- [ ] Web typechecked with `npx tsc -b --noEmit --force`, not just `npm run typecheck`
+      (`tsc -b` reuses an incremental cache and will not revisit a regenerated file)
 - [ ] Docs updated if behaviour or setup changed
 
 ## Anything you found but did not fix

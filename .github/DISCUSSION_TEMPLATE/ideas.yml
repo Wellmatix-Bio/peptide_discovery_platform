@@ -1,0 +1,45 @@
+# Form for the Ideas discussion category. The filename must match the category slug.
+title: "[Idea] "
+labels: []
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Ideas are for shaping something before anyone builds it. A concrete proposal with its
+        trade-offs stated gets further than a feature name.
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem would this solve
+      description: Who hits it, and what they do today instead. An idea without a problem behind
+        it is hard to weigh against the others.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What you have in mind
+    validations:
+      required: true
+  - type: textarea
+    id: cost
+    attributes:
+      label: What it would cost or change
+      description: |
+        Be honest about the downside — it is the most useful part. For example: does it add a
+        dependency? A copyleft one (see `docs/LICENSING.md`)? Does it change what a stored result
+        means, so old and new runs stop being comparable? Does it make a number harder to trace
+        back to the model that produced it?
+    validations:
+      required: true
+  - type: checkboxes
+    id: house-rules
+    attributes:
+      label: Does it fit the project's rules
+      description: |
+        See [House rules for changes](https://github.com/Wellmatix-Bio/peptide_discovery_platform/blob/main/CONTRIBUTING.md#house-rules-for-changes).
+        Tick what applies; an unticked box is not a rejection, it is a thing to discuss.
+      options:
+        - label: A check that cannot run would still report itself as not run, never as a pass
+        - label: It computes nothing in the UI that the API did not compute
+        - label: It adds no required dependency under a copyleft licence

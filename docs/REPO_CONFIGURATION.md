@@ -48,7 +48,7 @@ a literal `main`, so it follows a rename).
 | Bypass list | the maintainer, *Always allow* | **Deliberate.** Without a bypass actor, a red CI job locks you out of fixing it. This project hit exactly that situation with an unmergeable TypeScript upgrade |
 | Restrict deletions | On | |
 | Block force pushes | On | |
-| Require a pull request | On, **1** approval | |
+| Require a pull request | On, **1** approval | A single maintainer cannot approve their own PR, so own-changes merge via the bypass checkbox. Kept at 1 anyway: it is strangers' PRs the rule is for, and those you *can* review. See [MAINTAINING.md](MAINTAINING.md) |
 | ↳ Dismiss stale approvals on new commits | On | An approval is of a diff, not of a branch |
 | ↳ Require review from Code Owners | On | `.github/CODEOWNERS` routes licence files and `test_licensing.py` specifically |
 | ↳ Require conversation resolution | On | No merging over an unanswered review comment |

@@ -9,7 +9,7 @@
  * The same navigation also kept the previous run's state, because the route parameter changes
  * without remounting the component.
  */
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter, Route, Routes, useNavigate } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -155,9 +155,43 @@ describe("switching away from a run that has already loaded", () => {
     );
 
     screen.getByRole("button", { name: /go to the other run/i }).click();
-    await waitFor(() => expect(screen.getByText(FAST)).toBeInTheDocument());
+
+    /* The second run never answers, so the correct screen is the loading one. Waiting for the
+       NEW run's id would be waiting for the bug: that id only appeared early because the page was
+       still rendering the previous run's state alongside it. */
+    await waitFor(() => expect(screen.getByText(/reading this run/i)).toBeInTheDocument());
 
     expect(screen.queryByText(/candidate generation/i)).not.toBeInTheDocument();
     expect(screen.queryByText(SLOW)).not.toBeInTheDocument();
+  });
+
+  it("clears the previous run's state in the same paint as the new route", async () => {
+    /* react-router 7 wraps navigation in startTransition, so the component renders with the new
+       route parameter before any clearing effect commits. State keyed by its run is what makes
+       that safe: there is no render in which one run's id can be paired with another's data.
+       Checked with no waitFor -- if the stale stage survives even one paint, a reader can see it. */
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) => {
+        if (url.includes("111")) {
+          return new Response(JSON.stringify(statusFor(SLOW, "s04_candidate_generation")), {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          });
+        }
+        await new Promise((resolve) => setTimeout(resolve, 5000));
+        return new Response("{}", { status: 200, headers: { "content-type": "application/json" } });
+      }),
+    );
+
+    showSwitchable(SLOW);
+    await waitFor(() =>
+      expect(screen.getAllByText(/candidate generation/i).length).toBeGreaterThan(0),
+    );
+
+    /* fireEvent, not a raw .click(): it wraps the event in act(), so React has flushed by the
+       time the assertion runs. A raw click would be measuring React's scheduling, not the app. */
+    fireEvent.click(screen.getByRole("button", { name: /go to the other run/i }));
+    expect(screen.queryByText(/candidate generation/i)).not.toBeInTheDocument();
   });
 });

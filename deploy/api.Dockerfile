@@ -25,4 +25,5 @@ EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s \
   CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/healthz', timeout=4)"
 # One worker. The API only submits jobs and reads artifacts; the GPU work is Vertex's.
-CMD ["python", "-m", "uvicorn", "backend.api_e2e.api:app", "--host", "0.0.0.0", "--port", "8080"]
+# Shell form so Cloud Run's $PORT is honoured; compose leaves PORT unset, so 8080 is used there.
+CMD python -m uvicorn backend.api_e2e.api:app --host 0.0.0.0 --port ${PORT:-8080}

@@ -137,6 +137,8 @@ Open and documented rather than discovered later:
 | [REVIEW_LOG.md](docs/REVIEW_LOG.md) | Queries raised in review, what was found, why it was missed |
 | [PATHWAY_THRESHOLD.md](docs/PATHWAY_THRESHOLD.md) | For the model owner: the one open modelling decision |
 | [HISTORY_SCAN.md](docs/HISTORY_SCAN.md) | Pre-publication scan of the git history, and what it found |
+| [MAINTAINING.md](docs/MAINTAINING.md) | For maintainers: triage, releases, and what goes wrong |
+| [REPO_CONFIGURATION.md](docs/REPO_CONFIGURATION.md) | Every GitHub setting applied, and why — reusable for another repo |
 
 ---
 

@@ -194,13 +194,67 @@ that `stage` reads `pending` on a succeeded run.
 
 ---
 
-## Commits and pull requests
+## Opening a pull request
 
-Explain **what changed, why, and how you verified it**. If you found something while working that
-you are not fixing, say so rather than leaving it for the next person to rediscover.
+You do not need write access. Fork, branch, push to your fork, open a PR.
 
-CI runs three jobs: the Python suites and the baseline check, the web typecheck/test/build with
-generated types regenerated and compared, and a build of all three images.
+```bash
+gh repo fork Wellmatix-Bio/peptide_discovery_platform --clone
+```
+
+```bash
+git checkout -b short-description-of-the-change
+```
+
+Branch from `main` and keep one change per PR. If you find a second thing worth fixing, say so in
+the PR and let somebody decide whether it belongs in the same change — see **Say what you found**
+below.
+
+### What has to pass
+
+Three CI jobs are **required**; a PR cannot merge until all three are green:
+
+| Job | What it does |
+|---|---|
+| `python` | The backend suite against its recorded baseline, plus the accounts suite, plus a check that the OpenAPI snapshot matches `api.py` |
+| `web` | Regenerates the TypeScript types and fails on any diff, then typecheck, tests and build |
+| `images` | Builds all three container images |
+
+Run them locally first; all three are in [Tests](#tests) above. Two traps worth knowing:
+
+- **`npm run typecheck` can pass locally while CI fails.** `tsc -b` reuses an incremental cache
+  and will not revisit a regenerated file. Use `npx tsc -b --noEmit --force` to reproduce CI.
+- **If you change `api.py` — even a docstring — regenerate the snapshot.** FastAPI puts docstrings
+  in the schema, so a comment-only edit changes the contract file. `python web/scripts/openapi.py
+  peptide` then `cd web && npm run api:types`. This has broken `main` twice.
+
+### What review expects
+
+- **One approval**, and conversations resolved before merge.
+- **Code Owners review** is required for some paths. `LICENSE`, `NOTICE`, `docs/LICENSING.md` and
+  `tests/test_licensing.py` are called out in `.github/CODEOWNERS` because a change there can
+  quietly alter what the project may be distributed under.
+- **Merge commits only.** Squash and rebase are disabled, so your individual commits survive —
+  write them accordingly.
+- **Your branch must be up to date** with `main` before merging. GitHub offers an "Update branch"
+  button.
+
+### Writing the commit and the PR
+
+Explain **what changed, why, and how you verified it**. "How you verified it" is not a formality
+here: for anything load-bearing, the expectation is that you broke it deliberately and watched a
+test fail — see [Tests for new work](#tests-for-new-work).
+
+**Say what you found and are not fixing.** A PR that mentions an unrelated problem it noticed is
+worth more than one that silently leaves it. If a test you wrote surprised you, or passed when it
+should not have, that belongs in the message too.
+
+### First time here?
+
+Issues labelled **`good first issue`** and **`help wanted`** are the ones most likely to be
+self-contained. If something in this file is wrong or out of date, that is also a real
+contribution — several sections exist because somebody lost an afternoon to the thing they
+describe.
 
 ---
 

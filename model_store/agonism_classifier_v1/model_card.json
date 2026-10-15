@@ -1,0 +1,37 @@
+{
+  "model_name": "agonism_classifier_v1",
+  "task": "multi-task binary classification: P(EC50 < 1000 pM) per receptor (GCGR, GLP1R, GIPR); 1000 pM = 1 nM",
+  "architecture": "mean of 5 fold models; each is a shared MLP trunk (max_len*7 -> 256 -> 128 -> 64, ReLU, BatchNorm, dropout 0.2) with one linear head per receptor, trained with masked focal loss (alpha 0.25, gamma 2)",
+  "input": "per-token features from FeatureExtractor.get_token_features: Kyte-Doolittle hydrophobicity, pH 7.4 side-chain charge, residue MW (the first three z-scored with each fold's own statistics), D flag, lipid flag, sin/cos of position; zero-padded to max_len 44 tokens and flattened",
+  "receptors": [
+    "GLP1R",
+    "GIPR",
+    "GCGR"
+  ],
+  "weights_dir": "model_store/model_weights/agonism_classifier_v1",
+  "weights_layout": "fold1.pt ... fold5.pt, each with state_dict, in_dim, receptors, max_len and scaler; cv_metrics.csv",
+  "training_data": {
+    "sources": "ChEMBL GLP-1R EC50 (cAMP direct, EXACT) and all_sequences_aligned.csv; replicate EC50s merged by geometric mean; a missing EC50 is a masked label",
+    "label_counts": {
+      "GCGR": {
+        "positive": 95,
+        "negative": 104,
+        "missing": 72
+      },
+      "GLP1R": {
+        "positive": 214,
+        "negative": 57,
+        "missing": 0
+      },
+      "GIPR": {
+        "positive": 31,
+        "negative": 24,
+        "missing": 216
+      }
+    },
+    "receptor_column_assumption": "EC50_T1 = GCGR, EC50_T2 = GLP1R, EC50_T3 = GIPR (assumed order, not confirmed by the source file)",
+    "cv": "5-fold, folds grouped by CD-HIT clusters at 80% identity, 20% of the training part held out for early stopping",
+    "decision_threshold_in_notebook": 0.5
+  },
+  "cv_metrics": "weights/cv_metrics.csv (per fold and receptor: AUC-ROC, AUC-PR, F1, precision, recall, balanced accuracy)"
+}

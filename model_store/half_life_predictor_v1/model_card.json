@@ -1,0 +1,52 @@
+{
+  "model_name": "half_life_predictor_v1",
+  "task": "regression: peptide half-life as log10(half-life in seconds)",
+  "architecture": "mean of 5 cluster-fold XGBRegressor models (reg:squarederror, enable_categorical=True); no full-data refit",
+  "weights_layout": "fold_0.joblib .. fold_4.joblib",
+  "weights_dir": "model_store/model_weights/half_life_predictor_v1",
+  "esm_model_name": "facebook/esm2_t30_150M_UR50D",
+  "esm_embedding": "mean-pooled last_hidden_state over every attended token including BOS/EOS, sequence passed as given (uppercase standard residues)",
+  "n_features": 655,
+  "feature_order": [
+    "esm_0..esm_639 (ESM2-150M mean-pooled embedding)",
+    "desc_length, desc_net_charge, desc_pI, desc_hydrophobicity (modlAMP HydrophRatio), desc_hydrophobic_moment (Eisenberg), desc_aromatic_fraction, desc_cationic_fraction (K/R/H)",
+    "is_nterm_modified, is_cterm_modified, is_pegylated, is_d_amino_acid, is_cyclic (0/1)",
+    "species, matrix, vivo_vitro (pandas category; integer codes follow the sorted level order below)"
+  ],
+  "categorical_levels": {
+    "species": ["cat", "chicken", "cow", "dog", "human", "insect", "monkey", "mouse", "pig", "rabbit", "rat", "sheep", "unknown_or_other"],
+    "matrix": ["buffer_or_enzyme", "cell_based", "other_unspecified", "plasma", "serum", "whole_blood"],
+    "vivo_vitro": ["ex_vivo", "in_vitro", "in_vivo", "unknown"]
+  },
+  "xgb_params": {
+    "max_depth": 5,
+    "learning_rate": 0.05,
+    "n_estimators": 500,
+    "subsample": 0.7,
+    "colsample_bytree": 1.0,
+    "early_stopping_rounds": 20,
+    "random_state": 42
+  },
+  "training_data": {
+    "sources": "PEPlife and DRAMP, merged and de-duplicated on (molecule_id, PMID)",
+    "n_rows": 1283,
+    "unique_sequences": 853,
+    "length_range": [5, 50],
+    "residues": "20 uppercase standard amino acids only; D-form and non-standard sequences excluded",
+    "filters": "censor_status == exact; named-enzyme rows dropped; matrix x vivo_vitro |z| > 3 outliers dropped",
+    "target": "log10_hl = log10(half_life_sec)",
+    "cv": "5 folds by CD-HIT cluster (40% identity), whole clusters per fold, greedy size-balanced assignment"
+  },
+  "cv_metrics": {
+    "source": "pipeline_esm2_150m.ipynb, out-of-fold predictions of the saved fold models",
+    "overall": {"MAE": 0.6467, "R2": 0.8916, "Pearson": 0.9443, "Spearman": 0.8297},
+    "per_fold": [
+      {"fold": 0, "MAE": 0.5762, "R2": 0.9231, "Pearson": 0.9609, "Spearman": 0.8928},
+      {"fold": 1, "MAE": 0.5963, "R2": 0.9004, "Pearson": 0.9499, "Spearman": 0.8089},
+      {"fold": 2, "MAE": 0.6875, "R2": 0.8584, "Pearson": 0.9265, "Spearman": 0.8031},
+      {"fold": 3, "MAE": 0.6709, "R2": 0.8886, "Pearson": 0.9430, "Spearman": 0.7876},
+      {"fold": 4, "MAE": 0.7030, "R2": 0.8613, "Pearson": 0.9317, "Spearman": 0.7778}
+    ],
+    "units": "MAE in log10(seconds)"
+  }
+}

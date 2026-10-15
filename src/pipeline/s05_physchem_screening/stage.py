@@ -11,6 +11,7 @@ from tqdm import tqdm
 from common.gpu import release_stage_models
 from common.logging import get_logger
 from pipeline.base import CandidateStage, RunContext
+from pipeline.feature_extractor import PROPY_AVAILABLE, PROPY_UNAVAILABLE_REASON
 from schemas.candidate import Candidate
 from schemas.run_config import StageConfig
 

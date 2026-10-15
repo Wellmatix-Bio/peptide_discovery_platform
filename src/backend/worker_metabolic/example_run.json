@@ -1,0 +1,36 @@
+{
+  "run_id": "metabolic-001",
+  "seed": 42,
+  "seed_candidates_path": "data\\raw\\curated_peptides_metabolic.fasta",
+  "artifacts_dir": "./artifacts",
+  "model_store": "./model_store",
+  "stages": {
+    "s01_metabolic_therapeutic_product_brief": {
+      "params": {
+        "brief": {
+          "target_receptors": ["GLP-1R", "GIPR"],
+          "min_length": 6,
+          "max_length": 40,
+          "min_plasma_half_life_minutes": 60,
+          "route_b_n_peptides": 100,
+          "hemolysis_screening": true
+        }
+      }
+    },
+    "s04_metabolic_candidate_generation": {
+      "params": {}
+    },
+    "s05_metabolic_physchem_screening": {
+      "params": {}
+    },
+    "s06_metabolic_functional_screening": {
+      "params": {}
+    },
+    "s08_metabolic_safety_developability": {
+      "params": {}
+    },
+    "s11_metabolic_ranking": {
+      "params": {}
+    }
+  }
+}

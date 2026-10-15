@@ -26,6 +26,7 @@ logger = get_logger(__name__)
 # Maps each setup stage to the RunContext field its payload populates.
 SETUP_STAGE_TARGET_FIELD = {
     "s01_therapeutic_product_brief": "brief",
+    "s01_metabolic_therapeutic_product_brief": "brief",
     "s02_wound_biology_and_targets": "objectives",
     # "s03_data_integration": "standardized_records",
 }

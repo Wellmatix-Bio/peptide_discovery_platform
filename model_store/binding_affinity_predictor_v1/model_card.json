@@ -1,0 +1,43 @@
+{
+  "model_name": "binding_affinity_predictor_v1",
+  "task": "regression: peptide-receptor binding affinity as pKd = 9 - log10(Kd [nM]); higher = tighter binding",
+  "architecture": "frozen ESM2-150M masked-mean-pooled vector per chain, concat(target, binder) 1280-d -> Linear(256) -> ReLU -> Dropout(0.1) -> Linear(1); MSE on pKd, output bias initialised to the training mean pKd",
+  "esm_model_name": "facebook/esm2_t30_150M_UR50D",
+  "esm_embedding": "mean over every attended token including BOS/EOS; the notebook encoded under fp16 autocast, the platform runs fp32 (vectors differ in the 3rd decimal)",
+  "embedding_dim": 640,
+  "weights_dir": "model_store/model_weights/binding_affinity_predictor_v1",
+  "weights_layout": "baseline_split_cluster.pt, baseline_split_random.pt (each {state, best, best_epoch}), receptors.json (human UniProt sequences), metadata.json",
+  "default_checkpoint": "cluster",
+  "receptors": {
+    "GLP1R": "UniProt P43220, 463 aa, full length",
+    "GCGR": "UniProt P47871, 477 aa, full length",
+    "GIPR": "UniProt P48546, 466 aa, full length"
+  },
+  "training_data": {
+    "sources": "PPB-Affinity (proteinea/ppb_affinity, raw_rec) merged with PPI-affinity; duplicates collapsed to the median pKd, PPI taking precedence",
+    "train_rows": {"split_random": 11865, "split_cluster": 11425},
+    "pkd_range": [-1.61, 15.7],
+    "mostly": "protein-protein complexes (median target length 223 aa); only PPI-affinity contributes short peptides (median 12 aa)",
+    "splits": {
+      "split_random": "stratified rows",
+      "split_cluster": "whole groups, CD-HIT clusters of the chains with complexes grouped by target cluster"
+    },
+    "training": {"optimizer": "AdamW", "lr": 0.001, "weight_decay": 0.01, "batch_size": 64, "max_epochs": 200, "patience": 20, "select_by": "validation SRCC", "seed": 42}
+  },
+  "metrics": {
+    "source": "training_balm.ipynb, Model A, single seed",
+    "split_random": {
+      "best_epoch": 111,
+      "val": {"PCC": 0.835, "SRCC": 0.841, "R2": 0.688, "RMSE": 1.275, "MAE": 0.901},
+      "test": {"PCC": 0.844, "SRCC": 0.848, "R2": 0.698, "RMSE": 1.246, "MAE": 0.905},
+      "StdPeptide_external": {"n": 94, "PCC": 0.329, "SRCC": 0.267, "R2": 0.091, "RMSE": 1.154, "MAE": 0.946}
+    },
+    "split_cluster": {
+      "best_epoch": 10,
+      "val": {"PCC": 0.622, "SRCC": 0.583, "R2": 0.380, "RMSE": 1.722, "MAE": 1.358},
+      "test": {"PCC": 0.501, "SRCC": 0.524, "R2": 0.227, "RMSE": 2.111, "MAE": 1.524},
+      "StdPeptide_external": {"n": 83, "PCC": 0.327, "SRCC": 0.315, "R2": -0.006, "RMSE": 1.155, "MAE": 0.949}
+    },
+    "StdPeptide": "94 measurements of 62 distinct peptides against human GLP-1R, GCGR and GIPR; no model trained or validated on them"
+  }
+}

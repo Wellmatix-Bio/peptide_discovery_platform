@@ -1,6 +1,6 @@
 # End-to-end Job API Specification
 
-This specification covers **job creation, status checks, result reads and cancellation**.
+This specification covers **job creation, status checks, result reads and cancellation** for the two pipelines the API runs: **wound healing** (the default) and **metabolic** (weight control).
 Machine-readable contract: `openapi.yaml`, OpenAPI 3.1.
 Implementation: src/backend/api_e2e/api.py.
 Stage and configuration validation: src/schemas/stage_configs.py
@@ -26,8 +26,30 @@ not resume a previous run or submit separate stage groups.
 | `stages` | object | Yes | Stage name mapped to its parameters |
 
 Unknown top-level fields and unknown stage names are rejected. There is no
-top-level `seed`, `run_id`, or `job_id` input. The pipeline seed comes from
-`stages.s01_therapeutic_product_brief.seed` (default `42`).
+top-level `seed`, `run_id`, or `job_id` input. The pipeline seed comes from the brief stage's `seed`
+(`s01_therapeutic_product_brief` or `s01_metabolic_therapeutic_product_brief`; default `42`).
+
+### Choosing a pipeline
+
+`pipeline` picks the stage set, the worker image and the brief. The brief stage inside `stages` must agree with it.
+
+| | Wound healing | Metabolic |
+|---|---|---|
+| `pipeline` | `wound_healing` (default; may be omitted) | `metabolic` |
+| Brief stage (identifies the request shape) | `s01_therapeutic_product_brief` | `s01_metabolic_therapeutic_product_brief` |
+| Brief fields | wound context, desired functions, pathogens, min/max length (6-50), dosing interval | `target_receptors` (GLP1R, GIPR, GCGR), min/max length (5-50) |
+| Stages that differ | `s04_candidate_generation`, `s05_physchem_screening`, `s06_functional_models`, `s08_safety_developability`, `s11_ranking` | `s04_metabolic_candidate_generation`, `s05_metabolic_physchem_screening`, `s06_metabolic_functional_screening`, `s08_metabolic_safety_developability`, `s11_metabolic_ranking` |
+| Shared stages | `s07_structure_mechanism`, `s09_synthesis_cmc` | `s07_structure_mechanism`, `s09_synthesis_cmc` |
+| Worker image setting | `WORKER_IMAGE_URI` | `WORKER_METABOLIC_IMAGE_URI` |
+| Vertex job display name | `ai-peptide-discovery-e2e-<request_id, first 12 characters>` | `ai-peptide-discovery-metabolic-<request_id, first 12 characters>` |
+| Vertex job label `pipeline` | `wound-healing` | `metabolic` |
+| Example | [`example_request.json`](src/backend/api_e2e/example_request.json) | below |
+
+A request that mixes the two (for example a wound stage name under `"pipeline": "metabolic"`) returns 422.
+
+### Wound-healing pipeline
+
+`pipeline` omitted or `"wound_healing"`. Example:
 
 ```json
 {
@@ -55,6 +77,35 @@ The complete example is [`example_request.json`](src/backend/api_e2e/example_req
 Parameters go directly under each stage name. The API normalizes them into the
 worker's internal `enabled`/`params` representation. The internal wrapped form
 is also accepted, but flat parameter keys cannot be mixed with `params`.
+
+#### Stage validation
+
+| Stage | Default when omitted |
+|---|---|
+| `s01_therapeutic_product_brief` | Required; omission is rejected |
+| `s04_candidate_generation` | Schema defaults |
+| `s05_physchem_screening` | Schema defaults |
+| `s06_functional_models` | Schema defaults |
+| `s07_structure_mechanism` | Schema defaults |
+| `s08_safety_developability` | Schema defaults |
+| `s09_synthesis_cmc` | Schema defaults |
+| `s11_ranking` | Always enabled with the built-in ranking policy |
+
+Enabled stages use the exact model selected by `STAGE_PARAMS_MODELS`, including
+nested validation and defaults. Unknown parameter keys are ignored according to
+`BaseStageParams`. Disabled stages skip parameter validation. Add `"enabled": false`
+inside a stage to disable it, except Stage 1 (required) and Stage 11 (forced enabled).
+
+`BriefFields` requires wound context, desired functions, pathogens, min/max
+length, and dosing interval hours. Length is 6-50 residues; dosing interval is
+1-168 hours. The OpenAPI component schemas enumerate allowed vocabularies.
+`antibiofilm` is not currently an accepted desired function. Extra brief fields
+are ignored. Some validated brief fields are not retained by the narrower
+runtime `Brief` model.
+
+Stage 11 weights, modifiers, normalization, and input mappings live in code.
+Send `"s11_ranking": {}` or omit it. The current normalizer discards supplied
+Stage 11 settings and always uses an enabled stage with no parameters.
 
 ### Metabolic pipeline
 
@@ -97,34 +148,7 @@ and takes `n_peptides`, `route_a_ga_params`, `lam` and `tol`. The OpenAPI schema
 }
 ```
 
-### Stage validation
-
-| Stage | Default when omitted |
-|---|---|
-| `s01_therapeutic_product_brief` | Required; omission is rejected |
-| `s04_candidate_generation` | Schema defaults |
-| `s05_physchem_screening` | Schema defaults |
-| `s06_functional_models` | Schema defaults |
-| `s07_structure_mechanism` | Schema defaults |
-| `s08_safety_developability` | Schema defaults |
-| `s09_synthesis_cmc` | Schema defaults |
-| `s11_ranking` | Always enabled with the built-in ranking policy |
-
-Enabled stages use the exact model selected by `STAGE_PARAMS_MODELS`, including
-nested validation and defaults. Unknown parameter keys are ignored according to
-`BaseStageParams`. Disabled stages skip parameter validation. Add `"enabled": false`
-inside a stage to disable it, except Stage 1 (required) and Stage 11 (forced enabled).
-
-`BriefFields` requires wound context, desired functions, pathogens, min/max
-length, and dosing interval hours. Length is 6-50 residues; dosing interval is
-1-168 hours. The OpenAPI component schemas enumerate allowed vocabularies.
-`antibiofilm` is not currently an accepted desired function. Extra brief fields
-are ignored. Some validated brief fields are not retained by the narrower
-runtime `Brief` model.
-
-Stage 11 weights, modifiers, normalization, and input mappings live in code.
-Send `"s11_ranking": {}` or omit it. The current normalizer discards supplied
-Stage 11 settings and always uses an enabled stage with no parameters.
+### Submission behaviour (both pipelines)
 
 The worker starts when the request-path config appears, waiting at most 120 seconds
 for a missing file. The API returns only after both writes complete. A config
@@ -251,6 +275,14 @@ Each entry of `candidates` is a flat
 `CandidateResponse` projected from the candidate record (the full prediction
 tree is not included; read `candidates_final.json` for it). Scalar fields are
 `null` when the producing stage did not run or abstained.
+
+**Wound healing and metabolic jobs share this shape.** The fields describe the wound-healing models, so a metabolic job fills only
+those whose stage it ran: `id`, `sequence`, the ranking fields, physicochemical and safety values (`molecular_weight`, `net_charge`,
+`instability_index`, the risk categories, `solubility`, `aggregation_tendency`, `cleavage_stability`, `hemolytic_activity_phc50`
+when hemolysis screening is on) and the Stage 7 pathway lists. The wound-only fields (`amp_probability`, `anti_inflammatory_probability`,
+`angiogenic_activity`, `cytotoxicity_probability`, `log_mic_um`, `pmbic`) come back `null` or `{}`, and `proliferation_probability` and
+`migration_probability` come back `0`. The metabolic scores (functional pEC50, binding pKd, the pEC50-pKd gap, half-life) are not in the summary:
+read them from `candidates_final.json`.
 
 | Field | Source |
 |---|---|

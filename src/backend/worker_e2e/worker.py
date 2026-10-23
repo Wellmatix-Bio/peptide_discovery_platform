@@ -15,14 +15,12 @@ from schemas.run_config import RunConfig
 from schemas.e2e_config import validate_job_config
 
 
-def load_job_config(
-    path: str, wait_seconds: float = 0, validate=validate_job_config
-) -> RunConfig:
-    """Read a self-contained JSON run config; `validate` turns the payload into a RunConfig."""
+def load_job_config(path: str, wait_seconds: float = 0) -> RunConfig:
+    """Read a self-contained JSON run config."""
     deadline = time.monotonic() + wait_seconds
     while True:
         try:
-            return validate(json.loads(storage.read_text(path)))
+            return validate_job_config(json.loads(storage.read_text(path)))
         except (FileNotFoundError, NotFound):
             if time.monotonic() >= deadline:
                 raise
@@ -58,14 +56,9 @@ def completed_run_reason(run_dir: str) -> str | None:
     return None
 
 
-def run_job(
-    config_path: str,
-    wait_seconds: float = 0,
-    overwrite: bool = False,
-    validate=validate_job_config,
-) -> list:
+def run_job(config_path: str, wait_seconds: float = 0, overwrite: bool = False) -> list:
     # Set environment before importing pipeline/model modules, which capture it.
-    config = load_job_config(config_path, wait_seconds, validate)
+    config = load_job_config(config_path, wait_seconds)
     # os.environ["DEV_MODE"] = "false"
     from common import env, model_sync
 

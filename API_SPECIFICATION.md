@@ -22,6 +22,7 @@ not resume a previous run or submit separate stage groups.
 | Field | Type | Required | Meaning |
 |---|---|---|---|
 | `request_id` | string | Yes | Nonempty identifier for this submission |
+| `pipeline` | string | No | `wound_healing` (default) or `metabolic`. Selects the stage set and the worker image; it must match the shape of `stages` (see [Metabolic pipeline](#metabolic-pipeline)) |
 | `stages` | object | Yes | Stage name mapped to its parameters |
 
 Unknown top-level fields and unknown stage names are rejected. There is no
@@ -54,6 +55,47 @@ The complete example is [`example_request.json`](src/backend/api_e2e/example_req
 Parameters go directly under each stage name. The API normalizes them into the
 worker's internal `enabled`/`params` representation. The internal wrapped form
 is also accepted, but flat parameter keys cannot be mixed with `params`.
+
+### Metabolic pipeline
+
+`"pipeline": "metabolic"` runs the metabolism / weight-control branch on the same endpoint. `stages` must then
+be the metabolic request: it is recognized by `s01_metabolic_therapeutic_product_brief`, and the wound-healing
+stage names are rejected. A `pipeline` that disagrees with the shape of `stages` returns 422 and names the
+value to use. The job runs on the image in `WORKER_METABOLIC_IMAGE_URI` and is labelled `pipeline: metabolic`.
+
+| Stage | Default when omitted |
+|---|---|
+| `s01_metabolic_therapeutic_product_brief` | Required; omission is rejected |
+| `s04_metabolic_candidate_generation` | Schema defaults |
+| `s05_metabolic_physchem_screening` | Schema defaults |
+| `s06_metabolic_functional_screening` | Schema defaults |
+| `s07_structure_mechanism` | Schema defaults (shared with the wound pipeline; stays on) |
+| `s08_metabolic_safety_developability` | Schema defaults |
+| `s09_synthesis_cmc` | Schema defaults (shared with the wound pipeline; stays on) |
+| `s11_metabolic_ranking` | Schema defaults |
+
+The brief (`MetabolicBrief`) requires `min_length` and `max_length` (5-50) and `target_receptors` (GLP1R, GIPR
+or GCGR, exact spelling; duplicates are dropped). Stage 8 takes `hemolysis_screening` (default `true`);
+`false` skips hemolysis and Stage 11 drops it from the safety score. Stage 4 can override the length range and receptors,
+and takes `n_peptides`, `route_a_ga_params`, `lam` and `tol`. The OpenAPI schemas list every stage's parameters.
+
+```json
+{
+  "request_id": "request-002",
+  "pipeline": "metabolic",
+  "stages": {
+    "s01_metabolic_therapeutic_product_brief": {
+      "brief": {
+        "target_receptors": ["GLP1R", "GIPR"],
+        "min_length": 6,
+        "max_length": 40
+      }
+    },
+    "s04_metabolic_candidate_generation": {"n_peptides": 100},
+    "s08_metabolic_safety_developability": {"hemolysis_screening": true, "hemolysis_probability_reject_max": 0.5}
+  }
+}
+```
 
 ### Stage validation
 
@@ -305,7 +347,8 @@ forced termination; Vertex is authoritative.
 ## Server settings
 
 Required: `VERTEX_CLOUD_PROJECT`, `VERTEX_LOCATION`, `VERTEX_ARTIFACTS_DIR`, `VERTEX_MODEL_STORE`,
-`SEED_CANDIDATES_FILE`, `WORKER_IMAGE_URI`, `WORKER_SERVICE_ACCOUNT`.
+`SEED_CANDIDATES_FILE`, `WORKER_IMAGE_URI`, `WORKER_SERVICE_ACCOUNT`; `WORKER_METABOLIC_IMAGE_URI` is also
+required for `pipeline: metabolic` jobs.
 Use the project ID or number, not the display name. Artifact/model/seed paths
 must be GCS URIs. The service-account setting is an email, not a key file.
 

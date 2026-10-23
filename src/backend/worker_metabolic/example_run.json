@@ -1,36 +1,143 @@
 {
-  "run_id": "metabolic-001",
+  "run_id": "metabolic-004",
   "seed": 42,
   "seed_candidates_path": "data\\raw\\curated_peptides_metabolic.fasta",
   "artifacts_dir": "./artifacts",
   "model_store": "./model_store",
   "stages": {
     "s01_metabolic_therapeutic_product_brief": {
+      "enabled": true,
       "params": {
         "brief": {
-          "target_receptors": ["GLP-1R", "GIPR"],
+          "target_receptors": [
+            "GLP1R",
+            "GIPR"
+          ],
           "min_length": 6,
-          "max_length": 40,
-          "min_plasma_half_life_minutes": 60,
-          "route_b_n_peptides": 100,
-          "hemolysis_screening": true
-        }
+          "max_length": 40
+        },
+        "seed": 42
       }
     },
     "s04_metabolic_candidate_generation": {
-      "params": {}
+      "enabled": true,
+      "params": {
+        "route_a_ga_params": {},
+        "target_receptors": null,
+        "min_length": null,
+        "max_length": null,
+        "lam": 0.5,
+        "tol": 1.0,
+        "n_peptides": 100,
+        "max_new_tokens": 120,
+        "batch_size": 16,
+        "max_attempts": 20
+      }
     },
     "s05_metabolic_physchem_screening": {
-      "params": {}
+      "enabled": true,
+      "params": {
+        "ph": 7.4,
+        "solubility_solvent": "Ultrapure water",
+        "molecular_weight_reject_max": 5000.0,
+        "hydrophobicity_reject_max": 0.3,
+        "molecular_weight_flag_max": 4577.6,
+        "net_charge_flag_min": -3.02,
+        "net_charge_flag_max": 1.03,
+        "isoelectric_point_flag_ph_window": 0.233,
+        "hydrophobic_moment_flag_max": 0.189,
+        "amphipathicity_flag_max": 0.245,
+        "instability_index_flag_max": 70.5,
+        "solubility_flag_min": 0.173,
+        "aggregation_tendency_flag_max": 0.47,
+        "ss_confidence_unstable_max": 0.5,
+        "ss_confidence_ambiguous_max": 0.7,
+        "oxidation_count_flag_max": 3,
+        "deamidation_count_flag_max": 1
+      }
     },
     "s06_metabolic_functional_screening": {
-      "params": {}
+      "enabled": true,
+      "params": {
+        "target_receptors": [
+          "GLP1R",
+          "GIPR"
+        ],
+        "ec50_max_nm": {
+          "GLP1R": 1000.0,
+          "GIPR": 1000.0,
+          "GCGR": 1000.0
+        },
+        "ec50_floor_nm": 0.001,
+        "agonism_probability_min": {}
+      }
+    },
+    "s07_structure_mechanism": {
+      "enabled": true,
+      "params": {
+        "plddt_low_confidence_max": 0.5,
+        "pathway_engagement_min_probability": 0.5,
+        "helix_phi_min": -100.0,
+        "helix_phi_max": -30.0,
+        "helix_psi_min": -77.0,
+        "helix_psi_max": -5.0,
+        "sheet_phi_min": -180.0,
+        "sheet_phi_max": -45.0,
+        "sheet_psi_min": 90.0,
+        "sheet_psi_max": 180.0
+      }
     },
     "s08_metabolic_safety_developability": {
-      "params": {}
+      "enabled": true,
+      "params": {
+        "hemolysis_screening": true,
+        "hemolysis_probability_reject_max": 0.5,
+        "solubility_solvent": "Ultrapure water",
+        "cytotoxicity_cell_type": "DRAMP_aggregate",
+        "cytotoxicity_reject_max": 0.5,
+        "aggregation_reject_max": 0.7,
+        "solubility_flag_min": 0.173,
+        "plasma_half_life_min_minutes": 60.0,
+        "cleavage_stability_reject_min": 0.3,
+        "cleavage_decay_rate": 0.5
+      }
+    },
+    "s09_synthesis_cmc": {
+      "enabled": true,
+      "params": {
+        "rejected_difficulty_classes": [
+          "high"
+        ]
+      }
     },
     "s11_metabolic_ranking": {
-      "params": {}
+      "enabled": true,
+      "params": {
+        "weights": {
+          "receptor_agonism": 0.35,
+          "stability": 0.2,
+          "anti_inflammatory": 0.1,
+          "safety": 0.15,
+          "developability": 0.15,
+          "mechanistic_confidence": 0.05
+        },
+        "target_receptors": [
+          "GLP1R",
+          "GIPR"
+        ],
+        "ec50_max_nm": {
+          "GLP1R": 1000.0,
+          "GIPR": 1000.0,
+          "GCGR": 1000.0
+        },
+        "ec50_floor_nm": 0.001,
+        "half_life_target_minutes": 60.0,
+        "hemolysis_phc50_reject_max": 4.0,
+        "pkd_range": [
+          5.0,
+          11.0
+        ]
+      }
     }
   }
 }

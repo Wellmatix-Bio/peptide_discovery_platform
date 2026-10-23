@@ -106,12 +106,6 @@ class Stage11Metabolic(CandidateStage):
         ]
         if not receptors:
             raise ValueError("Stage 11 (metabolic) needs at least one target receptor")
-        # A metabolic brief is the single configuration: it switches hemolysis and sets the half-life target.
-        brief = ctx.brief
-        if getattr(brief, "hemolysis_screening", True) is False:
-            params["hemolysis_phc50_reject_max"] = None
-        if getattr(brief, "min_plasma_half_life_minutes", None) is not None:
-            params["half_life_target_minutes"] = brief.min_plasma_half_life_minutes
         weights = params["weights"]
         if set(weights) != set(MODULES) or any(w < 0 for w in weights.values()):
             raise ValueError(f"weights must give a non-negative value for exactly {MODULES}")
@@ -177,13 +171,14 @@ class Stage11Metabolic(CandidateStage):
             raw["receptor_agonism"] = geometric_mean(list(per_receptor.values()))
             detail["receptor_agonism"] = {"receptor_scores": per_receptor}
 
-        # Stability: average of proteolytic stability and plasma half-life, whichever are available.
+        # Stability: mean of proteolytic stability and plasma half-life.
         cleavage = _read_path(p, "cleavage_stability.score")
         half_life = half_life_score(
             _read_path(p, "plasma_half_life.minutes"), params["half_life_target_minutes"]
         )
-        raw["stability"] = _mean([cleavage if _usable(cleavage) else None, half_life])
-        detail["stability"] = {"proteolytic": cleavage, "half_life": half_life}
+        cleavage = cleavage if _usable(cleavage) else None
+        raw["stability"] = _mean([cleavage, half_life])
+        detail["stability"] = {"cleavage": cleavage, "half_life": half_life}
 
         anti_inflammatory = p.get("anti_inflammatory_probability")
         raw["anti_inflammatory"] = anti_inflammatory if _usable(anti_inflammatory) else None

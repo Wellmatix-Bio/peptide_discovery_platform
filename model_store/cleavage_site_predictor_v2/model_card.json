@@ -1,0 +1,33 @@
+{
+  "model_name": "cleavage_site_predictor_v2",
+  "supersedes": "cleavage_site_predictor_v2 (joint model, 121-enzyme panel)",
+  "task": "Per-residue P1 protease cleavage-site probability for a candidate peptide (substrate), against a bundled panel of 6,460 enzymes (proteases).",
+  "architecture": "UniZyme Transformer_DE: one encoder layer per side (2 heads, d_model 480, Gaussian distance kernels, K=10); the enzyme side also takes a residue frustration matrix; an active-site head feeds a pooled concatenation MLP that scores each substrate residue. See architecture.py.",
+  "inference_inputs_required": {
+    "sequence": "candidate peptide amino-acid sequence, standard 20 AAs, at most 1500 residues",
+    "enzyme_accession": "UniProt accession of a bundled enzyme (see enzymes/enzyme_catalog.csv), or omit to score against the full panel via predict()",
+    "distance_matrix": "optional (len(sequence), len(sequence)) float array, pairwise C-alpha distance in Angstroms; when omitted the peptide is folded with ESMFold"
+  },
+  "esm_model": "facebook/esm2_t12_35M_UR50D",
+  "esm_embedding_dim": 480,
+  "enzyme_panel_size": 6460,
+  "enzyme_panel_selection": "Every enzyme in UniZyme's data with a structure and a frustration matrix: 542 MEROPS-keyed training enzymes, 5,886 pretraining enzymes and 32 added for the wound-healing and metabolic pipelines. Ten wound-allowlist matrices were computed with frustratometer (configurational, k_electrostatics 0, min separation 12); the rest are UniZyme's own.",
+  "checkpoint": "UniZyme.pt from the UniZyme project",
+  "source": "Models/UniZyme (MIT licence)",
+  "metrics": null,
+  "known_limits": [
+    "CLEAVAGE_PROB_THRESHOLD is 0.5 and has not been calibrated; no precision/recall was measured for this checkpoint on peptides.",
+    "Ten of the energy matrices were computed locally rather than taken from UniZyme.",
+    "Energy matrices are stored as float16 (predictions differ by at most about 1e-4 from float32).",
+    "predict() requires the enzymes to be named; the panel is too large to screen in full.",
+    "Matrices are zero-padded to 1500 residues as in the original code, so inference cost does not scale down with peptide length."
+  ],
+  "enzymes_screened_by_pipelines": {
+    "metabolic": [
+      "P27487",
+      "P08473",
+      "P42785"
+    ],
+    "wound_healing": "the 33 accessions in WOUND_PROTEASE_ACCESSIONS (pipeline/s08_safety_developability/stage.py), all in the panel"
+  }
+}

@@ -39,6 +39,7 @@ services:
       VERTEX_ARTIFACTS_DIR: ${VERTEX_ARTIFACTS_DIR:?set it in deploy/.env}
       SEED_CANDIDATES_FILE: ${SEED_CANDIDATES_FILE:?set it in deploy/.env}
       WORKER_IMAGE_URI: ${WORKER_IMAGE_URI:?set it in deploy/.env}
+      WORKER_METABOLIC_IMAGE_URI: ${WORKER_METABOLIC_IMAGE_URI:-}
       WORKER_SERVICE_ACCOUNT: ${WORKER_SERVICE_ACCOUNT:?set it in deploy/.env}
       MACHINE_TYPE: ${MACHINE_TYPE:?set it in deploy/.env}
       ACCELERATOR_TYPE: ${ACCELERATOR_TYPE:?set it in deploy/.env}

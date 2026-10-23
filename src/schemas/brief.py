@@ -31,7 +31,6 @@ class Brief(BaseModel):
 
 
 MetabolicReceptor = Literal["GLP1R", "GIPR", "GCGR"]
-_RECEPTOR_ALIASES = {"GLP1R": "GLP1R", "GLP-1R": "GLP1R", "GIPR": "GIPR", "GCGR": "GCGR"}
 
 
 class MetabolicBrief(Brief):
@@ -44,23 +43,8 @@ class MetabolicBrief(Brief):
     max_length: int = Field(ge=5, le=50)
     #: Receptors the peptide should activate: Stage 4 GA fitness, Stage 6 screening and Stage 11 ranking.
     target_receptors: List[MetabolicReceptor] = Field(min_length=1)
-    #: Stage 8 rejects below this predicted human-plasma half-life; Stage 11 scores relative to it.
-    min_plasma_half_life_minutes: float = Field(default=60.0, gt=0)
-    #: How many peptides Route B (untagged ProtGPT2) samples in Stage 4.
-    route_b_n_peptides: int = Field(default=100, ge=1, le=10000)
-    #: Turns hemolysis filtering (Stage 8) and its safety score (Stage 11) on or off.
-    hemolysis_screening: bool = True
 
-    @field_validator("target_receptors", mode="before")
+    @field_validator("target_receptors")
     @classmethod
-    def _normalize_receptors(cls, value):
-        if not isinstance(value, (list, tuple)):
-            return value
-        names = []
-        for item in value:
-            key = str(item).strip().upper()
-            if key not in _RECEPTOR_ALIASES:
-                raise ValueError(f"unknown receptor {item!r}; expected GLP-1R, GIPR or GCGR")
-            if _RECEPTOR_ALIASES[key] not in names:
-                names.append(_RECEPTOR_ALIASES[key])
-        return names
+    def _drop_duplicate_receptors(cls, value):
+        return list(dict.fromkeys(value))

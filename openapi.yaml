@@ -369,8 +369,22 @@ components:
           type: string
           minLength: 1
           title: Request Id
+        pipeline:
+          type: string
+          enum:
+          - wound_healing
+          - metabolic
+          default: wound_healing
+          title: Pipeline
+          description: Which pipeline runs, and which worker image executes it. Must match
+            the shape of `stages`; a mismatch is rejected with 422.
         stages:
-          $ref: '#/components/schemas/E2ERequest'
+          oneOf:
+          - $ref: '#/components/schemas/E2ERequest'
+          - $ref: '#/components/schemas/MetabolicE2ERequest'
+          title: Stages
+          description: The wound-healing stages for `pipeline` wound_healing, the metabolic
+            stages (keyed by `s01_metabolic_therapeutic_product_brief`) for `metabolic`.
       additionalProperties: false
       type: object
       required:
@@ -1206,3 +1220,496 @@ components:
         body fails schema validation (e.g. a missing required field, a wrong
         type, or an extra key) before the route handler ever runs. Distinct
         from ErrorResponse, which covers errors the handler raises itself.
+    MetabolicBrief:
+      description: 'Stage 1 brief for metabolism / weight control; the single configuration Stages 4, 6, 8
+        and 11 read.
+
+
+        The wound fields stay on the base class, empty. Lengths are held to the range the metabolic models
+        cover.'
+      properties:
+        desired_functions:
+          items:
+            type: string
+          title: Desired Functions
+          type: array
+        max_length:
+          maximum: 50.0
+          minimum: 5.0
+          title: Max Length
+          type: integer
+        min_length:
+          maximum: 50.0
+          minimum: 5.0
+          title: Min Length
+          type: integer
+        pathogens:
+          items:
+            type: string
+          title: Pathogens
+          type: array
+        target_receptors:
+          items:
+            enum:
+            - GLP1R
+            - GIPR
+            - GCGR
+            type: string
+          minItems: 1
+          title: Target Receptors
+          type: array
+        wound_context:
+          items:
+            type: string
+          title: Wound Context
+          type: array
+      required:
+      - min_length
+      - max_length
+      - target_receptors
+      title: MetabolicBrief
+      type: object
+    MetabolicE2ERequest:
+      additionalProperties: false
+      description: 'The public metabolic job request shape (`pipeline: "metabolic"`): only the brief is required,
+        every other stage defaults.
+
+
+        Stages 7 and 9 are the shared wound-pipeline stages and stay on; the metabolic stages replace their
+        wound peers, so
+
+        the wound stage names are not accepted here.'
+      properties:
+        s01_metabolic_therapeutic_product_brief:
+          $ref: '#/components/schemas/Stage1MetabolicRequest'
+        s04_metabolic_candidate_generation:
+          $ref: '#/components/schemas/Stage4MetabolicRequest'
+          default:
+            batch_size: 16
+            enabled: true
+            lam: 0.5
+            max_attempts: 20
+            max_new_tokens: 120
+            n_peptides: 100
+            route_a_ga_params: {}
+            tol: 1.0
+        s05_metabolic_physchem_screening:
+          $ref: '#/components/schemas/Stage5MetabolicRequest'
+          default:
+            aggregation_tendency_flag_max: 0.47
+            amphipathicity_flag_max: 0.245
+            deamidation_count_flag_max: 1
+            enabled: true
+            hydrophobic_moment_flag_max: 0.189
+            hydrophobicity_reject_max: 0.3
+            instability_index_flag_max: 70.5
+            isoelectric_point_flag_ph_window: 0.233
+            molecular_weight_flag_max: 4577.6
+            molecular_weight_reject_max: 5000.0
+            net_charge_flag_max: 1.03
+            net_charge_flag_min: -3.02
+            oxidation_count_flag_max: 3
+            ph: 7.4
+            solubility_flag_min: 0.173
+            solubility_solvent: Ultrapure water
+            ss_confidence_ambiguous_max: 0.7
+            ss_confidence_unstable_max: 0.5
+        s06_metabolic_functional_screening:
+          $ref: '#/components/schemas/Stage6MetabolicRequest'
+          default:
+            agonism_probability_min: {}
+            ec50_floor_nm: 0.001
+            ec50_max_nm:
+              GCGR: 1000.0
+              GIPR: 1000.0
+              GLP1R: 1000.0
+            enabled: true
+            target_receptors:
+            - GLP1R
+        s07_structure_mechanism:
+          $ref: '#/components/schemas/Stage7Request'
+          default:
+            enabled: true
+            helix_phi_max: -30.0
+            helix_phi_min: -100.0
+            helix_psi_max: -5.0
+            helix_psi_min: -77.0
+            pathway_engagement_min_probability: 0.5
+            plddt_low_confidence_max: 0.5
+            sheet_phi_max: -45.0
+            sheet_phi_min: -180.0
+            sheet_psi_max: 180.0
+            sheet_psi_min: 90.0
+        s08_metabolic_safety_developability:
+          $ref: '#/components/schemas/Stage8MetabolicRequest'
+          default:
+            aggregation_reject_max: 0.7
+            cleavage_decay_rate: 0.5
+            cleavage_stability_reject_min: 0.3
+            cytotoxicity_cell_type: DRAMP_aggregate
+            cytotoxicity_reject_max: 0.5
+            enabled: true
+            hemolysis_probability_reject_max: 0.5
+            hemolysis_screening: true
+            plasma_half_life_min_minutes: 60.0
+            solubility_flag_min: 0.173
+            solubility_solvent: Ultrapure water
+        s09_synthesis_cmc:
+          $ref: '#/components/schemas/Stage9Request'
+          default:
+            enabled: true
+            rejected_difficulty_classes:
+            - high
+        s11_metabolic_ranking:
+          $ref: '#/components/schemas/Stage11MetabolicRequest'
+          default:
+            ec50_floor_nm: 0.001
+            ec50_max_nm:
+              GCGR: 1000.0
+              GIPR: 1000.0
+              GLP1R: 1000.0
+            enabled: true
+            half_life_target_minutes: 60.0
+            hemolysis_phc50_reject_max: 4.0
+            pkd_range:
+            - 5.0
+            - 11.0
+            target_receptors:
+            - GLP1R
+            weights:
+              anti_inflammatory: 0.1
+              developability: 0.15
+              mechanistic_confidence: 0.05
+              receptor_agonism: 0.35
+              safety: 0.15
+              stability: 0.2
+      required:
+      - s01_metabolic_therapeutic_product_brief
+      title: MetabolicE2ERequest
+      type: object
+    Stage1MetabolicRequest:
+      additionalProperties: false
+      properties:
+        brief:
+          $ref: '#/components/schemas/MetabolicBrief'
+        enabled:
+          default: true
+          title: Enabled
+          type: boolean
+        seed:
+          default: 42
+          description: Random seed for reproducibility
+          title: Seed
+          type: integer
+      required:
+      - brief
+      title: Stage1MetabolicRequest
+      type: object
+    Stage4MetabolicRequest:
+      additionalProperties: false
+      properties:
+        batch_size:
+          default: 16
+          title: Batch Size
+          type: integer
+        enabled:
+          default: true
+          title: Enabled
+          type: boolean
+        lam:
+          default: 0.5
+          minimum: 0.0
+          title: Lam
+          type: number
+        max_attempts:
+          default: 20
+          title: Max Attempts
+          type: integer
+        max_length:
+          anyOf:
+          - maximum: 50.0
+            minimum: 5.0
+            type: integer
+          - type: 'null'
+          title: Max Length
+        max_new_tokens:
+          default: 120
+          title: Max New Tokens
+          type: integer
+        min_length:
+          anyOf:
+          - maximum: 50.0
+            minimum: 5.0
+            type: integer
+          - type: 'null'
+          title: Min Length
+        n_peptides:
+          default: 100
+          maximum: 10000.0
+          minimum: 1.0
+          title: N Peptides
+          type: integer
+        route_a_ga_params:
+          additionalProperties: true
+          default: {}
+          title: Route A Ga Params
+          type: object
+        target_receptors:
+          anyOf:
+          - items:
+              enum:
+              - GLP1R
+              - GIPR
+              - GCGR
+              type: string
+            type: array
+          - type: 'null'
+          title: Target Receptors
+        tol:
+          default: 1.0
+          minimum: 0.0
+          title: Tol
+          type: number
+      title: Stage4MetabolicRequest
+      type: object
+    Stage5MetabolicRequest:
+      additionalProperties: false
+      properties:
+        aggregation_tendency_flag_max:
+          default: 0.47
+          title: Aggregation Tendency Flag Max
+          type: number
+        amphipathicity_flag_max:
+          default: 0.245
+          title: Amphipathicity Flag Max
+          type: number
+        deamidation_count_flag_max:
+          default: 1
+          title: Deamidation Count Flag Max
+          type: integer
+        enabled:
+          default: true
+          title: Enabled
+          type: boolean
+        hydrophobic_moment_flag_max:
+          default: 0.189
+          title: Hydrophobic Moment Flag Max
+          type: number
+        hydrophobicity_reject_max:
+          default: 0.3
+          title: Hydrophobicity Reject Max
+          type: number
+        instability_index_flag_max:
+          default: 70.5
+          title: Instability Index Flag Max
+          type: number
+        isoelectric_point_flag_ph_window:
+          default: 0.233
+          title: Isoelectric Point Flag Ph Window
+          type: number
+        molecular_weight_flag_max:
+          default: 4577.6
+          title: Molecular Weight Flag Max
+          type: number
+        molecular_weight_reject_max:
+          default: 5000.0
+          title: Molecular Weight Reject Max
+          type: number
+        net_charge_flag_max:
+          default: 1.03
+          title: Net Charge Flag Max
+          type: number
+        net_charge_flag_min:
+          default: -3.02
+          title: Net Charge Flag Min
+          type: number
+        oxidation_count_flag_max:
+          default: 3
+          title: Oxidation Count Flag Max
+          type: integer
+        ph:
+          default: 7.4
+          title: Ph
+          type: number
+        solubility_flag_min:
+          default: 0.173
+          title: Solubility Flag Min
+          type: number
+        solubility_solvent:
+          default: Ultrapure water
+          title: Solubility Solvent
+          type: string
+        ss_confidence_ambiguous_max:
+          default: 0.7
+          title: Ss Confidence Ambiguous Max
+          type: number
+        ss_confidence_unstable_max:
+          default: 0.5
+          title: Ss Confidence Unstable Max
+          type: number
+      title: Stage5MetabolicRequest
+      type: object
+    Stage6MetabolicRequest:
+      additionalProperties: false
+      properties:
+        agonism_probability_min:
+          additionalProperties:
+            type: number
+          default: {}
+          title: Agonism Probability Min
+          type: object
+        ec50_floor_nm:
+          default: 0.001
+          title: Ec50 Floor Nm
+          type: number
+        ec50_max_nm:
+          additionalProperties:
+            type: number
+          default:
+            GCGR: 1000.0
+            GIPR: 1000.0
+            GLP1R: 1000.0
+          title: Ec50 Max Nm
+          type: object
+        enabled:
+          default: true
+          title: Enabled
+          type: boolean
+        target_receptors:
+          default:
+          - GLP1R
+          items:
+            enum:
+            - GLP1R
+            - GIPR
+            - GCGR
+            type: string
+          title: Target Receptors
+          type: array
+      title: Stage6MetabolicRequest
+      type: object
+    Stage8MetabolicRequest:
+      additionalProperties: false
+      properties:
+        aggregation_reject_max:
+          default: 0.7
+          title: Aggregation Reject Max
+          type: number
+        cleavage_decay_rate:
+          default: 0.5
+          title: Cleavage Decay Rate
+          type: number
+        cleavage_stability_reject_min:
+          default: 0.3
+          title: Cleavage Stability Reject Min
+          type: number
+        cytotoxicity_cell_type:
+          default: DRAMP_aggregate
+          enum:
+          - DBAASP_no_cytotoxicity_hit
+          - DRAMP_aggregate
+          - Human PBMC
+          - Human Primary Epidermal Keratinocytes (HEK)
+          - Human keratinocytes HaCat
+          - Human microvascular endothelial cells HMEC-1
+          - Human skin fibroblasts
+          title: Cytotoxicity Cell Type
+          type: string
+        cytotoxicity_reject_max:
+          default: 0.5
+          title: Cytotoxicity Reject Max
+          type: number
+        enabled:
+          default: true
+          title: Enabled
+          type: boolean
+        hemolysis_probability_reject_max:
+          anyOf:
+          - type: number
+          - type: 'null'
+          default: 0.5
+          title: Hemolysis Probability Reject Max
+        hemolysis_screening:
+          default: true
+          title: Hemolysis Screening
+          type: boolean
+        plasma_half_life_min_minutes:
+          default: 60.0
+          title: Plasma Half Life Min Minutes
+          type: number
+        solubility_flag_min:
+          default: 0.173
+          title: Solubility Flag Min
+          type: number
+        solubility_solvent:
+          default: Ultrapure water
+          title: Solubility Solvent
+          type: string
+      title: Stage8MetabolicRequest
+      type: object
+    Stage11MetabolicRequest:
+      additionalProperties: false
+      properties:
+        ec50_floor_nm:
+          default: 0.001
+          title: Ec50 Floor Nm
+          type: number
+        ec50_max_nm:
+          additionalProperties:
+            type: number
+          default:
+            GCGR: 1000.0
+            GIPR: 1000.0
+            GLP1R: 1000.0
+          title: Ec50 Max Nm
+          type: object
+        enabled:
+          default: true
+          title: Enabled
+          type: boolean
+        half_life_target_minutes:
+          default: 60.0
+          title: Half Life Target Minutes
+          type: number
+        hemolysis_phc50_reject_max:
+          anyOf:
+          - type: number
+          - type: 'null'
+          default: 4.0
+          title: Hemolysis Phc50 Reject Max
+        pkd_range:
+          default:
+          - 5.0
+          - 11.0
+          maxItems: 2
+          minItems: 2
+          prefixItems:
+          - type: number
+          - type: number
+          title: Pkd Range
+          type: array
+        target_receptors:
+          default:
+          - GLP1R
+          items:
+            enum:
+            - GLP1R
+            - GIPR
+            - GCGR
+            type: string
+          title: Target Receptors
+          type: array
+        weights:
+          additionalProperties:
+            type: number
+          default:
+            anti_inflammatory: 0.1
+            developability: 0.15
+            mechanistic_confidence: 0.05
+            receptor_agonism: 0.35
+            safety: 0.15
+            stability: 0.2
+          title: Weights
+          type: object
+      title: Stage11MetabolicRequest
+      type: object

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import math
 import random
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any, Callable, Dict, List, TypedDict
 
@@ -45,7 +45,7 @@ class MetabolicGAConfig:
     """GA and seed-screening parameters; receptor_names must each have a predictor."""
 
     receptor_names: tuple[str, ...]
-    n_variants_per_seed: int = 5
+    n_variants_per_seed: int = 1
     # Thresholds are binding pKd = 9 - log10(Kd [nM]): 7.0 is Kd 100 nM, 8.0 is Kd 10 nM.
     screen_threshold: float = (
         7.0  # seed passes outright at or above this binding pKd geometric mean
@@ -53,8 +53,8 @@ class MetabolicGAConfig:
     near_match_threshold: float = (
         8.0  # ...or when pKd to any single receptor reaches this
     )
-    min_seeds_kept: int = 50  # top-ranked seeds are backfilled up to this count
-    n_generations: int = 20
+    min_seeds_kept: int = 20  # top-ranked seeds are backfilled up to this count
+    n_generations: int = 10
     mutation_rate: float = 0.1
     tournsize: int = 3
     elite_fraction: float = 0.05
@@ -62,6 +62,9 @@ class MetabolicGAConfig:
         0.25  # cap on one seed family's share of the surviving population
     )
     random_seed: int = 42
+    # Fitness = pEC50 geometric mean - lam * max(0, |pEC50 gm - pKd gm| - tol); a large gap means the two models disagree.
+    lam: float = 0.5
+    tol: float = 1.5
 
     def validate(self) -> None:
         if not self.receptor_names:
@@ -78,6 +81,10 @@ class MetabolicGAConfig:
             raise ValueError("elite_fraction must be in [0, 1).")
         if not 0 < self.max_family_share <= 1:
             raise ValueError("max_family_share must be in (0, 1].")
+        if self.lam < 0:
+            raise ValueError("lam must be >= 0.")
+        if self.tol < 0:
+            raise ValueError("tol must be >= 0.")
 
 
 @dataclass(frozen=True)
@@ -85,6 +92,12 @@ class Evaluation:
     fitness_score: float
     receptor_scores: Dict[str, float]
     client_fitness: float | None = None
+    # Binding pKd per receptor and the gap terms; None / empty for rejected sequences.
+    pkd_scores: Dict[str, float] = field(default_factory=dict)
+    ec50_g: float | None = None
+    kd_g: float | None = None
+    gap: float | None = None
+    penalty: float | None = None
 
 
 class MetabolicGAResult(TypedDict):
@@ -141,23 +154,49 @@ def _score_raw(
     return evaluations
 
 
+def _combine(
+    pec50: Evaluation, pkd: Evaluation, config: MetabolicGAConfig
+) -> Evaluation:
+    """pEC50 fitness minus the penalty on its gap to the pKd geometric mean; a non-finite score on either side stays rejected."""
+    if REJECTED_FITNESS_FLOOR in (pec50.fitness_score, pkd.fitness_score):
+        return Evaluation(
+            REJECTED_FITNESS_FLOOR, pec50.receptor_scores, pec50.client_fitness
+        )
+    gap = abs(pec50.fitness_score - pkd.fitness_score)
+    penalty = config.lam * max(0.0, gap - config.tol)
+    return Evaluation(
+        pec50.fitness_score - penalty,
+        pec50.receptor_scores,
+        pec50.client_fitness,
+        pkd_scores=pkd.receptor_scores,
+        ec50_g=pec50.fitness_score,
+        kd_g=pkd.fitness_score,
+        gap=gap,
+        penalty=penalty,
+    )
+
+
 def _evaluate_population(
     sequences: list[str],
     cache: Dict[str, Evaluation],
     receptors: Dict[str, BatchPredictor],
+    binding_predictors: Dict[str, BatchPredictor],
     config: MetabolicGAConfig,
     client_fitness_batch: BatchPredictor | None,
     constraint_config: ConstraintConfig,
 ) -> None:
-    """Evaluate every not-yet-cached sequence: physchem filter first, predictors only on passers."""
+    """Evaluate every not-yet-cached sequence: physchem filter first, pEC50 and pKd predictors only on passers."""
     to_score = [seq for seq in dict.fromkeys(sequences) if seq not in cache]
     if not to_score:
         return
     filter_results = physicochemical_filter_batch(to_score, constraint_config)
     passed = [seq for seq, r in zip(to_score, filter_results) if r.passed]
-    scored = dict(
-        zip(passed, _score_raw(passed, receptors, config, client_fitness_batch))
-    )
+    potency = _score_raw(passed, receptors, config, client_fitness_batch)
+    binding = _score_raw(passed, binding_predictors, config, None)
+    scored = {
+        seq: _combine(pec50, pkd, config)
+        for seq, pec50, pkd in zip(passed, potency, binding)
+    }
     rejected = Evaluation(
         REJECTED_FITNESS_FLOOR, {name: 0.0 for name in config.receptor_names}, None
     )
@@ -279,6 +318,7 @@ def run_metabolic_ga(
             sequences,
             eval_cache,
             receptors,
+            binding_predictors,
             config,
             client_fitness_batch,
             constraint_config,
@@ -296,7 +336,12 @@ def run_metabolic_ga(
                     "phase": phase,
                     "fitness_score": ev.fitness_score,
                     **{f"{n}_score": s for n, s in ev.receptor_scores.items()},
+                    **{f"{n}_pkd": ev.pkd_scores.get(n) for n in config.receptor_names},
                     "client_fitness": ev.client_fitness,
+                    "ec50_g": ev.ec50_g,
+                    "kd_g": ev.kd_g,
+                    "gap": ev.gap,
+                    "gap_penalty": ev.penalty,
                     "timestamp": datetime.now(timezone.utc).isoformat(),
                 }
             )
@@ -378,6 +423,9 @@ def run_metabolic_ga(
             population, offspring, pop_size, n_elite, family_cap
         )
         fitnesses = [ind.fitness.values[0] for ind in population]
+        gaps = [
+            g for ind in population if (g := eval_cache["".join(ind)].gap) is not None
+        ]
         logger.info(
             "routeA_metabolic.generation",
             extra={
@@ -385,6 +433,8 @@ def run_metabolic_ga(
                 "best_fitness": round(max(fitnesses), 4),
                 "mean_fitness": round(float(np.mean(fitnesses)), 4),
                 "n_families": len({ind.family_id for ind in population}),
+                "mean_gap": round(float(np.mean(gaps)), 4) if gaps else None,
+                "max_gap": round(max(gaps), 4) if gaps else None,
             },
         )
 
@@ -443,8 +493,17 @@ def build_model_predictors(
                 potency_cache[s] = {r: v[i] for r, v in all_scores.items()}
         return [potency_cache[s][receptor] for s in sequences]
 
+    binding_cache: Dict[str, Dict[str, float]] = {n: {} for n in receptor_names}
+
     def binding(sequences: list[str], receptor: str) -> list[float]:
-        return binding_model.predict_pkd_batch(sequences, feature_extractor, receptor)
+        cache = binding_cache[receptor]
+        missing = [s for s in dict.fromkeys(sequences) if s not in cache]
+        if missing:
+            values = binding_model.predict_pkd_batch(
+                missing, feature_extractor, receptor
+            )
+            cache.update(zip(missing, (float(v) for v in values)))
+        return [cache[s] for s in sequences]
 
     return (
         {n: (lambda seqs, n=n: potency(seqs, n)) for n in receptor_names},
@@ -453,16 +512,15 @@ def build_model_predictors(
 
 
 class RouteAMetabolic(Stage4Route):
-    """Reference-guided generation for metabolic targets: seed screening on receptor binding affinity, then global GA optimization on functional potency (Stage 4, route A).
+    """Stage 4 route A for metabolic targets: screen the seeds on binding affinity, then evolve them on functional potency.
 
-    Scores stay on the models' original scales: seed screening uses binding pKd and the GA fitness is the
-    geometric mean of functional pEC50 across the target receptors, so `{receptor}_score` and `fitness_score`
-    in a candidate's predictions are pEC50 values, not [0, 1] scores. A client fitness, if given, joins that
-    geometric mean on whatever scale it has.
+    Scores keep the models' own scales, so `{receptor}_score` and `fitness_score` are pEC50 values, not 0-1.
+    Fitness is the geometric mean of pEC50 across the target receptors, minus a penalty when it drifts too
+    far from the pKd geometric mean: lam * max(0, |pEC50 - pKd| - tol). Each candidate keeps its pKd values,
+    the gap and the penalty.
 
-    Config: `feature_extractor` (required unless both predictor dicts are passed), `target_receptors`
-    (default GLP1R and GCGR), `binding_split`, and optional `receptor_predictors` / `binding_predictors`
-    overrides (name -> batch predictor returning positive raw scores).
+    Config: `feature_extractor` (unless both predictor dicts are passed), `target_receptors` (default GLP1R
+    and GCGR), `binding_split`, and optional `receptor_predictors` / `binding_predictors` overrides.
     """
 
     def __init__(self, config: dict[str, Any] = {}):
@@ -530,6 +588,7 @@ class RouteAMetabolic(Stage4Route):
         candidates = []
         for individual in result["population"]:
             row = history_by_variant.loc[individual.variant_id]
+            has_gap = pd.notna(row["gap"])
             candidates.append(
                 Candidate(
                     id=individual.variant_id,
@@ -539,6 +598,14 @@ class RouteAMetabolic(Stage4Route):
                             f"{n}_score": float(row[f"{n}_score"])
                             for n in ga_config.receptor_names
                         },
+                        **{
+                            f"{n}_pkd": float(row[f"{n}_pkd"]) if has_gap else None
+                            for n in ga_config.receptor_names
+                        },
+                        "pec50_geomean": float(row["ec50_g"]) if has_gap else None,
+                        "pkd_geomean": float(row["kd_g"]) if has_gap else None,
+                        "pec50_pkd_gap": float(row["gap"]) if has_gap else None,
+                        "gap_penalty": float(row["gap_penalty"]) if has_gap else None,
                         "fitness_score": float(individual.fitness.values[0]),
                         "generation": int(individual.generation),
                         "family_id": individual.family_id,

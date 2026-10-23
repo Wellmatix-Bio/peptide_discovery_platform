@@ -13,6 +13,7 @@ model_store/model_weights/
 model_store/hemolysis_predictor_v2/*
 !model_store/hemolysis_predictor_v2/__init__.py
 !model_store/hemolysis_predictor_v2/predictor.py
+!model_store/hemolysis_predictor_v2/architecture.py
 
 # Local run artifacts, not part of either image.
 artifacts/

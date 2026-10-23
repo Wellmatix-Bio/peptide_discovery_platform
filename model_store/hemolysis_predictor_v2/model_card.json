@@ -1,0 +1,44 @@
+{
+  "model_name": "hemolysis_predictor_v2",
+  "task": "Peptide hemolysis from sequence: pHC50 regression (pHC50 = 6 - log10(HC50 in uM), higher = more hemolytic) and P(hemolytic) classification (hemolytic = HC50 < 100 uM, i.e. pHC50 > 4).",
+  "architecture": "Ensemble of three models on frozen facebook/esm2_t30_150M_UR50D embeddings: a multi-task network (projection, BiLSTM, global MLP, 2-head cross-attention; heads for pHC50 and hemolytic) on per-residue embeddings, an RBF SVR and an RBF SVC on standardised mean-pooled embeddings. pHC50 = mean(SVR, network); P(hemolytic) = mean(SVC, network).",
+  "usage": {
+    "regression": "phc50, for ranking",
+    "classification": "p_hemolytic, for filtering, evaluated at threshold 0.5"
+  },
+  "embedding": "residue embeddings from the shared FeatureExtractor with BOS/EOS stripped, fp32",
+  "valid_input": "20 standard uppercase amino acids; training peptides were up to 100 residues, longer inputs are extrapolation",
+  "training_data": {
+    "rows": 2293,
+    "unique_sequences": 2285,
+    "sources": "DBAASP, HemoPI2, Hemolytik; exact 50% hemolysis endpoints only; DBAASP preferred where sources overlap",
+    "filters": "pHC50 in [2.0, 6.5], length <= 100",
+    "hemolytic_fraction": 0.53,
+    "weighting": "row weight = 1 / cluster_size ** 0.5 (CD-HIT clusters at 80% identity)"
+  },
+  "validation": "5-fold grouped CV on CD-HIT clusters at 80% identity, zero cross-fold pairs at or above 80% (audited); pooled out-of-fold, single seed, unweighted",
+  "metrics_out_of_fold": {
+    "regression_phc50": {
+      "ensemble": {"pearson": 0.567, "r2": 0.307, "mae": 0.477, "rmse": 0.632},
+      "svr": {"pearson": 0.567, "r2": 0.311, "mae": 0.479, "rmse": 0.630},
+      "network": {"pearson": 0.507, "r2": 0.237, "mae": 0.502, "rmse": 0.663}
+    },
+    "classification_hemolytic": {
+      "majority_class_accuracy": 0.531,
+      "ensemble": {"auroc": 0.782, "accuracy": 0.717, "f1": 0.736, "precision": 0.727, "recall": 0.746},
+      "svm": {"auroc": 0.778, "accuracy": 0.710, "f1": 0.728, "precision": 0.724, "recall": 0.732},
+      "network": {"auroc": 0.767, "accuracy": 0.703, "f1": 0.723, "precision": 0.714, "recall": 0.733}
+    },
+    "source": "training.ipynb cells 16 and 18, latest run (2026-10-20); report.md predates it and lists different ensembles"
+  },
+  "known_limits": [
+    "Out-of-fold Pearson per fold ranged about 0.33 to 0.68 in earlier runs; differences of about 0.02 between models are inside the noise.",
+    "Predictions on design candidates compress into a narrow band near the 4.0 threshold: treat pHC50 as a ranking, not calibrated HC50 values.",
+    "The 168-peptide metabolic FASTA (GLP-1 / glucagon-like) has no exact overlap with the training data and about 29% best identity (alignment approximation), so predictions for incretin-like peptides are extrapolation.",
+    "Exported weights were pickled with scikit-learn 1.9.0; the platform loads them under 1.6.1 (InconsistentVersionWarning). Outputs matched the training project's own Ensemble.predict to about 2e-6 on 68 sequences."
+  ],
+  "weights_dir": "model_store/model_weights/hemolysis_predictor_v2",
+  "weights_layout": "network.pt (config + state_dict), svm_svr.joblib ({'svr', 'svm'} as plain sklearn pipelines), info.json",
+  "provenance": "Models/Hemolysis prediction/training.ipynb and models.py; ensemble saved to models/regressor/v3_esm2_150M/ensemble_n2293 on 2026-10-20.",
+  "supersedes": "none: hemolysis_predictor_v1 (random forest) is unchanged and still used by the wound-healing stages; this model is used only by the metabolic Stages 8 and 11. An earlier hemolysis_predictor_v2 (vendored HemoPI2 command-line tool, GPL-3.0, never wired in) was removed and this model took the v2 name."
+}

@@ -18,8 +18,8 @@ DEFAULT_THRESHOLDS = Stage5MetabolicParams().model_dump()
 class Stage5Metabolic(Stage5):
     """Same property computations as Stage 5, with the metabolism thresholds.
 
-    Hard filters (candidate removed): molecular weight, hydrophobic fraction, and length outside the
-    brief's range. Everything else flags and keeps the candidate. Opt-in: it runs only when named in thef fff
+    Hard filters (candidate removed): molecular weight, mean Eisenberg hydrophobicity, and length outside the
+    brief's range. Everything else flags and keeps the candidate. Opt-in: it runs only when named in the
     run config, normally in place of `s05_physchem_screening`.
     """
 
@@ -101,7 +101,7 @@ class Stage5Metabolic(Stage5):
 
         properties["hydrophobicity"] = (
             "reject"
-            if predictions["hydrophobic_fraction"] > t["hydrophobic_fraction_reject_max"]
+            if predictions["hydrophobicity"] > t["hydrophobicity_reject_max"]
             else "pass"
         )
 

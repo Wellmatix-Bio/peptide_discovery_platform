@@ -7,11 +7,9 @@ from pydantic import BaseModel
 from schemas.run_config import RunConfig
 from schemas.stage_configs import STAGE_PARAMS_MODELS, resolve_params
 
-BRIEF_STAGE = "s01_metabolic_therapeutic_product_brief"
-
 #: Metabolic stages, in pipeline order; each is forced on.
 METABOLIC_STAGES = (
-    BRIEF_STAGE,
+    "s01_metabolic_therapeutic_product_brief",
     "s04_metabolic_candidate_generation",
     "s05_metabolic_physchem_screening",
     "s06_metabolic_functional_screening",
@@ -64,7 +62,7 @@ def validate_metabolic_job_config(payload: dict) -> RunConfig:
         stage = stages.setdefault(name, {"enabled": True, "params": {}})
         stage["enabled"] = True
 
-    if not stages[BRIEF_STAGE]["params"].get("brief"):
+    if not stages["s01_metabolic_therapeutic_product_brief"]["params"].get("brief"):
         raise ValueError("the metabolic worker requires an inline Stage 1 brief")
 
     config = RunConfig.model_validate(payload)
@@ -73,5 +71,5 @@ def validate_metabolic_job_config(payload: dict) -> RunConfig:
         stage.params = resolve_params(name, stage.params)
         config.stages[name] = stage
     if "seed" not in payload:
-        config.seed = config.for_stage(BRIEF_STAGE).params.get("seed", 42)
+        config.seed = config.for_stage("s01_metabolic_therapeutic_product_brief").params.get("seed", 42)
     return config

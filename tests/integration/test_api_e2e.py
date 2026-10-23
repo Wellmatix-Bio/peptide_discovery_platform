@@ -100,6 +100,66 @@ def test_create_submits_worker_readable_json(service):
     }
 
 
+METABOLIC_IMAGE = "us-central1-docker.pkg.dev/test/images/worker-metabolic:latest"
+
+
+def metabolic_payload():
+    return {
+        "request_id": "metabolic-001",
+        "pipeline": "metabolic",
+        "stages": {
+            "s01_metabolic_therapeutic_product_brief": {
+                "brief": {
+                    "target_receptors": ["GLP1R", "GIPR"],
+                    "min_length": 6,
+                    "max_length": 40,
+                }
+            }
+        },
+    }
+
+
+def test_metabolic_pipeline_routes_to_metabolic_image_and_stages(service, monkeypatch):
+    client, sdk, job, objects, calls, payload = service
+    monkeypatch.setenv("WORKER_METABOLIC_IMAGE_URI", METABOLIC_IMAGE)
+    response = client.post("/api/v1/jobs/create", json=metabolic_payload())
+    assert response.status_code == 202, response.text
+    job_spec = calls[0]["custom_job"]
+    assert job_spec["job_spec"]["worker_pool_specs"][0]["container_spec"]["image_uri"] == METABOLIC_IMAGE
+    assert job_spec["labels"]["pipeline"] == "metabolic"
+    config = json.loads(objects[response.json()["result_path"] + "/config.json"])
+    enabled = {n for n, st in config["stages"].items() if st["enabled"]}
+    assert "s11_metabolic_ranking" in enabled and "s11_ranking" not in enabled
+    assert "s01_metabolic_therapeutic_product_brief" in enabled
+    assert "s01_therapeutic_product_brief" not in enabled
+
+
+def test_wound_request_still_uses_wound_image(service):
+    client, sdk, job, objects, calls, payload = service
+    assert "pipeline" not in payload  # the routing parameter defaults to wound_healing
+    assert client.post("/api/v1/jobs/create", json=payload).status_code == 202
+    image = calls[0]["custom_job"]["job_spec"]["worker_pool_specs"][0]["container_spec"]["image_uri"]
+    assert image.endswith("/worker:latest")
+
+
+def test_metabolic_pipeline_needs_its_own_image_setting(service, monkeypatch):
+    client = service[0]
+    monkeypatch.delenv("WORKER_METABOLIC_IMAGE_URI", raising=False)
+    response = client.post("/api/v1/jobs/create", json=metabolic_payload())
+    assert response.status_code == 503
+    assert "WORKER_METABOLIC_IMAGE_URI" in response.text
+
+
+def test_pipeline_must_match_stages(service, monkeypatch):
+    client, sdk, job, objects, calls, payload = service
+    monkeypatch.setenv("WORKER_METABOLIC_IMAGE_URI", METABOLIC_IMAGE)
+    wound_as_metabolic = {**payload, "pipeline": "metabolic"}
+    assert client.post("/api/v1/jobs/create", json=wound_as_metabolic).status_code == 422
+    metabolic_as_wound = {k: v for k, v in metabolic_payload().items() if k != "pipeline"}
+    assert client.post("/api/v1/jobs/create", json=metabolic_as_wound).status_code == 422
+    assert not calls
+
+
 @pytest.mark.parametrize(
     "state,status",
     [

@@ -79,8 +79,16 @@ class BriefFields(BaseModel):
 
 
 class Stage1Params(BaseStageParams):
-    brief: BriefFields
+    brief: BriefFields | None = None
+    #: Local runs only (DEV_MODE): a brief JSON file in place of the inline brief.
+    brief_path: str | None = None
     seed: int = Field(42, description="Random seed for reproducibility")
+
+    @model_validator(mode="after")
+    def _needs_a_brief(self):
+        if self.brief is None and not self.brief_path:
+            raise ValueError("Stage 1 needs a brief (or, for local runs, a brief_path)")
+        return self
 
 
 class Stage1MetabolicParams(BaseStageParams):
@@ -121,11 +129,17 @@ class Stage4Params(BaseStageParams):
 
 
 class Stage4MetabolicParams(BaseStageParams):
-    """Metabolic Stage 4: GA settings; receptors and lengths come from the brief."""
+    """Metabolic Stage 4: generation settings; receptors and lengths fall back to the brief when unset here."""
 
     route_a_ga_params: dict[str, Any] = {}
     target_receptors: list[MetabolicReceptor] | None = None
-    #: Route B is always untagged and its count comes from the brief; these tune its sampling.
+    min_length: int | None = Field(None, ge=5, le=50)
+    max_length: int | None = Field(None, ge=5, le=50)
+    #: GA fitness penalty on the pEC50-vs-pKd gap: lam * max(0, gap - tol); lam 0 turns it off.
+    lam: float = Field(0.5, ge=0)
+    tol: float = Field(1.0, ge=0)
+    #: Route B is always untagged; this is how many peptides it samples, and the rest tune its sampling.
+    n_peptides: int = Field(100, ge=1, le=10000)
     max_new_tokens: int = 120
     batch_size: int = 16
     max_attempts: int = 20
@@ -151,7 +165,8 @@ class Stage5MetabolicParams(BaseStageParams):
     solubility_solvent: str = "Ultrapure water"
     # Hard filters (candidate removed); length is checked against the brief's min_length / max_length.
     molecular_weight_reject_max: float = 5000.0
-    hydrophobic_fraction_reject_max: float = 0.614
+    #: Mean Eisenberg hydrophobicity above this rejects; just above the highest of the 168 metabolic seeds (0.257).
+    hydrophobicity_reject_max: float = 0.3
     # Soft flags (candidate retained).
     molecular_weight_flag_max: float = 4577.6  # HORDB 99th percentile
     net_charge_flag_min: float = -3.02
@@ -242,13 +257,16 @@ class Stage8Params(BaseStageParams):
 class Stage8MetabolicParams(BaseStageParams):
     """Metabolic Stage 8 defaults; the stage reads these as its thresholds."""
 
-    #: pHC50 above this rejects; null turns the hemolysis screen off.
-    hemolysis_phc50_reject_max: float | None = 4.0
+    #: False skips hemolysis entirely: no prediction, no filter, and Stage 11 drops it from the safety score.
+    hemolysis_screening: bool = True
+    #: P(hemolytic) above this rejects (hemolysis_predictor_v2 classifier, HC50 < 100 uM).
+    hemolysis_probability_reject_max: float | None = 0.5
     solubility_solvent: str = "Ultrapure water"
     cytotoxicity_cell_type: CytotoxicityCellType = "DRAMP_aggregate"
     cytotoxicity_reject_max: float = 0.5
     aggregation_reject_max: float = 0.7
     solubility_flag_min: float = 0.173
+    #: Cleavage-stability score below this rejects; the score is exp(-cleavage_decay_rate * exposure-weighted site severity).
     cleavage_stability_reject_min: float = 0.3
     cleavage_decay_rate: float = 0.5
     #: Predicted human-plasma half-life below this rejects; provisional until the client sets it.
@@ -276,7 +294,7 @@ class Stage11MetabolicParams(BaseStageParams):
     ec50_floor_nm: float = 0.001
     #: Plasma half-life that scores 0.5; 10x it scores 1.0. Provisional, like the Stage 8 minimum.
     half_life_target_minutes: float = 60.0
-    #: Matches the metabolic Stage 8 cutoff; null leaves hemolysis out of the safety score.
+    #: Scale of the hemolysis score (0.5 at this pHC50, 0 at twice it), from the v3 regression; null leaves hemolysis out of the safety score.
     hemolysis_phc50_reject_max: float | None = 4.0
     #: pKd mapped linearly to 0..1 (clipped); a placeholder until calibrated on incretin data.
     pkd_range: tuple[float, float] = (5.0, 11.0)
@@ -309,8 +327,10 @@ STAGE_PARAMS_MODELS: dict[str, type[BaseStageParams]] = {
 
 
 #: Stricter than the Stage*Params they wrap: unrecognized keys are rejected instead of dropped.
-class Stage1Request(Stage1Params):
+class Stage1Request(BaseModel):
     model_config = ConfigDict(extra="forbid")
+    brief: BriefFields
+    seed: int = Field(42, description="Random seed for reproducibility")
     enabled: bool = True
 
 
@@ -356,6 +376,55 @@ class E2ERequest(BaseModel):
     s07_structure_mechanism: Stage7Request
     s08_safety_developability: Stage8Request
     s09_synthesis_cmc: Stage9Request
+
+
+class Stage1MetabolicRequest(Stage1MetabolicParams):
+    model_config = ConfigDict(extra="forbid")
+    enabled: bool = True
+
+
+class Stage4MetabolicRequest(Stage4MetabolicParams):
+    model_config = ConfigDict(extra="forbid")
+    enabled: bool = True
+
+
+class Stage5MetabolicRequest(Stage5MetabolicParams):
+    model_config = ConfigDict(extra="forbid")
+    enabled: bool = True
+
+
+class Stage6MetabolicRequest(Stage6MetabolicParams):
+    model_config = ConfigDict(extra="forbid")
+    enabled: bool = True
+
+
+class Stage8MetabolicRequest(Stage8MetabolicParams):
+    model_config = ConfigDict(extra="forbid")
+    enabled: bool = True
+
+
+class Stage11MetabolicRequest(Stage11MetabolicParams):
+    model_config = ConfigDict(extra="forbid")
+    enabled: bool = True
+
+
+class MetabolicE2ERequest(BaseModel):
+    """The public metabolic job request shape (`pipeline: "metabolic"`): only the brief is required, every other stage defaults.
+
+    Stages 7 and 9 are the shared wound-pipeline stages and stay on; the metabolic stages replace their wound peers, so
+    the wound stage names are not accepted here.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    s01_metabolic_therapeutic_product_brief: Stage1MetabolicRequest
+    s04_metabolic_candidate_generation: Stage4MetabolicRequest = Stage4MetabolicRequest()
+    s05_metabolic_physchem_screening: Stage5MetabolicRequest = Stage5MetabolicRequest()
+    s06_metabolic_functional_screening: Stage6MetabolicRequest = Stage6MetabolicRequest()
+    s07_structure_mechanism: Stage7Request = Stage7Request()
+    s08_metabolic_safety_developability: Stage8MetabolicRequest = Stage8MetabolicRequest()
+    s09_synthesis_cmc: Stage9Request = Stage9Request()
+    s11_metabolic_ranking: Stage11MetabolicRequest = Stage11MetabolicRequest()
 
 
 def resolve_params(stage_name: str, raw_params: dict[str, Any]) -> dict[str, Any]:

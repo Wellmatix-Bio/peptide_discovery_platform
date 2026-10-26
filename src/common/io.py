@@ -56,16 +56,16 @@ def load_candidates_jsonl(path: str, *, schema_version: int) -> list[Candidate]:
 
 
 def _rank_sort_key(candidate: Candidate) -> tuple[int, int]:
-    """Ranked candidates first (by rank), then the rest in their existing order."""
+    """Ranked candidates first (by final_score_rank), then the rest in their existing order."""
     ranking = candidate.predictions.get("ranking")
-    rank = ranking.get("rank") if ranking else None
+    rank = ranking.get("final_score_rank") if ranking else None
     if rank is None:
         return (1, 0)
     return (0, rank)
 
 
 def write_final_candidates(run_dir: str | Path, candidates: list[Candidate]) -> str | Path:
-    """Write the run's final candidates to `run_dir/candidates_final.json`, sorted by Stage 11 rank with unranked ones after."""
+    """Write the run's final candidates to `run_dir/candidates_final.json`, sorted by Stage 11 final_score_rank with unranked ones after."""
     path = storage.join(run_dir, "candidates_final.json")
 
     ordered = sorted(enumerate(candidates), key=lambda pair: (*_rank_sort_key(pair[1]), pair[0]))

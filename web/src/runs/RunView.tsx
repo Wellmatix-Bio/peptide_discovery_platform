@@ -110,12 +110,12 @@ function Candidate({
   return (
     <div className="cand">
       <div className="cand-top">
-        {candidate.ranking == null ? (
+        {candidate.final_score_rank == null ? (
           <span className="cand-rank none" title="The pipeline declined to rank this candidate">
             unranked
           </span>
         ) : (
-          <span className="cand-rank">#{candidate.ranking}</span>
+          <span className="cand-rank">#{candidate.final_score_rank}</span>
         )}
         <div className="cand-main">
           <div className="cand-seq">
@@ -489,11 +489,11 @@ export function RunView() {
      API's own COUNTS (api.py computes them from each candidate's ranking.status). The grouping
      below is for display; the counts shown are always the API's, never re-derived here. */
   const all = results?.candidates ?? [];
-  const ranked = all.filter((one) => one.ranking != null);
-  const unranked = all.filter((one) => one.ranking == null);
+  const ranked = all.filter((one) => one.final_score_rank != null);
+  const unranked = all.filter((one) => one.final_score_rank == null);
   const tallies = new Map<number, number>();
   for (const one of ranked) {
-    tallies.set(one.ranking!, (tallies.get(one.ranking!) ?? 0) + 1);
+    tallies.set(one.final_score_rank!, (tallies.get(one.final_score_rank!) ?? 0) + 1);
   }
 
   return (
@@ -625,12 +625,12 @@ export function RunView() {
             ) : (
               ranked
                 .slice()
-                .sort((a, b) => (a.ranking ?? 0) - (b.ranking ?? 0))
+                .sort((a, b) => (a.final_score_rank ?? 0) - (b.final_score_rank ?? 0))
                 .map((candidate) => (
                   <Candidate
                     key={candidate.id}
                     candidate={candidate}
-                    tiedWith={tallies.get(candidate.ranking!) ?? 1}
+                    tiedWith={tallies.get(candidate.final_score_rank!) ?? 1}
                   />
                 ))
             )}

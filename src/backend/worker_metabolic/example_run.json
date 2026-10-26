@@ -69,7 +69,8 @@
           "GCGR": 1000.0
         },
         "ec50_floor_nm": 0.001,
-        "agonism_probability_min": {}
+        "agonism_probability_min": {},
+        "anti_inflammatory_probability_min": 0.5
       }
     },
     "s07_structure_mechanism": {

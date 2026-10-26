@@ -229,6 +229,17 @@
             ],
             "title": "Final Score"
           },
+          "final_score_rank": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Final Score Rank"
+          },
           "hemolytic_activity_phc50": {
             "anyOf": [
               {
@@ -348,6 +359,17 @@
             ],
             "title": "Oxidation Risk"
           },
+          "pareto_rank": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pareto Rank"
+          },
           "pmbic": {
             "additionalProperties": {
               "type": "number"
@@ -383,17 +405,6 @@
             ],
             "default": 0,
             "title": "Proliferation Probability"
-          },
-          "ranking": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Ranking"
           },
           "sequence": {
             "anyOf": [
@@ -625,6 +636,12 @@
             ],
             "title": "N Final"
           },
+          "pipeline": {
+            "const": "wound_healing",
+            "default": "wound_healing",
+            "title": "Pipeline",
+            "type": "string"
+          },
           "ranked_candidates": {
             "anyOf": [
               {
@@ -762,6 +779,388 @@
         "title": "MetabolicBrief",
         "type": "object"
       },
+      "MetabolicCandidateResponse": {
+        "description": "A metabolic candidate: the ranks and shared physicochemical and safety values, plus the receptor predictions.",
+        "properties": {
+          "activated_pathways": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Activated Pathways"
+          },
+          "aggregation_tendency": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Aggregation Tendency"
+          },
+          "agonism_probability": {
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "propertyNames": {
+              "enum": [
+                "GLP1R",
+                "GIPR",
+                "GCGR"
+              ]
+            },
+            "title": "Agonism Probability",
+            "type": "object"
+          },
+          "anti_inflammatory_probability": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Anti Inflammatory Probability"
+          },
+          "binding_pkd": {
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "propertyNames": {
+              "enum": [
+                "GLP1R",
+                "GIPR",
+                "GCGR"
+              ]
+            },
+            "title": "Binding Pkd",
+            "type": "object"
+          },
+          "cleavage_stability": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cleavage Stability"
+          },
+          "cytotoxicity_probability": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cytotoxicity Probability"
+          },
+          "deamidation_risk": {
+            "anyOf": [
+              {
+                "enum": [
+                  "low",
+                  "medium",
+                  "high"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Deamidation Risk"
+          },
+          "ec50_nm": {
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "propertyNames": {
+              "enum": [
+                "GLP1R",
+                "GIPR",
+                "GCGR"
+              ]
+            },
+            "title": "Ec50 Nm",
+            "type": "object"
+          },
+          "evidence_coverage": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Evidence Coverage"
+          },
+          "final_score": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Final Score"
+          },
+          "final_score_rank": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Final Score Rank"
+          },
+          "half_life_minutes": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Half Life Minutes"
+          },
+          "hemolytic_activity_phc50": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hemolytic Activity Phc50"
+          },
+          "id": {
+            "default": "?",
+            "title": "Id",
+            "type": "string"
+          },
+          "inhibited_pathways": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Inhibited Pathways"
+          },
+          "instability_index": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Instability Index"
+          },
+          "metabolic_activity_score": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Metabolic Activity Score"
+          },
+          "missing_modules": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Missing Modules"
+          },
+          "molecular_weight": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Molecular Weight"
+          },
+          "net_charge": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Net Charge"
+          },
+          "oxidation_risk": {
+            "anyOf": [
+              {
+                "enum": [
+                  "low",
+                  "medium",
+                  "high"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Oxidation Risk"
+          },
+          "p_hemolytic": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "P Hemolytic"
+          },
+          "pareto_rank": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pareto Rank"
+          },
+          "pec50": {
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "propertyNames": {
+              "enum": [
+                "GLP1R",
+                "GIPR",
+                "GCGR"
+              ]
+            },
+            "title": "Pec50",
+            "type": "object"
+          },
+          "pec50_pkd_gap": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pec50 Pkd Gap"
+          },
+          "sequence": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sequence"
+          },
+          "solubility": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Solubility"
+          },
+          "undetermined_pathways": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Undetermined Pathways"
+          }
+        },
+        "title": "MetabolicCandidateResponse",
+        "type": "object"
+      },
       "MetabolicE2ERequest": {
         "additionalProperties": false,
         "description": "The public metabolic job request shape (`pipeline: \"metabolic\"`): only the brief is required, every other stage defaults.\n\nStages 7 and 9 are the shared wound-pipeline stages and stay on; the metabolic stages replace their wound peers, so\nthe wound stage names are not accepted here.",
@@ -809,6 +1208,7 @@
             "$ref": "#/components/schemas/Stage6MetabolicRequest",
             "default": {
               "agonism_probability_min": {},
+              "anti_inflammatory_probability_min": 0.5,
               "ec50_floor_nm": 0.001,
               "ec50_max_nm": {
                 "GCGR": 1000.0,
@@ -896,6 +1296,83 @@
           "s01_metabolic_therapeutic_product_brief"
         ],
         "title": "MetabolicE2ERequest",
+        "type": "object"
+      },
+      "MetabolicJobResultsResponse": {
+        "properties": {
+          "candidates": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/MetabolicCandidateResponse"
+            },
+            "title": "Candidates",
+            "type": "array"
+          },
+          "component_stats": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/ComponentStats"
+            },
+            "title": "Component Stats",
+            "type": "object"
+          },
+          "insufficient_evidence_candidates": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Insufficient Evidence Candidates"
+          },
+          "job_id": {
+            "title": "Job Id",
+            "type": "string"
+          },
+          "n_final": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "N Final"
+          },
+          "pipeline": {
+            "const": "metabolic",
+            "default": "metabolic",
+            "title": "Pipeline",
+            "type": "string"
+          },
+          "ranked_candidates": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ranked Candidates"
+          },
+          "run_id": {
+            "title": "Run Id",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "job_id",
+          "run_id",
+          "status"
+        ],
+        "title": "MetabolicJobResultsResponse",
         "type": "object"
       },
       "ModelEntry": {
@@ -1038,11 +1515,6 @@
           "pop_size": {
             "default": 3,
             "title": "Pop Size",
-            "type": "integer"
-          },
-          "random_seed": {
-            "default": 42,
-            "title": "Random Seed",
             "type": "integer"
           }
         },
@@ -1343,8 +1815,7 @@
             "default": {
               "mutation_rate": 0.1,
               "n_generations": 5,
-              "pop_size": 3,
-              "random_seed": 42
+              "pop_size": 3
             }
           },
           "tags": {
@@ -1535,6 +2006,13 @@
             "default": {},
             "title": "Agonism Probability Min",
             "type": "object"
+          },
+          "anti_inflammatory_probability_min": {
+            "default": 0.5,
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Anti Inflammatory Probability Min",
+            "type": "number"
           },
           "ec50_floor_nm": {
             "default": 0.001,
@@ -2018,7 +2496,22 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/JobResultsResponse"
+                  "discriminator": {
+                    "mapping": {
+                      "metabolic": "#/components/schemas/MetabolicJobResultsResponse",
+                      "wound_healing": "#/components/schemas/JobResultsResponse"
+                    },
+                    "propertyName": "pipeline"
+                  },
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/JobResultsResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/MetabolicJobResultsResponse"
+                    }
+                  ],
+                  "title": "Response Get Job Results Api V1 Jobs  Job Id  Results Get"
                 }
               }
             },

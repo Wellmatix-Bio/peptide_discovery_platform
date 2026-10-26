@@ -105,7 +105,6 @@ class RouteAGAParams(BaseStageParams):
     pop_size: int = 3
     n_generations: int = 5
     mutation_rate: float = 0.1
-    random_seed: int = 42
 
 
 class RouteAConstraintConfig(BaseStageParams):
@@ -217,6 +216,8 @@ class Stage6MetabolicParams(BaseStageParams):
     ec50_floor_nm: float = 0.001
     #: Per-receptor minimum agonism probability; unset until the classifier's threshold is calibrated.
     agonism_probability_min: dict[str, float] = {}
+    #: Candidates predicted anti-inflammatory below this probability are rejected; an unscorable sequence is flagged, not rejected.
+    anti_inflammatory_probability_min: float = Field(0.5, ge=0, le=1)
 
 
 class Stage7Params(BaseStageParams):

@@ -34,6 +34,7 @@ def _build_route_a_metabolic(
             "lam": config.params.get("lam", 0.5),
             "tol": config.params.get("tol", 1.0),
             **config.params.get("route_a_ga_params", {}),
+            "random_seed": ctx.seed,
         },
     }
     return RouteAMetabolic(

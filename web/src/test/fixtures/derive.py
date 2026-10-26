@@ -38,26 +38,26 @@ def main() -> None:
     for field in ("amp_probability", "hemolytic_activity_phc50", "solubility", "sequence"):
         candidates[0][field] = None
     candidates[0]["log_mic_um"] = {}
-    candidates[1]["ranking"] = None
-    partial["ranked_candidates"] = sum(1 for c in candidates if c["ranking"] is not None)
+    candidates[1]["final_score_rank"] = None
+    partial["ranked_candidates"] = sum(1 for c in candidates if c["final_score_rank"] is not None)
     partial["insufficient_evidence_candidates"] = len(candidates) - partial["ranked_candidates"]
     write(
         "results-with-withheld-and-unranked.json",
         partial,
         SOURCE_RESULTS,
         "candidate[0]: amp_probability, hemolytic_activity_phc50, solubility and sequence set to"
-        " null and log_mic_um emptied; candidate[1].ranking set to null; ranked_candidates and"
+        " null and log_mic_um emptied; candidate[1].final_score_rank set to null; ranked_candidates and"
         " insufficient_evidence_candidates recounted to match.",
     )
 
     # 2. Two candidates sharing a position.
     tied = json.loads(json.dumps(results))
-    tied["candidates"][1]["ranking"] = tied["candidates"][0]["ranking"]
+    tied["candidates"][1]["final_score_rank"] = tied["candidates"][0]["final_score_rank"]
     write(
         "results-with-a-tie.json",
         tied,
         SOURCE_RESULTS,
-        "candidate[1].ranking set to candidate[0]'s, so two candidates share one position.",
+        "candidate[1].final_score_rank set to candidate[0]'s, so two candidates share one position.",
     )
 
     # 3. The case the whole run view exists to get right: Vertex finished, the worker never wrote

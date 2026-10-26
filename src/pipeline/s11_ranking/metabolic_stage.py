@@ -7,6 +7,7 @@ from typing import Any
 from common.logging import get_logger
 from pipeline.base import CandidateStage, RunContext
 from pipeline.s06_functional_models.metabolic_stage import geometric_mean, potency_score
+from pipeline.s11_ranking.pareto import pareto_fronts
 from pipeline.s11_ranking.stage import ApplyFlagDeductions, Bound, FlagRule, _read_path
 from schemas.candidate import Candidate
 from schemas.run_config import StageConfig
@@ -87,6 +88,9 @@ def hemolysis_score(phc50: float | None, cutoff: float | None) -> float | None:
 class Stage11Metabolic(CandidateStage):
     """Weighted mean of the module scores that are available: F = sum(w_i S_i) / sum(w_i) over scored modules.
 
+    `pareto_rank` is separate from the order: it layers candidates into Pareto fronts over the weighted modules' scores
+    (a missing score counts as 0 there). `final_score_rank` is the weighted-score position.
+
     Opt-in: it runs only when named in the run config, normally in place of `s11_ranking`. A candidate whose
     EC50 is unusable for any selected receptor is `insufficient_evidence` and is not ranked; any other
     missing module is left out and the remaining weights renormalize. Scores and orders, never filters.
@@ -117,8 +121,15 @@ class Stage11Metabolic(CandidateStage):
                 raise ValueError(f"Stage 11 candidate {candidate.id} has no sequence")
             results.append(self._score(candidate, receptors, params, deductions))
 
+        candidates_ranked = [r for r in results if r["status"] == "ranked"]
+        objectives = [m for m in MODULES if weights[m] > 0]
+        fronts = pareto_fronts(
+            [[r["modules"][m]["score"] or 0.0 for m in objectives] for r in candidates_ranked]
+        )
+        for result, front in zip(candidates_ranked, fronts):
+            result["pareto_rank"] = front
         ranked = sorted(
-            (r for r in results if r["status"] == "ranked"),
+            candidates_ranked,
             key=lambda r: (
                 -r["final_score"],
                 -r["evidence_coverage"],
@@ -127,7 +138,7 @@ class Stage11Metabolic(CandidateStage):
             ),
         )
         for i, result in enumerate(ranked):
-            result["rank"] = i + 1
+            result["final_score_rank"] = i + 1
         insufficient = [r for r in results if r["status"] != "ranked"]
 
         by_id = {c.id: c for c in candidates}
@@ -250,7 +261,8 @@ class Stage11Metabolic(CandidateStage):
                 if status == "ranked"
                 else None
             ),
-            "rank": None,
+            "final_score_rank": None,
+            "pareto_rank": None,
             "evidence_coverage": len([m for m in weighted if m not in missing]) / len(weighted)
             if weighted
             else 0.0,

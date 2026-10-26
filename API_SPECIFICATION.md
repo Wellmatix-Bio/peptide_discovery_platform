@@ -127,7 +127,7 @@ value to use. The job runs on the image in `WORKER_METABOLIC_IMAGE_URI` and is l
 
 The brief (`MetabolicBrief`) requires `min_length` and `max_length` (5-50) and `target_receptors` (GLP1R, GIPR
 or GCGR, exact spelling; duplicates are dropped). Stage 8 takes `hemolysis_screening` (default `true`);
-`false` skips hemolysis and Stage 11 drops it from the safety score. Stage 4 can override the length range and receptors,
+`false` skips hemolysis and Stage 11 drops it from the safety score. Stage 6 predicts each candidate's anti-inflammatory probability and rejects those below `anti_inflammatory_probability_min` (default `0.5`); Stage 11 also scores it. Stage 4 can override the length range and receptors,
 and takes `n_peptides`, `route_a_ga_params`, `lam` and `tol`. The OpenAPI schemas list every stage's parameters.
 
 ```json
@@ -276,19 +276,14 @@ Each entry of `candidates` is a flat
 tree is not included; read `candidates_final.json` for it). Scalar fields are
 `null` when the producing stage did not run or abstained.
 
-**Wound healing and metabolic jobs share this shape.** The fields describe the wound-healing models, so a metabolic job fills only
-those whose stage it ran: `id`, `sequence`, the ranking fields, physicochemical and safety values (`molecular_weight`, `net_charge`,
-`instability_index`, the risk categories, `solubility`, `aggregation_tendency`, `cleavage_stability`, `hemolytic_activity_phc50`
-when hemolysis screening is on) and the Stage 7 pathway lists. The wound-only fields (`amp_probability`, `anti_inflammatory_probability`,
-`angiogenic_activity`, `cytotoxicity_probability`, `log_mic_um`, `pmbic`) come back `null` or `{}`, and `proliferation_probability` and
-`migration_probability` come back `0`. The metabolic scores (functional pEC50, binding pKd, the pEC50-pKd gap, half-life) are not in the summary:
-read them from `candidates_final.json`.
+**The shape depends on the pipeline.** The response carries `pipeline` (`wound_healing` or `metabolic`), taken from the job's stored config, and `candidates` has the matching shape. The table below is the wound-healing one. Metabolic candidates are described under [Metabolic candidate fields](#metabolic-candidate-fields).
 
 | Field | Source |
 |---|---|
 | `id` | Candidate `id`; `"?"` if the record has none |
 | `sequence` | Top-level candidate `sequence` (not under `predictions`) |
-| `ranking` | `predictions.ranking.rank`, 1-based position among ranked candidates; `null` if not ranked |
+| `final_score_rank` | `predictions.ranking.final_score_rank`, 1-based position by weighted `final_score`; `null` if not ranked |
+| `pareto_rank` | `predictions.ranking.pareto_rank`, the Pareto front over the ranking modules' scores (after flag deductions): `1` is non-dominated, and candidates on the same front share a rank, so it is not a position. It does not affect the order of `final_score_rank`; `null` if not ranked |
 | `final_score` | `predictions.ranking.final_score`; `null` if not ranked |
 | `evidence_coverage` | `predictions.ranking.evidence_coverage` |
 | `missing_modules` | `predictions.ranking.missing_modules` |
@@ -313,6 +308,29 @@ read them from `candidates_final.json`.
 Pathogen keys here use spaces (`Staphylococcus aureus`), unlike the request's
 brief vocabulary, which uses underscores (`Staphylococcus_aureus`). A key
 outside the listed pathogens fails response validation.
+
+### Metabolic candidate fields
+
+For a `metabolic` job each entry of `candidates` is a `MetabolicCandidateResponse`. The top-level fields (`job_id`, `run_id`, `status`, `n_final`, `ranked_candidates`, `insufficient_evidence_candidates`, `component_stats`) are the same as above. Per-receptor fields are objects keyed by `GLP1R`, `GIPR` and `GCGR`; a value is `null` when it was not predicted.
+
+| Field | Source |
+|---|---|
+| `id`, `sequence` | as for wound healing |
+| `final_score_rank`, `pareto_rank`, `final_score`, `evidence_coverage`, `missing_modules` | `predictions.ranking.*`, as for wound healing |
+| `pec50` | predicted potency per receptor, -log10(EC50 in M) |
+| `ec50_nm` | the same potency as EC50 in nM, floored at the Stage 6 `ec50_floor_nm` |
+| `binding_pkd` | predicted binding per receptor, pKd = 9 - log10(Kd in nM) |
+| `agonism_probability` | agonism classifier, P(EC50 below 1 nM) per receptor; `null` when the classifier is not installed |
+| `pec50_pkd_gap` | disagreement between the pEC50 and pKd models (geometric means over the target receptors); Route A candidates only, `null` for others |
+| `metabolic_activity_score` | Stage 6 combined potency score in [0, 1] |
+| `anti_inflammatory_probability` | `anti_inflammatory_probability` |
+| `half_life_minutes` | `plasma_half_life.minutes` |
+| `hemolytic_activity_phc50`, `p_hemolytic` | `hemolysis.phc50` and `hemolysis.p_hemolytic`; `null` when hemolysis screening is off |
+| `cleavage_stability`, `solubility`, `aggregation_tendency`, `cytotoxicity_probability` | `<name>.score` |
+| `molecular_weight`, `net_charge`, `instability_index`, `deamidation_risk`, `oxidation_risk` | as for wound healing |
+| `activated_pathways`, `inhibited_pathways`, `undetermined_pathways` | `mechanism.*`, as for wound healing |
+
+The wound-only fields (`amp_probability`, `log_mic_um`, `pmbic`, `angiogenic_activity`, `proliferation_probability`, `migration_probability`) are not in the metabolic shape.
 
 ## Cancel a job
 

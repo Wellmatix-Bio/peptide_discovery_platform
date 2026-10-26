@@ -21,6 +21,7 @@ MODEL_STORE_DIR = Path(__file__).resolve().parents[3] / "model_store"
 if str(MODEL_STORE_DIR) not in sys.path:
     sys.path.insert(0, str(MODEL_STORE_DIR))
 
+from model_store.anti_inflammatory_predictor_v1 import AntiInflammatoryPredictor  # noqa: E402
 from model_store.binding_affinity_predictor_v1 import BindingAffinityPredictor  # noqa: E402
 from model_store.functional_potency_predictor_v1 import FunctionalPotencyPredictor  # noqa: E402
 
@@ -30,6 +31,7 @@ SCORE_EPSILON = 1e-6
 
 _potency_model: FunctionalPotencyPredictor | None = None
 _binding_model: BindingAffinityPredictor | None = None
+_anti_inflammatory_model: AntiInflammatoryPredictor | None = None
 _agonism_classifier = None
 _agonism_classifier_loaded = False
 
@@ -46,6 +48,13 @@ def _get_binding_model() -> BindingAffinityPredictor:
     if _binding_model is None:
         _binding_model = BindingAffinityPredictor()
     return _binding_model
+
+
+def _get_anti_inflammatory_model() -> AntiInflammatoryPredictor:
+    global _anti_inflammatory_model
+    if _anti_inflammatory_model is None:
+        _anti_inflammatory_model = AntiInflammatoryPredictor()
+    return _anti_inflammatory_model
 
 
 def _get_agonism_classifier():
@@ -117,6 +126,22 @@ def evaluate_candidate(
         elif not passed:
             failed.append(f"low_agonism_probability:{r}")
 
+    probability = predictions.get("anti_inflammatory_probability")
+    minimum = params.get("anti_inflammatory_probability_min")
+    usable = probability is not None and math.isfinite(probability) and minimum is not None
+    passed = (probability >= minimum) if usable else None
+    evaluated["anti_inflammatory_probability"] = {
+        "value": probability,
+        "threshold": minimum,
+        "direction": "higher_is_better",
+        "passed": passed,
+    }
+    if minimum is not None:
+        if not usable:
+            missing.append("anti_inflammatory_probability")
+        elif not passed:
+            failed.append("low_anti_inflammatory_probability")
+
     status = "rejected" if failed else "insufficient_evidence" if missing else "passed"
     return {
         "status": status,
@@ -176,6 +201,10 @@ class Stage6Metabolic(CandidateStage):
                     pkd[r][i] = float(binding_out[r][j])
         classifier = _get_agonism_classifier()
         probs = classifier.predict_proba_batch(sequences, fe) if classifier else None
+        # Predicted anti-inflammatory tendency; gated below at anti_inflammatory_probability_min and also scored by Stage 11.
+        anti_inflammatory = [None] * n
+        for i in scorable:
+            anti_inflammatory[i] = float(_get_anti_inflammatory_model().predict_proba(sequences[i]))
 
         survivors = []
         for i, candidate in enumerate(tqdm(candidates, desc="Stage 6 (metabolic)")):
@@ -195,6 +224,7 @@ class Stage6Metabolic(CandidateStage):
                     "ec50_clamped": clamped,
                     "agonism_probability": probability,
                     "binding_pkd": {r: pkd[r][i] for r in RECEPTORS},
+                    "anti_inflammatory_probability": anti_inflammatory[i],
                 }
             )
             result = evaluate_candidate(candidate.predictions, receptors, params)
@@ -217,6 +247,7 @@ class Stage6Metabolic(CandidateStage):
         used = [
             ModelRef(name="functional_potency_predictor", version="v1"),
             ModelRef(name="binding_affinity_predictor", version="v1"),
+            ModelRef(name="anti_inflammatory_predictor", version="v1"),
         ]
         if _get_agonism_classifier() is not None:
             used.append(ModelRef(name="agonism_classifier", version="v1"))

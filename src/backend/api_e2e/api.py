@@ -315,7 +315,8 @@ class ComponentStats(BaseModel):
 class CandidateResponse(BaseModel):
     id: str = "?"
     sequence: str | None = None  # 'sequence' key - sibling of predictions
-    ranking: int | None = None  # 'ranking.rank' key in predictions
+    final_score_rank: int | None = None  # 'ranking.final_score_rank' key in predictions
+    pareto_rank: int | None = None  # 'ranking.pareto_rank' key in predictions
     final_score: float | None = None  # 'ranking.final_score' key in predictions
     evidence_coverage: float | None = None  # 'ranking.evidence_coverage' key
     missing_modules: list[str] | None = None  # 'ranking.missing_modules' key
@@ -387,7 +388,57 @@ class CandidateResponse(BaseModel):
     )
 
 
+Receptor = Literal["GLP1R", "GIPR", "GCGR"]
+
+
+class MetabolicCandidateResponse(BaseModel):
+    """A metabolic candidate: the ranks and shared physicochemical and safety values, plus the receptor predictions."""
+
+    id: str = "?"
+    sequence: str | None = None
+    final_score_rank: int | None = None  # 'ranking.final_score_rank' key in predictions
+    pareto_rank: int | None = None  # 'ranking.pareto_rank' key in predictions
+    final_score: float | None = None  # 'ranking.final_score' key in predictions
+    evidence_coverage: float | None = None  # 'ranking.evidence_coverage' key
+    missing_modules: list[str] | None = None  # 'ranking.missing_modules' key
+    pec50: dict[Receptor, float | None] = Field(default_factory=dict)  # predicted potency, -log10(EC50 [M])
+    ec50_nm: dict[Receptor, float | None] = Field(default_factory=dict)  # the same potency as EC50 in nM
+    binding_pkd: dict[Receptor, float | None] = Field(default_factory=dict)  # predicted binding, 9 - log10(Kd [nM])
+    agonism_probability: dict[Receptor, float | None] = Field(default_factory=dict)  # P(EC50 < 1 nM)
+    pec50_pkd_gap: float | None = None  # disagreement of the pEC50 and pKd models; Route A candidates only
+    metabolic_activity_score: float | None = None  # Stage 6 combined potency score
+    anti_inflammatory_probability: float | None = None
+    half_life_minutes: float | None = None  # 'plasma_half_life.minutes' key in predictions
+    hemolytic_activity_phc50: float | None = None  # 'hemolysis.phc50' key in predictions
+    p_hemolytic: float | None = None  # 'hemolysis.p_hemolytic' key in predictions
+    cleavage_stability: float | None = None  # cleavage_stability.score in predictions
+    molecular_weight: float | None = None  # Daltons
+    net_charge: float | None = None
+    instability_index: float | None = None
+    deamidation_risk: Literal["low", "medium", "high"] | None = None
+    oxidation_risk: Literal["low", "medium", "high"] | None = None
+    solubility: float | None = None
+    aggregation_tendency: float | None = None
+    cytotoxicity_probability: float | None = None
+    activated_pathways: list[str] | None = None
+    undetermined_pathways: list[str] | None = None
+    inhibited_pathways: list[str] | None = None
+
+
+class MetabolicJobResultsResponse(BaseModel):
+    pipeline: Literal["metabolic"] = "metabolic"
+    job_id: str
+    run_id: str
+    status: str
+    n_final: int | None = None
+    ranked_candidates: int | None = None
+    insufficient_evidence_candidates: int | None = None
+    component_stats: dict[str, ComponentStats] = Field(default_factory=dict)
+    candidates: list[MetabolicCandidateResponse] = []
+
+
 class JobResultsResponse(BaseModel):
+    pipeline: Literal["wound_healing"] = "wound_healing"
     job_id: str
     run_id: str
     status: str
@@ -411,7 +462,8 @@ def _candidate_response(candidate: dict) -> CandidateResponse:
     return CandidateResponse(
         id=candidate.get("id", "?"),
         sequence=candidate.get("sequence"),
-        ranking=nested("ranking", "rank"),
+        final_score_rank=nested("ranking", "final_score_rank"),
+        pareto_rank=nested("ranking", "pareto_rank"),
         final_score=nested("ranking", "final_score"),
         evidence_coverage=nested("ranking", "evidence_coverage"),
         missing_modules=nested("ranking", "missing_modules"),
@@ -438,6 +490,56 @@ def _candidate_response(candidate: dict) -> CandidateResponse:
     )
 
 
+def _metabolic_candidate_response(candidate: dict) -> MetabolicCandidateResponse:
+    preds = candidate.get("predictions") or {}
+
+    def nested(key: str, field: str):
+        return (preds.get(key) or {}).get(field)
+
+    return MetabolicCandidateResponse(
+        id=candidate.get("id", "?"),
+        sequence=candidate.get("sequence"),
+        final_score_rank=nested("ranking", "final_score_rank"),
+        pareto_rank=nested("ranking", "pareto_rank"),
+        final_score=nested("ranking", "final_score"),
+        evidence_coverage=nested("ranking", "evidence_coverage"),
+        missing_modules=nested("ranking", "missing_modules"),
+        pec50=preds.get("pec50") or {},
+        ec50_nm=preds.get("ec50_nm") or {},
+        binding_pkd=preds.get("binding_pkd") or {},
+        agonism_probability=preds.get("agonism_probability") or {},
+        pec50_pkd_gap=preds.get("pec50_pkd_gap"),
+        metabolic_activity_score=preds.get("metabolic_activity_score"),
+        anti_inflammatory_probability=preds.get("anti_inflammatory_probability"),
+        half_life_minutes=nested("plasma_half_life", "minutes"),
+        hemolytic_activity_phc50=nested("hemolysis", "phc50"),
+        p_hemolytic=nested("hemolysis", "p_hemolytic"),
+        cleavage_stability=nested("cleavage_stability", "score"),
+        molecular_weight=preds.get("molecular_weight"),
+        net_charge=preds.get("net_charge"),
+        instability_index=preds.get("instability_index"),
+        deamidation_risk=nested("deamidation_risk", "risk_category"),
+        oxidation_risk=nested("oxidation_risk", "risk_category"),
+        solubility=nested("solubility", "score"),
+        aggregation_tendency=nested("aggregation_tendency", "score"),
+        cytotoxicity_probability=nested("cytotoxicity", "score"),
+        activated_pathways=nested("mechanism", "activated_pathways"),
+        inhibited_pathways=nested("mechanism", "inhibited_pathways"),
+        undetermined_pathways=nested("mechanism", "undetermined_pathways"),
+    )
+
+
+def _run_pipeline(run_dir: str, candidates: list[dict]) -> Pipeline:
+    """The run's pipeline: from the config the API stored with the job, else from the shape of its candidates."""
+    try:
+        config = json.loads(storage.read_text(storage.join(run_dir, "config.json")))
+        brief_stage = (config.get("stages") or {}).get("s01_metabolic_therapeutic_product_brief") or {}
+        return "metabolic" if brief_stage.get("enabled") else "wound_healing"
+    except Exception:  # noqa: BLE001 - an older run or an unreadable config: infer from the candidates
+        metabolic = any("ec50_nm" in (c.get("predictions") or {}) for c in candidates)
+        return "metabolic" if metabolic else "wound_healing"
+
+
 def _component_stats(candidates: list[dict]) -> dict[str, ComponentStats]:
     """Mean/median/min/max per ranking module over ranked candidates' post-deduction `score`; missing scores are excluded."""
     values_by_component: dict[str, list[float]] = {}
@@ -462,7 +564,13 @@ def _component_stats(candidates: list[dict]) -> dict[str, ComponentStats]:
     }
 
 
-@app.get("/api/v1/jobs/{job_id:path}/results", response_model=JobResultsResponse)
+@app.get(
+    "/api/v1/jobs/{job_id:path}/results",
+    response_model=Annotated[
+        Union[JobResultsResponse, MetabolicJobResultsResponse],
+        Field(discriminator="pipeline"),
+    ],
+)
 def get_job_results(job_id: str):
     name = job_name(job_id)
     run_id = _run_id_from_job_id(name)
@@ -476,7 +584,12 @@ def get_job_results(job_id: str):
     status = status_payload.get("status", "unknown")
 
     if status != "success":
-        return JobResultsResponse(
+        unfinished = (
+            MetabolicJobResultsResponse
+            if _run_pipeline(run_dir, []) == "metabolic"
+            else JobResultsResponse
+        )
+        return unfinished(
             job_id=name,
             run_id=run_id,
             status=status,
@@ -497,9 +610,7 @@ def get_job_results(job_id: str):
         if c.get("predictions", {}).get("ranking", {}).get("status") == "ranked"
     )
 
-    candidates_response = [_candidate_response(c) for c in candidates]
-
-    return JobResultsResponse(
+    common = dict(
         job_id=name,
         run_id=run_id,
         status=status,
@@ -507,7 +618,13 @@ def get_job_results(job_id: str):
         ranked_candidates=ranked,
         insufficient_evidence_candidates=len(candidates) - ranked,
         component_stats=_component_stats(candidates),
-        candidates=candidates_response,
+    )
+    if _run_pipeline(run_dir, candidates) == "metabolic":
+        return MetabolicJobResultsResponse(
+            **common, candidates=[_metabolic_candidate_response(c) for c in candidates]
+        )
+    return JobResultsResponse(
+        **common, candidates=[_candidate_response(c) for c in candidates]
     )
 
 

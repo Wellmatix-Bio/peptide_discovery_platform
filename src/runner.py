@@ -5,7 +5,10 @@ from __future__ import annotations
 import json
 import time
 from dataclasses import replace
+import os
 from pathlib import Path
+
+import torch
 
 from common.audit import AuditWriter
 from common.env import DEV_MODE
@@ -26,9 +29,26 @@ logger = get_logger(__name__)
 # Maps each setup stage to the RunContext field its payload populates.
 SETUP_STAGE_TARGET_FIELD = {
     "s01_therapeutic_product_brief": "brief",
+    "s01_metabolic_therapeutic_product_brief": "brief",
     "s02_wound_biology_and_targets": "objectives",
     # "s03_data_integration": "standardized_records",
 }
+
+
+def log_cuda_status() -> None:
+    """Logs whether PyTorch can see a GPU, so a run that silently fell back to the CPU shows it at the top of its log."""
+    available = torch.cuda.is_available()
+    logger.info(
+        "run.cuda",
+        extra={
+            "cuda_available": available,
+            "devices": [torch.cuda.get_device_name(i) for i in range(torch.cuda.device_count())],
+            "torch": torch.__version__,
+            "LD_LIBRARY_PATH": os.environ.get("LD_LIBRARY_PATH"),
+        },
+    )
+    if not available:
+        logger.warning("run.cuda_unavailable", extra={"hint": "all models will run on the CPU"})
 
 
 class ConfigError(RuntimeError):
@@ -80,6 +100,7 @@ class PipelineRunner:
             )
 
     def run(self) -> list[Candidate]:
+        log_cuda_status()
         num_stages = len(self.setup_stages) + len(self.candidate_stages)
         for idx, stage in enumerate(self.setup_stages):
             self._check_cancelled()

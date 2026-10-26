@@ -100,6 +100,66 @@ def test_create_submits_worker_readable_json(service):
     }
 
 
+METABOLIC_IMAGE = "us-central1-docker.pkg.dev/test/images/worker-metabolic:latest"
+
+
+def metabolic_payload():
+    return {
+        "request_id": "metabolic-001",
+        "pipeline": "metabolic",
+        "stages": {
+            "s01_metabolic_therapeutic_product_brief": {
+                "brief": {
+                    "target_receptors": ["GLP1R", "GIPR"],
+                    "min_length": 6,
+                    "max_length": 40,
+                }
+            }
+        },
+    }
+
+
+def test_metabolic_pipeline_routes_to_metabolic_image_and_stages(service, monkeypatch):
+    client, sdk, job, objects, calls, payload = service
+    monkeypatch.setenv("WORKER_METABOLIC_IMAGE_URI", METABOLIC_IMAGE)
+    response = client.post("/api/v1/jobs/create", json=metabolic_payload())
+    assert response.status_code == 202, response.text
+    job_spec = calls[0]["custom_job"]
+    assert job_spec["job_spec"]["worker_pool_specs"][0]["container_spec"]["image_uri"] == METABOLIC_IMAGE
+    assert job_spec["labels"]["pipeline"] == "metabolic"
+    config = json.loads(objects[response.json()["result_path"] + "/config.json"])
+    enabled = {n for n, st in config["stages"].items() if st["enabled"]}
+    assert "s11_metabolic_ranking" in enabled and "s11_ranking" not in enabled
+    assert "s01_metabolic_therapeutic_product_brief" in enabled
+    assert "s01_therapeutic_product_brief" not in enabled
+
+
+def test_wound_request_still_uses_wound_image(service):
+    client, sdk, job, objects, calls, payload = service
+    assert "pipeline" not in payload  # the routing parameter defaults to wound_healing
+    assert client.post("/api/v1/jobs/create", json=payload).status_code == 202
+    image = calls[0]["custom_job"]["job_spec"]["worker_pool_specs"][0]["container_spec"]["image_uri"]
+    assert image.endswith("/worker:latest")
+
+
+def test_metabolic_pipeline_needs_its_own_image_setting(service, monkeypatch):
+    client = service[0]
+    monkeypatch.delenv("WORKER_METABOLIC_IMAGE_URI", raising=False)
+    response = client.post("/api/v1/jobs/create", json=metabolic_payload())
+    assert response.status_code == 503
+    assert "WORKER_METABOLIC_IMAGE_URI" in response.text
+
+
+def test_pipeline_must_match_stages(service, monkeypatch):
+    client, sdk, job, objects, calls, payload = service
+    monkeypatch.setenv("WORKER_METABOLIC_IMAGE_URI", METABOLIC_IMAGE)
+    wound_as_metabolic = {**payload, "pipeline": "metabolic"}
+    assert client.post("/api/v1/jobs/create", json=wound_as_metabolic).status_code == 422
+    metabolic_as_wound = {k: v for k, v in metabolic_payload().items() if k != "pipeline"}
+    assert client.post("/api/v1/jobs/create", json=metabolic_as_wound).status_code == 422
+    assert not calls
+
+
 @pytest.mark.parametrize(
     "state,status",
     [
@@ -304,3 +364,61 @@ def test_config_upload_failure_cancels_created_job(service, monkeypatch):
     monkeypatch.setattr(api.storage, "write_text", fail)
     assert client.post("/api/v1/jobs/create", json=payload).status_code == 502
     assert calls[-1]["name"] == JOB
+
+
+RUN = "gs://test/artifacts/runs/456"
+
+
+def _publish_run(objects, stages, candidates):
+    objects[f"{RUN}/results.json"] = json.dumps({"status": "success", "n_final": len(candidates)})
+    objects[f"{RUN}/config.json"] = json.dumps({"stages": stages})
+    objects[f"{RUN}/candidates_final.json"] = json.dumps(candidates)
+
+
+def test_metabolic_results_carry_receptor_predictions_and_both_ranks(service):
+    client, sdk, job, objects, *_ = service
+    candidate = {
+        "id": "m1",
+        "sequence": "HAEGTFTSDV",
+        "predictions": {
+            "pec50": {"GLP1R": 10.5, "GIPR": 9.8, "GCGR": None},
+            "ec50_nm": {"GLP1R": 0.03, "GIPR": 0.16, "GCGR": None},
+            "binding_pkd": {"GLP1R": 8.9, "GIPR": 8.1, "GCGR": 7.0},
+            "agonism_probability": {"GLP1R": 0.8, "GIPR": None, "GCGR": None},
+            "pec50_pkd_gap": 1.4,
+            "metabolic_activity_score": 0.7,
+            "anti_inflammatory_probability": 0.9,
+            "plasma_half_life": {"minutes": 240.0},
+            "hemolysis": {"phc50": 3.1, "p_hemolytic": 0.2},
+            "ranking": {"status": "ranked", "final_score": 0.6, "final_score_rank": 1, "pareto_rank": 2,
+                        "evidence_coverage": 1.0, "missing_modules": [], "modules": {}},
+        },
+    }
+    _publish_run(objects, {"s01_metabolic_therapeutic_product_brief": {"enabled": True}}, [candidate])
+    body = client.get(f"/api/v1/jobs/{JOB}/results").json()
+    assert body["pipeline"] == "metabolic"
+    got = body["candidates"][0]
+    assert (got["final_score_rank"], got["pareto_rank"]) == (1, 2)
+    assert got["pec50"]["GLP1R"] == 10.5 and got["ec50_nm"]["GCGR"] is None
+    assert got["binding_pkd"]["GIPR"] == 8.1 and got["pec50_pkd_gap"] == 1.4
+    assert got["half_life_minutes"] == 240.0 and got["p_hemolytic"] == 0.2
+    assert "amp_probability" not in got and "log_mic_um" not in got
+
+
+def test_wound_results_keep_their_shape(service):
+    client, sdk, job, objects, *_ = service
+    candidate = {"id": "w1", "sequence": "KLAKLAK", "predictions": {
+        "amp_probability": 0.9, "ranking": {"status": "ranked", "final_score_rank": 1, "pareto_rank": 1}}}
+    _publish_run(objects, {"s01_therapeutic_product_brief": {"enabled": True}}, [candidate])
+    body = client.get(f"/api/v1/jobs/{JOB}/results").json()
+    assert body["pipeline"] == "wound_healing"
+    assert body["candidates"][0]["amp_probability"] == 0.9
+    assert "pec50" not in body["candidates"][0]
+
+
+def test_results_pipeline_is_inferred_when_config_is_missing(service):
+    client, sdk, job, objects, *_ = service
+    objects[f"{RUN}/results.json"] = json.dumps({"status": "success", "n_final": 1})
+    objects[f"{RUN}/candidates_final.json"] = json.dumps(
+        [{"id": "m1", "sequence": "HAEG", "predictions": {"ec50_nm": {"GLP1R": 1.0}}}])
+    assert client.get(f"/api/v1/jobs/{JOB}/results").json()["pipeline"] == "metabolic"

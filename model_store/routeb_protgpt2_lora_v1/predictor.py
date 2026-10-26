@@ -87,7 +87,7 @@ class ProtGPT2Generator:
         """Sample up to n_peptides unique, validated peptides conditioned on `tags` (a subset of TAG_TOKENS)."""
         self._load()
         torch = self.torch
-        tags = tags or ["<AMP>"]
+        tags = tags or []  # no tags means untagged generation
         unknown = set(tags) - set(TAG_TOKENS)
         if unknown:
             raise ValueError(f"Unknown generation tags: {sorted(unknown)}; expected a subset of {TAG_TOKENS}")

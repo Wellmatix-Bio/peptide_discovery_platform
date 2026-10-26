@@ -1,5 +1,6 @@
 # Stage 7: Structure and Mechanism.
 from __future__ import annotations
+import gc
 import os
 import sys
 import tempfile
@@ -8,6 +9,7 @@ from pathlib import Path
 
 import freesasa
 import numpy as np
+import torch
 from tqdm import tqdm
 
 from common.gpu import release_stage_models
@@ -73,6 +75,15 @@ def _get_pathway_model() -> PathwayMappingPredictor:
     return _pathway_model
 
 
+def _release_esmfold_model() -> None:
+    """Drops the ESMFold weights so Stage 8 onward has the GPU to itself."""
+    global _esmfold_model
+    _esmfold_model = None
+    gc.collect()
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+
+
 _esmfold_model: ESMFoldPredictor | None = None
 _pathway_model: PathwayMappingPredictor | None = None
 
@@ -122,6 +133,8 @@ class Stage7(CandidateStage):
                 )
             )
 
+        del models
+        _release_esmfold_model()
         return candidates
 
     def models_used(self) -> list[ModelRef]:

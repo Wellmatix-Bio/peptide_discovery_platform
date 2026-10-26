@@ -11,6 +11,7 @@ from tqdm import tqdm
 from common.gpu import release_stage_models
 from common.logging import get_logger
 from pipeline.base import CandidateStage, RunContext
+from pipeline.feature_extractor import PROPY_AVAILABLE, PROPY_UNAVAILABLE_REASON
 from schemas.candidate import Candidate
 from schemas.run_config import StageConfig
 
@@ -89,7 +90,7 @@ DEFAULT_THRESHOLDS = {
     "molecular_weight_reject_max": 5000.0,  # Da; >4-5 kDa flagged for delivery/synthesis
     "net_charge_flag_min": -5.0,
     "net_charge_flag_max": 9.0,
-    "hydrophobic_fraction_reject_max": 0.6,  # fraction of residues on the hydrophobic side of Eisenberg 0
+    "hydrophobicity_reject_max": 0.5,  # mean Eisenberg hydrophobicity; rejects 4 of 159 curated peptides and 21 of 1,834 generated ones
     "hydrophobic_moment_flag_max": 0.5,  # Eisenberg-scale moment; high = strong membrane disruption
     "instability_index_flag_max": 40.0,  # Guruprasad et al. 1990 cutoff
     "solubility_flag_min": 0.4,  # P(soluble) below this is flagged, not rejected -- Stage 5 is a soft screen
@@ -454,8 +455,7 @@ class Stage5(CandidateStage):
 
         properties["hydrophobicity"] = (
             "reject"
-            if predictions["hydrophobic_fraction"]
-            > t["hydrophobic_fraction_reject_max"]
+            if predictions["hydrophobicity"] > t["hydrophobicity_reject_max"]
             else "pass"
         )
 

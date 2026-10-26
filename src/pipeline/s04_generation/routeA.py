@@ -17,7 +17,7 @@ from src.schemas.stage4_route import Stage4Route
 from schemas.candidate import Candidate
 from dataclasses import dataclass, field, fields
 from model_store.amp_classifier_v1 import AMPClassifier
-from model_store.hemolysis_predictor_v1 import ModifiedHemolyticPredictor
+from model_store.hemolysis_predictor_v2 import HemolysisPredictor
 from modlamp.descriptors import GlobalDescriptor, PeptideDescriptor
 from pipeline.feature_extractor import FeatureExtractor
 
@@ -595,10 +595,10 @@ def _real_amp_predictor() -> AMPClassifier:
     return _amp_model_cache
 
 
-def _real_hemolysis_predictor() -> ModifiedHemolyticPredictor:
+def _real_hemolysis_predictor() -> HemolysisPredictor:
     global _hemolysis_model_cache
     if _hemolysis_model_cache is None:
-        _hemolysis_model_cache = ModifiedHemolyticPredictor()
+        _hemolysis_model_cache = HemolysisPredictor()
     return _hemolysis_model_cache
 
 
@@ -610,8 +610,8 @@ def predict_amp(sequence: str, feature_extractor: FeatureExtractor) -> float:
 def predict_hemolysis_phc50(
     sequence: str, feature_extractor: FeatureExtractor
 ) -> float:
-    """Real hemolysis model output from hemolysis_predictor_v1: pHC50, not a probability."""
-    return _real_hemolysis_predictor().predict_phc50(sequence, feature_extractor)
+    """Real hemolysis model output from hemolysis_predictor_v2: pHC50, not a probability."""
+    return _real_hemolysis_predictor().predict_phc50_batch([sequence], feature_extractor)[0]
 
 
 def predict_amp_batch(
@@ -626,7 +626,9 @@ def predict_amp_batch(
 def predict_hemolysis_phc50_batch(
     sequences: list[str], feature_extractor: FeatureExtractor
 ) -> list[float]:
-    """Real hemolysis pHC50 values from hemolysis_predictor_v1 in one descriptor-extraction pass."""
+    """Real hemolysis pHC50 values from hemolysis_predictor_v2 in one pass."""
+    if sequences:
+        feature_extractor.get_esm2_embedding_batch(sequences)
     return _real_hemolysis_predictor().predict_phc50_batch(sequences, feature_extractor)
 
 

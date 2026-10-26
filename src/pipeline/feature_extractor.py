@@ -11,6 +11,8 @@ from __future__ import annotations
 import hashlib
 import io
 import json
+import math
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -156,6 +158,97 @@ def _sequence_cache_key(sequence: str, fingerprint: str) -> str:
     return f"{digest}:{fingerprint}"
 
 
+# Per-token features for the agonism classifier: hydrophobicity, charge, MW, D flag, lipid flag, sin/cos of position.
+# Notation: A (L), a (D), [Aib] [Sar] [Nle] [hSer] [nVal] [Dap] [MetO], [K(yE-C16)] (lipidated Lys).
+_TOKEN_RE = re.compile(r"\[[^\]]*\]|[A-Za-z]")
+_LIPID_RE = re.compile(r"([A-Z])(\(.*\))")
+_NONSTANDARD_RESIDUES_CSV = (
+    Path(__file__).resolve().parents[2]
+    / "model_store"
+    / "agonism_classifier_v1"
+    / "nonstandard_residues.csv"
+)
+_TOKEN_PH = 7.4
+_TOKEN_POSITION_BASE = 1
+_TOKEN_LIPID = {
+    "hydrophobicity_per_carbon": 0.3,
+    "mw_per_carbon": 14.03,
+    "linker_mw": {"yE": 129.12, "eK": 128.17, "OEG": 145.16},
+    "charge": 0.0,
+}
+_KYTE_DOOLITTLE = {
+    "A": 1.8, "R": -4.5, "N": -3.5, "D": -3.5, "C": 2.5, "Q": -3.5, "E": -3.5, "G": -0.4, "H": -3.2, "I": 4.5,
+    "L": 3.8, "K": -3.9, "M": 1.9, "F": 2.8, "P": -1.6, "S": -0.8, "T": -0.7, "W": -0.9, "Y": -1.3, "V": 4.2,
+}
+_RESIDUE_MW = {
+    "A": 89.09, "R": 174.20, "N": 132.12, "D": 133.10, "C": 121.16, "Q": 146.15, "E": 147.13, "G": 75.07,
+    "H": 155.16, "I": 131.17, "L": 131.17, "K": 146.19, "M": 149.21, "F": 165.19, "P": 115.13, "S": 105.09,
+    "T": 119.12, "W": 204.23, "Y": 181.19, "V": 117.15,
+}
+_SIDE_CHAIN_PKA = {"D": 3.9, "E": 4.07, "C": 8.18, "Y": 10.46, "H": 6.04, "K": 10.54, "R": 12.48}
+_TOKEN_POSITIVE, _TOKEN_NEGATIVE = {"K", "R", "H"}, {"D", "E", "C", "Y"}
+TOKEN_FEATURE_NAMES = (
+    "hydrophobicity", "charge", "mol_weight", "d_flag", "lipid_flag", "sin_pos", "cos_pos",
+)
+
+
+def tokenize_peptide(sequence: str) -> list[str]:
+    """One token per residue; a bracket group such as [Aib] or [K(yE-C16)] is one token."""
+    sequence = sequence.strip()
+    tokens = _TOKEN_RE.findall(sequence)
+    if "".join(tokens) != sequence:
+        raise ValueError(f"Cannot tokenise sequence {sequence!r}")
+    return tokens
+
+
+def _token_charge(letter: str) -> float:
+    if letter in _TOKEN_POSITIVE:
+        return 1.0 / (1.0 + 10 ** (_TOKEN_PH - _SIDE_CHAIN_PKA[letter]))
+    if letter in _TOKEN_NEGATIVE:
+        return -1.0 / (1.0 + 10 ** (_SIDE_CHAIN_PKA[letter] - _TOKEN_PH))
+    return 0.0
+
+
+def _standard_residue(letter: str) -> tuple[float, float, float]:
+    return _KYTE_DOOLITTLE[letter], _token_charge(letter), _RESIDUE_MW[letter]
+
+
+class _TokenResidueTable:
+    """Properties of one token: (hydrophobicity, charge, MW, d_flag, lipid_flag)."""
+
+    def __init__(self, nonstandard_csv: Path) -> None:
+        df = pd.read_csv(nonstandard_csv)
+        self.table = {
+            r.name: (float(r.hydrophobicity), float(r.charge), float(r.mw))
+            for r in df.itertuples()
+        }
+
+    @staticmethod
+    def _lipid(modification: str) -> tuple[float, float, float]:
+        n_carbon = sum(int(x) for x in re.findall(r"C(\d+)", modification))
+        cfg = _TOKEN_LIPID
+        mw = n_carbon * cfg["mw_per_carbon"] + sum(
+            cfg["linker_mw"][x] for x in re.findall(r"yE|eK|OEG", modification)
+        )
+        return n_carbon * cfg["hydrophobicity_per_carbon"], cfg["charge"], mw
+
+    def lookup(self, token: str) -> tuple[float, float, float, int, int]:
+        inner = token[1:-1] if token.startswith("[") else token
+        lipid = _LIPID_RE.fullmatch(inner)
+        if lipid:
+            h, c, mw = _standard_residue(lipid.group(1))
+            lh, lc, lmw = self._lipid(lipid.group(2))
+            return h + lh, c + lc, mw + lmw, 0, 1
+        if inner in self.table:
+            return (*self.table[inner], 0, 0)
+        if inner.startswith("d") and inner[1:] in self.table:  # [dNle] -> D form of Nle
+            return (*self.table[inner[1:]], 1, 0)
+        if len(inner) == 1 and inner.upper() in _KYTE_DOOLITTLE:
+            h, c, mw = _standard_residue(inner.upper())
+            return h, c, mw, int(inner.islower()), 0  # lowercase = D residue, L properties
+        raise KeyError(f"Unknown residue token {token!r}; add it to {_NONSTANDARD_RESIDUES_CSV.name}")
+
+
 class FeatureExtractor:
     """Run-scoped cache of raw per-sequence features, keyed by sequence hash plus an extractor/checkpoint fingerprint."""
 
@@ -171,6 +264,8 @@ class FeatureExtractor:
         self._modlamp_cache: dict[str, dict[str, float]] = {}
         self._propy_biopython_cache: dict[str, dict[str, float]] = {}
         self._hemolysis_v1_cache: dict[str, dict[str, float]] = {}
+        self._token_cache: dict[str, np.ndarray] = {}  # in memory only; not part of save()/load()
+        self._token_residue_table: _TokenResidueTable | None = None
 
         self._esm2_tokenizer: Any = None
         self._esm2_model: Any = None
@@ -402,3 +497,28 @@ class FeatureExtractor:
                 ].to_dict()
 
         return [self._hemolysis_v1_cache[k] for k in keys]
+
+    def get_token_features(self, sequence: str) -> np.ndarray:
+        """(L, 7) unscaled per-token features (hydrophobicity, charge, MW, D flag, lipid flag, sin/cos position); memoized per sequence."""
+        return self.get_token_features_batch([sequence])[0]
+
+    def get_token_features_batch(self, sequences: list[str]) -> list[np.ndarray]:
+        """Unscaled (L, 7) arrays, one per sequence; raises on a token missing from the residue table."""
+        if self._token_residue_table is None:
+            self._token_residue_table = _TokenResidueTable(_NONSTANDARD_RESIDUES_CSV)
+        table = self._token_residue_table
+        out = []
+        for sequence in sequences:
+            key = _sequence_cache_key(sequence, "token_features_v1")
+            if key not in self._token_cache:
+                tokens = tokenize_peptide(sequence)
+                length = len(tokens)
+                feats = np.zeros((length, 7), dtype=np.float32)
+                for i, token in enumerate(tokens):
+                    h, c, mw, d_flag, lipid_flag = table.lookup(token)
+                    pos = i + _TOKEN_POSITION_BASE
+                    feats[i] = [h, c, mw, d_flag, lipid_flag,
+                                math.sin(math.pi * pos / length), math.cos(math.pi * pos / length)]
+                self._token_cache[key] = feats
+            out.append(self._token_cache[key])
+        return out

@@ -1,0 +1,113 @@
+{
+  "model_name": "functional_potency_predictor_v1",
+  "task": "regression: functional agonism potency pEC50 = -log10(EC50 [M]) per receptor (GCGR, GLP1R, GIPR); higher = more potent",
+  "architecture": "per receptor, unweighted mean of four regressors on raw (unscaled) mean-pooled ESM2-150M embeddings: RidgeCV, RandomForest (500 trees, max_features 0.33), XGBoost (300 trees, depth 3, lr 0.05), MLP (640-640-256-64-1, relu, adam)",
+  "members": [
+    "ridge",
+    "rf",
+    "xgb",
+    "mlp"
+  ],
+  "esm_model_name": "facebook/esm2_t30_150M_UR50D",
+  "esm_embedding": "mean-pooled last_hidden_state over residue positions, BOS/EOS excluded; input is plain_sequence(seq) (Aib->A, Sar->G, Nle->L, lipidated [K(...)]->K); no feature scaling",
+  "embedding_dim": 640,
+  "weights_dir": "model_store/model_weights/functional_potency_predictor_v1",
+  "weights_layout": "<member>/<RECEPTOR>.joblib with a <RECEPTOR>.json metadata file, for member in ridge, rf, xgb, mlp",
+  "training_data": {
+    "sources": "ChEMBL GLP-1R EC50 (cAMP direct, EXACT) and all_sequences_aligned.csv; replicate EC50s merged by geometric mean",
+    "n_train": {
+      "GCGR": 199,
+      "GLP1R": 271,
+      "GIPR": 55
+    },
+    "length_range": [
+      5,
+      50
+    ],
+    "receptor_column_assumption": "EC50_T1 = GCGR, EC50_T2 = GLP1R, EC50_T3 = GIPR (assumed order, not confirmed by the source file)",
+    "cv": "leave-one-cluster-out, CD-HIT 90% identity"
+  },
+  "loco_cv_metrics_ensemble": {
+    "source": "training_regression.ipynb, out-of-fold mean of the four members",
+    "GCGR": {
+      "n": 199,
+      "RMSE": 1.365,
+      "MAE": 1.026,
+      "R2": 0.47,
+      "Pearson": 0.688,
+      "Spearman": 0.678
+    },
+    "GLP1R": {
+      "n": 271,
+      "RMSE": 1.025,
+      "MAE": 0.827,
+      "R2": 0.511,
+      "Pearson": 0.722,
+      "Spearman": 0.584
+    },
+    "GIPR": {
+      "n": 55,
+      "RMSE": 1.94,
+      "MAE": 1.462,
+      "R2": -0.108,
+      "Pearson": 0.094,
+      "Spearman": 0.144
+    }
+  },
+  "loco_cv_metrics_members": {
+    "GCGR": {
+      "ridge": {
+        "R2": 0.397,
+        "Spearman": 0.636
+      },
+      "rf": {
+        "R2": 0.322,
+        "Spearman": 0.595
+      },
+      "xgb": {
+        "R2": 0.38,
+        "Spearman": 0.609
+      },
+      "mlp": {
+        "R2": 0.413,
+        "Spearman": 0.692
+      }
+    },
+    "GLP1R": {
+      "ridge": {
+        "R2": 0.358,
+        "Spearman": 0.549
+      },
+      "rf": {
+        "R2": 0.256,
+        "Spearman": 0.436
+      },
+      "xgb": {
+        "R2": 0.39,
+        "Spearman": 0.516
+      },
+      "mlp": {
+        "R2": 0.417,
+        "Spearman": 0.523
+      }
+    },
+    "GIPR": {
+      "ridge": {
+        "R2": -0.222,
+        "Spearman": 0.188
+      },
+      "rf": {
+        "R2": -0.207,
+        "Spearman": -0.02
+      },
+      "xgb": {
+        "R2": -0.23,
+        "Spearman": -0.002
+      },
+      "mlp": {
+        "R2": -0.141,
+        "Spearman": 0.264
+      }
+    }
+  }
+}

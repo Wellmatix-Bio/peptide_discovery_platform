@@ -184,6 +184,8 @@ export interface components {
             evidence_coverage?: number | null;
             /** Final Score */
             final_score?: number | null;
+            /** Final Score Rank */
+            final_score_rank?: number | null;
             /** Hemolytic Activity Phc50 */
             hemolytic_activity_phc50?: number | null;
             /**
@@ -212,6 +214,8 @@ export interface components {
             net_charge?: number | null;
             /** Oxidation Risk */
             oxidation_risk?: ("low" | "medium" | "high") | null;
+            /** Pareto Rank */
+            pareto_rank?: number | null;
             /** Pmbic */
             pmbic: {
                 [key: string]: number;
@@ -221,8 +225,6 @@ export interface components {
              * @default 0
              */
             proliferation_probability: number | null;
-            /** Ranking */
-            ranking?: number | null;
             /** Sequence */
             sequence?: string | null;
             /** Solubility */
@@ -400,11 +402,6 @@ export interface components {
              * @default 3
              */
             pop_size: number;
-            /**
-             * Random Seed
-             * @default 42
-             */
-            random_seed: number;
         };
         /** Stage1Request */
         Stage1Request: {
@@ -465,8 +462,7 @@ export interface components {
              * @default {
              *       "mutation_rate": 0.1,
              *       "n_generations": 5,
-             *       "pop_size": 3,
-             *       "random_seed": 42
+             *       "pop_size": 3
              *     }
              */
             route_a_ga_params: components["schemas"]["RouteAGAParams"];

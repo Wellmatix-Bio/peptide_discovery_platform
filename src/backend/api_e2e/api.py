@@ -8,35 +8,27 @@ import statistics
 import logging
 from functools import lru_cache
 from pathlib import Path
-from typing import Literal
+from typing import Annotated, Literal, Union
 from fastapi import FastAPI, HTTPException
 from google.api_core.exceptions import GoogleAPICallError, NotFound
 from google.auth.exceptions import GoogleAuthError
-from pydantic import BaseModel, ConfigDict, Field, config
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Discriminator,
+    Field,
+    Tag,
+    model_validator,
+)
 from common import storage
+
 # Imported for its side effect: common/env.py loads .env into os.environ; do not remove as unused.
 from common import env  # noqa: F401
-from schemas.brief import Brief
+from schemas.brief import Brief, MetabolicBrief
 from schemas.e2e_config import validate_job_config
-from schemas.stage_configs import E2ERequest
+from schemas.stage_configs import E2ERequest, MetabolicE2ERequest
 
 app = FastAPI(title="End-to-end Pipeline Job API")
-
-
-#: Settings forwarded into the worker container, read from the process environment.
-#: Deliberately explicit and minimal: these are the only variables anything on the
-#: worker's own code path reads (common/model_sync.py), and DEV_MODE, which is set
-#: to "false" separately below. Everything else the worker needs travels in its
-#: config.json -- SEED_CANDIDATES_FILE, for instance, reaches it as the config's
-#: seed_candidates_path, not as an environment variable.
-#:
-#: This was previously common/env.py's DOTENV_KEYS, which is populated only by
-#: parsing a .env FILE. An API process configured any other way -- docker compose
-#: `environment:`, Kubernetes, Cloud Run -- forwarded nothing, so the worker fell
-#: back to model_sync.py's placeholder gs://TODO-bucket/model_store and failed
-#: during weight sync rather than at submit time. It also forwarded every other key
-#: in .env, including deployment settings the worker never reads.
-WORKER_ENV_KEYS = ("VERTEX_MODEL_STORE",)
 
 
 def required(name):
@@ -57,10 +49,49 @@ def job_client():
     )
 
 
+Pipeline = Literal["wound_healing", "metabolic"]
+
+
+def _stages_pipeline(stages) -> str:
+    """Which request schema `stages` belongs to, by the brief stage it carries; `pipeline` is checked against it below."""
+    keys = (
+        stages
+        if isinstance(stages, dict)
+        else stages.model_fields_set | set(type(stages).model_fields)
+    )
+    return (
+        "metabolic"
+        if "s01_metabolic_therapeutic_product_brief" in keys
+        else "wound_healing"
+    )
+
+
 class CreateJobRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     request_id: str = Field(min_length=1)
-    stages: E2ERequest
+    #: Routes the job: which stages run and which worker image executes them. Same endpoint for both.
+    pipeline: Pipeline = "wound_healing"
+    stages: Annotated[
+        Union[
+            Annotated[E2ERequest, Tag("wound_healing")],
+            Annotated[MetabolicE2ERequest, Tag("metabolic")],
+        ],
+        Discriminator(_stages_pipeline),
+    ]
+
+    @model_validator(mode="after")
+    def _stages_match_pipeline(self):
+        actual = (
+            "metabolic"
+            if isinstance(self.stages, MetabolicE2ERequest)
+            else "wound_healing"
+        )
+        if actual != self.pipeline:
+            raise ValueError(
+                f"pipeline is {self.pipeline!r} but stages is a {actual} request; set pipeline to {actual!r}"
+                " or send that pipeline's stages"
+            )
+        return self
 
 
 class CreateJobResponse(BaseModel):
@@ -72,45 +103,13 @@ class CreateJobResponse(BaseModel):
 #: Vertex states meaning the job will not progress any further. Kept in step with
 #: services/accounts/accounts/history.py and web/src/api/peptide.ts, which list the same four.
 TERMINAL_VERTEX_STATES = frozenset(
-    {"JOB_STATE_SUCCEEDED", "JOB_STATE_FAILED", "JOB_STATE_CANCELLED", "JOB_STATE_EXPIRED"}
+    {
+        "JOB_STATE_SUCCEEDED",
+        "JOB_STATE_FAILED",
+        "JOB_STATE_CANCELLED",
+        "JOB_STATE_EXPIRED",
+    }
 )
-
-
-def run_state(worker_status: str | None, vertex_state: str | None) -> str:
-    """Reconcile what the worker last said with what Vertex says, into one honest answer.
-
-    `status` on its own cannot be trusted and never could: it is read from the worker's
-    results.json, so a worker that is killed -- OOM, pre-emption, a crash before the final write
-    -- leaves it reading "running", or "pending" if it died before writing anything at all. The
-    job is over; the field says it is not. Clients were each expected to notice this and combine
-    the two fields themselves, which means every client either duplicates this function or gets
-    it wrong.
-
-    Precedence, and why:
-
-    1. **A worker that finished wins.** If it wrote `success` or `failed`, that is a first-hand
-       report about the run and nothing Vertex says is more specific.
-    2. **Then Vertex's terminal states**, because they are observed rather than self-reported.
-       `cancelled` is kept distinct from `failed`: someone chose to stop it.
-    3. **A job Vertex finished with no successful result is `abandoned`**, not `pending` and not
-       `succeeded`. The container exited cleanly without producing results -- the single case
-       this whole function exists for.
-    4. Otherwise the worker's own `running`, or `submitted` when it has said nothing yet.
-    """
-    terminal = vertex_state in TERMINAL_VERTEX_STATES
-    if worker_status == "success":
-        return "succeeded"
-    if worker_status in ("failed", "fail"):
-        return "failed"
-    if vertex_state == "JOB_STATE_CANCELLED":
-        return "cancelled"
-    if vertex_state in ("JOB_STATE_FAILED", "JOB_STATE_EXPIRED"):
-        return "failed"
-    if terminal:
-        return "abandoned"
-    if worker_status == "running":
-        return "running"
-    return "submitted"
 
 
 class JobStatusResponse(BaseModel):
@@ -145,11 +144,15 @@ def create_job(request: CreateJobRequest):
     artifacts = required("VERTEX_ARTIFACTS_DIR")
     models = required("VERTEX_MODEL_STORE")
     seeds = required("SEED_CANDIDATES_FILE")
-    image = required("WORKER_IMAGE_URI")
+    metabolic = request.pipeline == "metabolic"
+    image = required("WORKER_METABOLIC_IMAGE_URI" if metabolic else "WORKER_IMAGE_URI")
     service_account = required("WORKER_SERVICE_ACCOUNT")
     machine_type = required("MACHINE_TYPE")
     accelerator_type = required("ACCELERATOR_TYPE")
     accelerator_count = int(required("ACCELERATOR_COUNT"))
+    # Environment variables passed into the worker; everything else it needs travels in its config.json.
+    worker_env_keys = ("VERTEX_MODEL_STORE",)
+
     if not all(storage.is_gcs_path(p) for p in (artifacts, models, seeds)):
         raise HTTPException(
             503, "Artifacts, model store, and seed FASTA must use gs:// paths"
@@ -158,23 +161,30 @@ def create_job(request: CreateJobRequest):
     staging_dir = storage.join(artifacts, "requests", request.request_id)
     staging_config_path = storage.join(staging_dir, "config.json")
     try:
+        brief_stage = (
+            "s01_metabolic_therapeutic_product_brief"
+            if metabolic
+            else "s01_therapeutic_product_brief"
+        )
         config = validate_job_config(
             {
                 "artifacts_dir": artifacts,
                 "model_store": models,
                 "seed_candidates_path": seeds,
                 "stages": request.stages.model_dump(),
-            }
+            },
+            pipeline=request.pipeline,
         )
-        Brief.model_validate(
-            config.for_stage("s01_therapeutic_product_brief").params["brief"]
+        (MetabolicBrief if metabolic else Brief).model_validate(
+            config.for_stage(brief_stage).params["brief"]
         )
     except (ValueError, TypeError) as exc:
         raise HTTPException(422, str(exc)) from exc
     custom_job = {
-        "display_name": f"ai-peptide-discovery-e2e-{request.request_id[:12]}",
+        "display_name": f"ai-peptide-discovery-{'metabolic' if metabolic else 'e2e'}-{request.request_id[:12]}",
         "labels": {
             "service": "battery-ai",
+            "pipeline": request.pipeline.replace("_", "-"),
             "request-id": _label_value(request.request_id),
         },
         "job_spec": {
@@ -200,7 +210,7 @@ def create_job(request: CreateJobRequest):
                             {"name": "DEV_MODE", "value": "false"},
                             *(
                                 {"name": key, "value": os.environ[key]}
-                                for key in WORKER_ENV_KEYS
+                                for key in worker_env_keys
                                 if key in os.environ
                             ),
                         ],
@@ -266,12 +276,30 @@ def get_job_status(job_id: str):
     )
 
     worker_status = (results.get("status") if results else None) or None
+
+    run_state = "succeeded"
+    terminal = vertex_state in TERMINAL_VERTEX_STATES
+    if worker_status == "success":
+        run_state = "succeeded"
+    elif worker_status in ("failed", "fail"):
+        run_state = "failed"
+    elif vertex_state == "JOB_STATE_CANCELLED":
+        run_state = "cancelled"
+    elif vertex_state in ("JOB_STATE_FAILED", "JOB_STATE_EXPIRED"):
+        run_state = "failed"
+    elif terminal:
+        run_state = "abandoned"
+    elif worker_status == "running":
+        run_state = "running"
+    else:
+        run_state = "submitted"
+
     return JobStatusResponse(
         job_id=job.name,
         status=worker_status or "pending",
         stage=(results.get("stage") if results else None) or "pending",
         vertex_state=vertex_state,
-        run_state=run_state(worker_status, vertex_state),
+        run_state=run_state,
         error=job.error.message or None,
     )
 
@@ -287,7 +315,8 @@ class ComponentStats(BaseModel):
 class CandidateResponse(BaseModel):
     id: str = "?"
     sequence: str | None = None  # 'sequence' key - sibling of predictions
-    ranking: int | None = None  # 'ranking.rank' key in predictions
+    final_score_rank: int | None = None  # 'ranking.final_score_rank' key in predictions
+    pareto_rank: int | None = None  # 'ranking.pareto_rank' key in predictions
     final_score: float | None = None  # 'ranking.final_score' key in predictions
     evidence_coverage: float | None = None  # 'ranking.evidence_coverage' key
     missing_modules: list[str] | None = None  # 'ranking.missing_modules' key
@@ -359,7 +388,57 @@ class CandidateResponse(BaseModel):
     )
 
 
+Receptor = Literal["GLP1R", "GIPR", "GCGR"]
+
+
+class MetabolicCandidateResponse(BaseModel):
+    """A metabolic candidate: the ranks and shared physicochemical and safety values, plus the receptor predictions."""
+
+    id: str = "?"
+    sequence: str | None = None
+    final_score_rank: int | None = None  # 'ranking.final_score_rank' key in predictions
+    pareto_rank: int | None = None  # 'ranking.pareto_rank' key in predictions
+    final_score: float | None = None  # 'ranking.final_score' key in predictions
+    evidence_coverage: float | None = None  # 'ranking.evidence_coverage' key
+    missing_modules: list[str] | None = None  # 'ranking.missing_modules' key
+    pec50: dict[Receptor, float | None] = Field(default_factory=dict)  # predicted potency, -log10(EC50 [M])
+    ec50_nm: dict[Receptor, float | None] = Field(default_factory=dict)  # the same potency as EC50 in nM
+    binding_pkd: dict[Receptor, float | None] = Field(default_factory=dict)  # predicted binding, 9 - log10(Kd [nM])
+    agonism_probability: dict[Receptor, float | None] = Field(default_factory=dict)  # P(EC50 < 1 nM)
+    pec50_pkd_gap: float | None = None  # disagreement of the pEC50 and pKd models; Route A candidates only
+    metabolic_activity_score: float | None = None  # Stage 6 combined potency score
+    anti_inflammatory_probability: float | None = None
+    half_life_minutes: float | None = None  # 'plasma_half_life.minutes' key in predictions
+    hemolytic_activity_phc50: float | None = None  # 'hemolysis.phc50' key in predictions
+    p_hemolytic: float | None = None  # 'hemolysis.p_hemolytic' key in predictions
+    cleavage_stability: float | None = None  # cleavage_stability.score in predictions
+    molecular_weight: float | None = None  # Daltons
+    net_charge: float | None = None
+    instability_index: float | None = None
+    deamidation_risk: Literal["low", "medium", "high"] | None = None
+    oxidation_risk: Literal["low", "medium", "high"] | None = None
+    solubility: float | None = None
+    aggregation_tendency: float | None = None
+    cytotoxicity_probability: float | None = None
+    activated_pathways: list[str] | None = None
+    undetermined_pathways: list[str] | None = None
+    inhibited_pathways: list[str] | None = None
+
+
+class MetabolicJobResultsResponse(BaseModel):
+    pipeline: Literal["metabolic"] = "metabolic"
+    job_id: str
+    run_id: str
+    status: str
+    n_final: int | None = None
+    ranked_candidates: int | None = None
+    insufficient_evidence_candidates: int | None = None
+    component_stats: dict[str, ComponentStats] = Field(default_factory=dict)
+    candidates: list[MetabolicCandidateResponse] = []
+
+
 class JobResultsResponse(BaseModel):
+    pipeline: Literal["wound_healing"] = "wound_healing"
     job_id: str
     run_id: str
     status: str
@@ -383,7 +462,8 @@ def _candidate_response(candidate: dict) -> CandidateResponse:
     return CandidateResponse(
         id=candidate.get("id", "?"),
         sequence=candidate.get("sequence"),
-        ranking=nested("ranking", "rank"),
+        final_score_rank=nested("ranking", "final_score_rank"),
+        pareto_rank=nested("ranking", "pareto_rank"),
         final_score=nested("ranking", "final_score"),
         evidence_coverage=nested("ranking", "evidence_coverage"),
         missing_modules=nested("ranking", "missing_modules"),
@@ -410,6 +490,56 @@ def _candidate_response(candidate: dict) -> CandidateResponse:
     )
 
 
+def _metabolic_candidate_response(candidate: dict) -> MetabolicCandidateResponse:
+    preds = candidate.get("predictions") or {}
+
+    def nested(key: str, field: str):
+        return (preds.get(key) or {}).get(field)
+
+    return MetabolicCandidateResponse(
+        id=candidate.get("id", "?"),
+        sequence=candidate.get("sequence"),
+        final_score_rank=nested("ranking", "final_score_rank"),
+        pareto_rank=nested("ranking", "pareto_rank"),
+        final_score=nested("ranking", "final_score"),
+        evidence_coverage=nested("ranking", "evidence_coverage"),
+        missing_modules=nested("ranking", "missing_modules"),
+        pec50=preds.get("pec50") or {},
+        ec50_nm=preds.get("ec50_nm") or {},
+        binding_pkd=preds.get("binding_pkd") or {},
+        agonism_probability=preds.get("agonism_probability") or {},
+        pec50_pkd_gap=preds.get("pec50_pkd_gap"),
+        metabolic_activity_score=preds.get("metabolic_activity_score"),
+        anti_inflammatory_probability=preds.get("anti_inflammatory_probability"),
+        half_life_minutes=nested("plasma_half_life", "minutes"),
+        hemolytic_activity_phc50=nested("hemolysis", "phc50"),
+        p_hemolytic=nested("hemolysis", "p_hemolytic"),
+        cleavage_stability=nested("cleavage_stability", "score"),
+        molecular_weight=preds.get("molecular_weight"),
+        net_charge=preds.get("net_charge"),
+        instability_index=preds.get("instability_index"),
+        deamidation_risk=nested("deamidation_risk", "risk_category"),
+        oxidation_risk=nested("oxidation_risk", "risk_category"),
+        solubility=nested("solubility", "score"),
+        aggregation_tendency=nested("aggregation_tendency", "score"),
+        cytotoxicity_probability=nested("cytotoxicity", "score"),
+        activated_pathways=nested("mechanism", "activated_pathways"),
+        inhibited_pathways=nested("mechanism", "inhibited_pathways"),
+        undetermined_pathways=nested("mechanism", "undetermined_pathways"),
+    )
+
+
+def _run_pipeline(run_dir: str, candidates: list[dict]) -> Pipeline:
+    """The run's pipeline: from the config the API stored with the job, else from the shape of its candidates."""
+    try:
+        config = json.loads(storage.read_text(storage.join(run_dir, "config.json")))
+        brief_stage = (config.get("stages") or {}).get("s01_metabolic_therapeutic_product_brief") or {}
+        return "metabolic" if brief_stage.get("enabled") else "wound_healing"
+    except Exception:  # noqa: BLE001 - an older run or an unreadable config: infer from the candidates
+        metabolic = any("ec50_nm" in (c.get("predictions") or {}) for c in candidates)
+        return "metabolic" if metabolic else "wound_healing"
+
+
 def _component_stats(candidates: list[dict]) -> dict[str, ComponentStats]:
     """Mean/median/min/max per ranking module over ranked candidates' post-deduction `score`; missing scores are excluded."""
     values_by_component: dict[str, list[float]] = {}
@@ -434,7 +564,13 @@ def _component_stats(candidates: list[dict]) -> dict[str, ComponentStats]:
     }
 
 
-@app.get("/api/v1/jobs/{job_id:path}/results", response_model=JobResultsResponse)
+@app.get(
+    "/api/v1/jobs/{job_id:path}/results",
+    response_model=Annotated[
+        Union[JobResultsResponse, MetabolicJobResultsResponse],
+        Field(discriminator="pipeline"),
+    ],
+)
 def get_job_results(job_id: str):
     name = job_name(job_id)
     run_id = _run_id_from_job_id(name)
@@ -448,7 +584,12 @@ def get_job_results(job_id: str):
     status = status_payload.get("status", "unknown")
 
     if status != "success":
-        return JobResultsResponse(
+        unfinished = (
+            MetabolicJobResultsResponse
+            if _run_pipeline(run_dir, []) == "metabolic"
+            else JobResultsResponse
+        )
+        return unfinished(
             job_id=name,
             run_id=run_id,
             status=status,
@@ -469,9 +610,7 @@ def get_job_results(job_id: str):
         if c.get("predictions", {}).get("ranking", {}).get("status") == "ranked"
     )
 
-    candidates_response = [_candidate_response(c) for c in candidates]
-
-    return JobResultsResponse(
+    common = dict(
         job_id=name,
         run_id=run_id,
         status=status,
@@ -479,17 +618,19 @@ def get_job_results(job_id: str):
         ranked_candidates=ranked,
         insufficient_evidence_candidates=len(candidates) - ranked,
         component_stats=_component_stats(candidates),
-        candidates=candidates_response,
+    )
+    if _run_pipeline(run_dir, candidates) == "metabolic":
+        return MetabolicJobResultsResponse(
+            **common, candidates=[_metabolic_candidate_response(c) for c in candidates]
+        )
+    return JobResultsResponse(
+        **common, candidates=[_candidate_response(c) for c in candidates]
     )
 
 
 class CancelJobResponse(BaseModel):
     job_id: str
     status: Literal["cancelling", "cancelled", "failed"]
-
-
-_ALREADY_CANCELLED_STATES = {"JOB_STATE_CANCELLING", "JOB_STATE_CANCELLED"}
-_TERMINAL_FAILED_STATES = {"JOB_STATE_FAILED", "JOB_STATE_EXPIRED"}
 
 
 @app.post("/api/v1/jobs/{job_id:path}/cancel", response_model=CancelJobResponse)
@@ -506,9 +647,9 @@ def cancel_job(job_id: str):
         raise HTTPException(502, str(exc)) from exc
 
     state = job.state.name
-    if state in _ALREADY_CANCELLED_STATES:
+    if state in ("JOB_STATE_CANCELLING", "JOB_STATE_CANCELLED"):
         return {"job_id": name, "status": "cancelled"}
-    if state in _TERMINAL_FAILED_STATES:
+    if state in TERMINAL_VERTEX_STATES and state != "JOB_STATE_SUCCEEDED":
         return {"job_id": name, "status": "failed"}
 
     try:
@@ -619,7 +760,11 @@ def model_manifest():
                 model_card_status=(
                     None
                     if card is None
-                    else ("placeholder" if card.get("status") == "placeholder" else "documented")
+                    else (
+                        "placeholder"
+                        if card.get("status") == "placeholder"
+                        else "documented"
+                    )
                 ),
             )
         )

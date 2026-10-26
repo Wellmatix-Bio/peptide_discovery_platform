@@ -20,11 +20,11 @@ MODEL_STORE_DIR = Path(__file__).resolve().parents[3] / "model_store"
 if str(MODEL_STORE_DIR) not in sys.path:
     sys.path.insert(0, str(MODEL_STORE_DIR))
 
-from model_store.hemolysis_predictor_v1 import ModifiedHemolyticPredictor  # noqa: E402
+from model_store.hemolysis_predictor_v2 import HemolysisPredictor  # noqa: E402
 from model_store.cytotoxicity_predictor_v1 import CytotoxicityClassifier  # noqa: E402
 from model_store.solubility_predictor_v1 import SolubilityPredictor  # noqa: E402
 from model_store.aggregation_predictor_v1 import AggregationPredictor  # noqa: E402
-from model_store.cleavage_site_predictor_v1 import CleavageSitePredictor  # noqa: E402
+from model_store.cleavage_site_predictor_v2 import CleavageSitePredictor  # noqa: E402
 
 # Hard reject thresholds; any one failing rejects the candidate (high pHC50 = hemolytic at low concentration = worse).
 HEMOLYSIS_PHC50_REJECT_MAX = 4.0
@@ -89,11 +89,11 @@ CLEAVAGE_DECAY_RATE = 0.5
 IDEALIZED_CA_STEP_ANGSTROM = 3.8  # extended-chain Ca-Ca spacing along backbone
 
 
-def _get_hemolysis_v1_model() -> ModifiedHemolyticPredictor:
-    global _hemolysis_v1_model
-    if _hemolysis_v1_model is None:
-        _hemolysis_v1_model = ModifiedHemolyticPredictor()
-    return _hemolysis_v1_model
+def _get_hemolysis_v2_model() -> HemolysisPredictor:
+    global _hemolysis_v2_model
+    if _hemolysis_v2_model is None:
+        _hemolysis_v2_model = HemolysisPredictor()
+    return _hemolysis_v2_model
 
 
 def _get_cytotoxicity_model() -> CytotoxicityClassifier:
@@ -124,7 +124,7 @@ def _get_cleavage_model() -> CleavageSitePredictor:
     return _cleavage_model
 
 
-_hemolysis_v1_model: ModifiedHemolyticPredictor | None = None
+_hemolysis_v2_model: HemolysisPredictor | None = None
 _cytotoxicity_model: CytotoxicityClassifier | None = None
 _solubility_model: SolubilityPredictor | None = None
 _aggregation_model: AggregationPredictor | None = None
@@ -135,7 +135,7 @@ _cleavage_model: CleavageSitePredictor | None = None
 class Stage8Models:
     """Bundle returned by build_models(): every model this stage depends on, lazy-loaded on first use of each."""
 
-    hemolysis: ModifiedHemolyticPredictor
+    hemolysis: HemolysisPredictor
     cytotoxicity: CytotoxicityClassifier
     solubility: SolubilityPredictor
     aggregation: AggregationPredictor
@@ -145,7 +145,7 @@ class Stage8Models:
 def build_models(config_params: dict) -> Stage8Models:
     """Factory: import and initialize every Stage 8 model (each lazy-loads its weights on first predict())."""
     return Stage8Models(
-        hemolysis=_get_hemolysis_v1_model(),
+        hemolysis=_get_hemolysis_v2_model(),
         cytotoxicity=_get_cytotoxicity_model(),
         solubility=_get_solubility_model(),
         aggregation=_get_aggregation_model(),
@@ -190,9 +190,13 @@ class Stage8(CandidateStage):
             sequences, models.hemolysis, feature_extractor
         )
 
+        cleavage_results = self.compute_cleavage_stability_batch(
+            candidates, models.cleavage, config.params
+        )
+
         survivors: list[Candidate] = []
-        for candidate, hemolysis_result in zip(
-            tqdm(candidates, desc="Stage 8"), hemolysis_results
+        for candidate, hemolysis_result, cleavage_result in zip(
+            tqdm(candidates, desc="Stage 8"), hemolysis_results, cleavage_results
         ):
             sequence = candidate.sequence
             candidate.predictions.update(
@@ -209,11 +213,7 @@ class Stage8(CandidateStage):
                     ),
                 }
             )
-            candidate.predictions["cleavage_stability"] = (
-                self.compute_cleavage_stability(
-                    candidate, models.cleavage, config.params
-                )
-            )
+            candidate.predictions["cleavage_stability"] = cleavage_result
 
             verdict = self.compute_safety_verdict(candidate.predictions, config.params)
             candidate.predictions["safety_verdict"] = verdict
@@ -233,14 +233,11 @@ class Stage8(CandidateStage):
 
     def models_used(self) -> list[ModelRef]:
         return [
-            ModelRef(
-                name="hemolysis_predictor",
-                version="v1",
-            ),
+            ModelRef(name="hemolysis_predictor", version="v2"),
             ModelRef(name="cytotoxicity_predictor", version="v1"),
             ModelRef(name="solubility_predictor", version="v1"),
             ModelRef(name="aggregation_predictor", version="v1"),
-            ModelRef(name="cleavage_site_predictor", version="v1"),
+            ModelRef(name="cleavage_site_predictor", version="v2"),
         ]
 
     def release_models(self) -> None:
@@ -251,10 +248,10 @@ class Stage8(CandidateStage):
     def compute_hemolysis_batch(
         self,
         sequences: list[str],
-        model: ModifiedHemolyticPredictor,
+        model: HemolysisPredictor,
         feature_extractor=None,
     ) -> list[dict]:
-        """Predict pHC50 for all candidates in one v1 batch (higher = more hemolytic)."""
+        """Predict pHC50 for all candidates in one v2 batch (higher = more hemolytic)."""
         if not sequences:
             return []
         phc50_values = model.predict_phc50_batch(sequences, feature_extractor)
@@ -299,46 +296,51 @@ class Stage8(CandidateStage):
         self, candidate: Candidate, model: CleavageSitePredictor, config_params: dict
     ) -> dict:
         """Protease-cleavage stability score in (0, 1] (1.0 = no predicted sites); None if no allowlisted enzyme is in the panel."""
-        sequence = candidate.sequence
-        distance_matrix = self._get_distance_matrix(candidate)
-        exposure_by_position = self._get_exposure_by_position(candidate, len(sequence))
+        return self.compute_cleavage_stability_batch([candidate], model, config_params)[0]
 
-        wound_accessions = self._wound_relevant_accessions(model, config_params)
-        if not wound_accessions:
-            return {
-                "score": None,
-                "status": "no_wound_relevant_enzymes_in_panel",
-                "sites": [],
-            }
+    def compute_cleavage_stability_batch(
+        self, candidates: list[Candidate], model: CleavageSitePredictor, config_params: dict
+    ) -> list[dict]:
+        """compute_cleavage_stability for many candidates; each enzyme scores them in batches of the model's default size."""
+        accessions = self._wound_relevant_accessions(model, config_params)
+        if not accessions:
+            return [
+                {"score": None, "status": "no_wound_relevant_enzymes_in_panel", "sites": []}
+                for _ in candidates
+            ]
 
-        weighted_sites = []
-        for accession in wound_accessions:
-            result = model.predict_one(sequence, distance_matrix, accession)
-            for position in result["cleavage_site_positions"]:
-                probability = result["per_residue_probability"][position]
-                exposure = exposure_by_position[position]
-                weighted_sites.append(
-                    {
-                        "position": position,
-                        "enzyme_accession": accession,
-                        "enzyme_name": result["enzyme_name"],
-                        "probability": probability,
-                        "exposure": exposure,
-                        "weighted_severity": probability * exposure,
-                    }
-                )
+        sequences = [c.sequence for c in candidates]
+        matrices = [self._get_distance_matrix(c) for c in candidates]
+        exposures = [self._get_exposure_by_position(c, len(c.sequence)) for c in candidates]
+        sites = [[] for _ in candidates]
+        for accession in accessions:
+            results = model.predict_batch(sequences, accession, matrices)
+            for i, result in enumerate(results):
+                for position in result["cleavage_site_positions"]:
+                    probability = result["per_residue_probability"][position]
+                    exposure = exposures[i][position]
+                    sites[i].append(
+                        {
+                            "position": position,
+                            "enzyme_accession": accession,
+                            "enzyme_name": result["enzyme_name"],
+                            "probability": probability,
+                            "exposure": exposure,
+                            "weighted_severity": probability * exposure,
+                        }
+                    )
 
         decay_rate = config_params.get("cleavage_decay_rate", CLEAVAGE_DECAY_RATE)
-        total_severity = sum(site["weighted_severity"] for site in weighted_sites)
-        score = float(np.exp(-decay_rate * total_severity))
-
-        return {
-            "score": score,
-            "status": "ok",
-            "n_wound_enzymes_screened": len(wound_accessions),
-            "n_sites": len(weighted_sites),
-            "sites": weighted_sites,
-        }
+        return [
+            {
+                "score": float(np.exp(-decay_rate * sum(site["weighted_severity"] for site in candidate_sites))),
+                "status": "ok",
+                "n_wound_enzymes_screened": len(accessions),
+                "n_sites": len(candidate_sites),
+                "sites": candidate_sites,
+            }
+            for candidate_sites in sites
+        ]
 
     def _wound_relevant_accessions(
         self, model: CleavageSitePredictor, config_params: dict

@@ -41,7 +41,7 @@
         "Streptococcus sanguinis": 4.751791144530111
       },
       "proliferation_probability": 0.3885559016427016,
-      "ranking": 1,
+      "final_score_rank": 1,
       "sequence": "KKAAAKWLTVNVRFKHL",
       "solubility": 0.6684202551841736,
       "undetermined_pathways": null
@@ -87,7 +87,7 @@
         "Streptococcus sanguinis": 4.922503537088083
       },
       "proliferation_probability": 0.5573591477293657,
-      "ranking": 2,
+      "final_score_rank": 2,
       "sequence": "KRKHVRVRKHVE",
       "solubility": 0.9277051687240601,
       "undetermined_pathways": null
@@ -133,7 +133,7 @@
         "Streptococcus sanguinis": 4.61334013790233
       },
       "proliferation_probability": 0.6216230950040919,
-      "ranking": 3,
+      "final_score_rank": 3,
       "sequence": "TRQWSISPHSYALDFKYVTTNNK",
       "solubility": 0.6179247498512268,
       "undetermined_pathways": null
@@ -179,7 +179,7 @@
         "Streptococcus sanguinis": 4.735683470040922
       },
       "proliferation_probability": 0.41435316234130815,
-      "ranking": 4,
+      "final_score_rank": 4,
       "sequence": "KPDLRHHRHLRHHRHLAF",
       "solubility": 0.9165241122245789,
       "undetermined_pathways": null
@@ -225,7 +225,7 @@
         "Streptococcus sanguinis": 4.858203177125535
       },
       "proliferation_probability": 0.6418971279854834,
-      "ranking": 5,
+      "final_score_rank": 5,
       "sequence": "RWKIVTVIRNA",
       "solubility": 0.5136299729347229,
       "undetermined_pathways": null
@@ -271,7 +271,7 @@
         "Streptococcus sanguinis": 4.645104441338034
       },
       "proliferation_probability": 0.6758303379156304,
-      "ranking": 6,
+      "final_score_rank": 6,
       "sequence": "RVPAEYTRSQILSWLG",
       "solubility": 0.5620357394218445,
       "undetermined_pathways": null
@@ -317,7 +317,7 @@
         "Streptococcus sanguinis": 4.679086128804451
       },
       "proliferation_probability": 0.6131139386886509,
-      "ranking": 7,
+      "final_score_rank": 7,
       "sequence": "GIKFLHRAKKVTHSNYNVQCMDTC",
       "solubility": 0.6590107083320618,
       "undetermined_pathways": null
@@ -363,7 +363,7 @@
         "Streptococcus sanguinis": 4.627403346372334
       },
       "proliferation_probability": 0.5909664825309675,
-      "ranking": 8,
+      "final_score_rank": 8,
       "sequence": "LSRWKASAQPKLAQPKLKRKAN",
       "solubility": 0.9101206064224243,
       "undetermined_pathways": null
@@ -409,7 +409,7 @@
         "Streptococcus sanguinis": 4.374305898534766
       },
       "proliferation_probability": 0.797052797669824,
-      "ranking": 9,
+      "final_score_rank": 9,
       "sequence": "HCETVYPRFGSQFMLT",
       "solubility": 0.8654082417488098,
       "undetermined_pathways": null
@@ -455,7 +455,7 @@
         "Streptococcus sanguinis": 4.746447805046353
       },
       "proliferation_probability": 0.7474730093681387,
-      "ranking": 10,
+      "final_score_rank": 10,
       "sequence": "KRCMRPYPICDRPYNIN",
       "solubility": 0.9214155673980713,
       "undetermined_pathways": null
@@ -501,7 +501,7 @@
         "Streptococcus sanguinis": 4.191062165654384
       },
       "proliferation_probability": 0.85534540409065,
-      "ranking": 11,
+      "final_score_rank": 11,
       "sequence": "GRRARWNPIYEL",
       "solubility": 0.9320887923240662,
       "undetermined_pathways": null
@@ -547,7 +547,7 @@
         "Streptococcus sanguinis": 4.377493324875522
       },
       "proliferation_probability": 0.764204081742044,
-      "ranking": 12,
+      "final_score_rank": 12,
       "sequence": "GILKEVAHGQKFSNPIEKMSVTCSKDC",
       "solubility": 0.9398397207260132,
       "undetermined_pathways": null
@@ -593,7 +593,7 @@
         "Streptococcus sanguinis": 4.5443375281457445
       },
       "proliferation_probability": 0.570804656244019,
-      "ranking": 13,
+      "final_score_rank": 13,
       "sequence": "TYDRIESCKPGNAHTQVSVCQWKK",
       "solubility": 0.8932670950889587,
       "undetermined_pathways": null
@@ -639,7 +639,7 @@
         "Streptococcus sanguinis": 4.261165400332864
       },
       "proliferation_probability": 0.7049481815479499,
-      "ranking": 14,
+      "final_score_rank": 14,
       "sequence": "KPNLGATSWEVRIDFNK",
       "solubility": 0.7421543002128601,
       "undetermined_pathways": null
@@ -685,7 +685,7 @@
         "Streptococcus sanguinis": 4.461108054748036
       },
       "proliferation_probability": 0.7169716545635136,
-      "ranking": 15,
+      "final_score_rank": 15,
       "sequence": "GILSRVKAIGEKFTHITDMNQSPP",
       "solubility": 0.7851439118385315,
       "undetermined_pathways": null
@@ -731,7 +731,7 @@
         "Streptococcus sanguinis": 4.167797284992421
       },
       "proliferation_probability": 0.757862332670015,
-      "ranking": 16,
+      "final_score_rank": 16,
       "sequence": "GVPDCASNGIHKLFEGTKR",
       "solubility": 0.9128301739692688,
       "undetermined_pathways": null

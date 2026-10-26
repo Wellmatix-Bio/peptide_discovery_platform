@@ -147,7 +147,7 @@ def test_all_scores_missing_is_insufficient_evidence_not_zero():
     assert result.status == "insufficient_evidence"
     assert result.final_score is None
     assert result.evidence_coverage == 0.0
-    assert result.rank is None
+    assert result.final_score_rank is None
 
 
 # ------------------------------------------------------------------
@@ -224,7 +224,7 @@ def test_ranker_never_ranks_insufficient_evidence():
 def test_batch_summary_counts():
     batch = Stage11Service(make_config()).rank_batch([make_input("r"), make_input("i", scores={})])
     assert (batch.total_candidates, batch.insufficient_evidence) == (2, 1)
-    assert batch.ranked_candidates[0].rank == 1
+    assert batch.ranked_candidates[0].final_score_rank == 1
 
 
 def test_ranking_is_deterministic():
@@ -392,3 +392,24 @@ def test_run_orders_ranked_then_insufficient():
     empty = Candidate(id="insufficient1", sequence="KLLK", predictions={})
     survivors = Stage11().run([empty, ranked], StageConfig(params={}), _ctx(_brief()))
     assert [c.id for c in survivors] == ["ranked1", "insufficient1"]
+
+
+def test_pareto_fronts_layer_by_non_domination():
+    from pipeline.s11_ranking.pareto import pareto_fronts
+
+    # [1, 0] and [0, 1] trade off; [0.5, 0.5] is dominated by neither; [0, 0] is dominated by all
+    assert pareto_fronts([[1, 0], [0, 1], [0.4, 0.4], [0, 0]]) == [1, 1, 1, 2]
+    assert pareto_fronts([[1, 1], [1, 0.5], [0.5, 0.5]]) == [1, 2, 3]
+    assert pareto_fronts([[1, 1], [1, 1]]) == [1, 1]  # equal vectors do not dominate each other
+
+
+def test_pareto_rank_is_separate_from_the_final_score_order():
+    best_overall = _tied("aaa", final_score=0.9)
+    dominated = _tied("bbb", final_score=0.8)
+    dominated = dominated.model_copy(update={"modules": {
+        **dominated.modules,
+        "safety": dominated.modules["safety"].model_copy(update={"score": 0.0}),
+    }})
+    ranked = CandidateRanker().rank([dominated, best_overall])
+    assert [(r.candidate_id, r.final_score_rank) for r in ranked] == [("aaa", 1), ("bbb", 2)]
+    assert [r.pareto_rank for r in ranked] == [1, 2]

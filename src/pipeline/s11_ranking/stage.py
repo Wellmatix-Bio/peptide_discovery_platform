@@ -8,6 +8,7 @@ from pydantic import BaseModel, ConfigDict, Field, StrictBool, model_validator
 
 from common.logging import get_logger
 from pipeline.base import CandidateStage, RunContext
+from pipeline.s11_ranking.pareto import pareto_fronts
 from schemas.brief import Brief
 from schemas.candidate import Candidate
 from schemas.run_config import StageConfig
@@ -105,7 +106,8 @@ class RankingResult(StrictModel):
     sequence: str
     status: Literal["ranked", "insufficient_evidence"]
     final_score: Unit | None
-    rank: int | None = None
+    final_score_rank: int | None = None  # 1-based position by weighted final_score
+    pareto_rank: int | None = None  # Pareto front across the activated modules' scores; 1 = non-dominated, ties share a rank
     evidence_coverage: Unit  # activated modules with a score / activated modules
     incomplete_evidence: bool
     modules: dict[ModuleName, ModuleResult]
@@ -746,7 +748,11 @@ class CandidateScorer:
 
 
 class CandidateRanker:
-    """Sorts by final_score descending; ties break on evidence_coverage, then stability, then candidate_id."""
+    """Sorts by final_score descending; ties break on evidence_coverage, then stability, then candidate_id.
+
+    pareto_rank is assigned separately and does not change the order: it layers the candidates by non-domination over the
+    modules the brief activates, and a module with no score counts as 0 there, so missing evidence cannot make a candidate dominate.
+    """
 
     @staticmethod
     def _tie_break_key(result: RankingResult) -> tuple[float, float, float, str]:
@@ -760,8 +766,11 @@ class CandidateRanker:
 
     def rank(self, results: list[RankingResult]) -> list[RankingResult]:
         ranked = [r for r in results if r.status == "ranked"]
+        objectives = [m for m in MODULE_NAMES if any(r.modules[m].activated for r in ranked)]
+        fronts = pareto_fronts([[r.modules[m].score or 0.0 for m in objectives] for r in ranked])
+        ranked = [r.model_copy(update={"pareto_rank": f}) for r, f in zip(ranked, fronts)]
         ranked.sort(key=self._tie_break_key)
-        return [r.model_copy(update={"rank": i + 1}) for i, r in enumerate(ranked)]
+        return [r.model_copy(update={"final_score_rank": i + 1}) for i, r in enumerate(ranked)]
 
 
 # Stage11Service: orchestrates scoring and ranking for a batch.

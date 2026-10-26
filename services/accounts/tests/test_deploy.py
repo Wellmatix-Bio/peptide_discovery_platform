@@ -87,7 +87,7 @@ def test_accounts_and_apis_run_as_non_root():
 
 
 def test_the_api_container_is_given_the_settings_it_forwards_to_the_worker():
-    """api.py's WORKER_ENV_KEYS is read from the process environment, so the API container must
+    """api.py's worker_env_keys is read from the process environment, so the API container must
     actually carry VERTEX_MODEL_STORE. If it does not, the worker falls back to
     model_sync.py's placeholder gs://TODO-bucket/model_store and fails during weight sync,
     minutes into a GPU run rather than at submit time. See docs/BASELINE.md."""

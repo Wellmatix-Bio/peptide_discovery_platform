@@ -1,6 +1,6 @@
 # End-to-end Job API Specification
 
-This specification covers **job creation, status checks, result reads and cancellation**.
+This specification covers **job creation, status checks, result reads and cancellation** for the two pipelines the API runs: **wound healing** (the default) and **metabolic** (weight control).
 Machine-readable contract: `openapi.yaml`, OpenAPI 3.1.
 Implementation: src/backend/api_e2e/api.py.
 Stage and configuration validation: src/schemas/stage_configs.py
@@ -22,11 +22,34 @@ not resume a previous run or submit separate stage groups.
 | Field | Type | Required | Meaning |
 |---|---|---|---|
 | `request_id` | string | Yes | Nonempty identifier for this submission |
+| `pipeline` | string | No | `wound_healing` (default) or `metabolic`. Selects the stage set and the worker image; it must match the shape of `stages` (see [Metabolic pipeline](#metabolic-pipeline)) |
 | `stages` | object | Yes | Stage name mapped to its parameters |
 
 Unknown top-level fields and unknown stage names are rejected. There is no
-top-level `seed`, `run_id`, or `job_id` input. The pipeline seed comes from
-`stages.s01_therapeutic_product_brief.seed` (default `42`).
+top-level `seed`, `run_id`, or `job_id` input. The pipeline seed comes from the brief stage's `seed`
+(`s01_therapeutic_product_brief` or `s01_metabolic_therapeutic_product_brief`; default `42`).
+
+### Choosing a pipeline
+
+`pipeline` picks the stage set, the worker image and the brief. The brief stage inside `stages` must agree with it.
+
+| | Wound healing | Metabolic |
+|---|---|---|
+| `pipeline` | `wound_healing` (default; may be omitted) | `metabolic` |
+| Brief stage (identifies the request shape) | `s01_therapeutic_product_brief` | `s01_metabolic_therapeutic_product_brief` |
+| Brief fields | wound context, desired functions, pathogens, min/max length (6-50), dosing interval | `target_receptors` (GLP1R, GIPR, GCGR), min/max length (5-50) |
+| Stages that differ | `s04_candidate_generation`, `s05_physchem_screening`, `s06_functional_models`, `s08_safety_developability`, `s11_ranking` | `s04_metabolic_candidate_generation`, `s05_metabolic_physchem_screening`, `s06_metabolic_functional_screening`, `s08_metabolic_safety_developability`, `s11_metabolic_ranking` |
+| Shared stages | `s07_structure_mechanism`, `s09_synthesis_cmc` | `s07_structure_mechanism`, `s09_synthesis_cmc` |
+| Worker image setting | `WORKER_IMAGE_URI` | `WORKER_METABOLIC_IMAGE_URI` |
+| Vertex job display name | `ai-peptide-discovery-e2e-<request_id, first 12 characters>` | `ai-peptide-discovery-metabolic-<request_id, first 12 characters>` |
+| Vertex job label `pipeline` | `wound-healing` | `metabolic` |
+| Example | [`example_request.json`](src/backend/api_e2e/example_request.json) | below |
+
+A request that mixes the two (for example a wound stage name under `"pipeline": "metabolic"`) returns 422.
+
+### Wound-healing pipeline
+
+`pipeline` omitted or `"wound_healing"`. Example:
 
 ```json
 {
@@ -55,7 +78,7 @@ Parameters go directly under each stage name. The API normalizes them into the
 worker's internal `enabled`/`params` representation. The internal wrapped form
 is also accepted, but flat parameter keys cannot be mixed with `params`.
 
-### Stage validation
+#### Stage validation
 
 | Stage | Default when omitted |
 |---|---|
@@ -83,6 +106,49 @@ runtime `Brief` model.
 Stage 11 weights, modifiers, normalization, and input mappings live in code.
 Send `"s11_ranking": {}` or omit it. The current normalizer discards supplied
 Stage 11 settings and always uses an enabled stage with no parameters.
+
+### Metabolic pipeline
+
+`"pipeline": "metabolic"` runs the metabolism / weight-control branch on the same endpoint. `stages` must then
+be the metabolic request: it is recognized by `s01_metabolic_therapeutic_product_brief`, and the wound-healing
+stage names are rejected. A `pipeline` that disagrees with the shape of `stages` returns 422 and names the
+value to use. The job runs on the image in `WORKER_METABOLIC_IMAGE_URI` and is labelled `pipeline: metabolic`.
+
+| Stage | Default when omitted |
+|---|---|
+| `s01_metabolic_therapeutic_product_brief` | Required; omission is rejected |
+| `s04_metabolic_candidate_generation` | Schema defaults |
+| `s05_metabolic_physchem_screening` | Schema defaults |
+| `s06_metabolic_functional_screening` | Schema defaults |
+| `s07_structure_mechanism` | Schema defaults (shared with the wound pipeline; stays on) |
+| `s08_metabolic_safety_developability` | Schema defaults |
+| `s09_synthesis_cmc` | Schema defaults (shared with the wound pipeline; stays on) |
+| `s11_metabolic_ranking` | Schema defaults |
+
+The brief (`MetabolicBrief`) requires `min_length` and `max_length` (5-50) and `target_receptors` (GLP1R, GIPR
+or GCGR, exact spelling; duplicates are dropped). Stage 8 takes `hemolysis_screening` (default `true`);
+`false` skips hemolysis and Stage 11 drops it from the safety score. Stage 6 predicts each candidate's anti-inflammatory probability and rejects those below `anti_inflammatory_probability_min` (default `0.5`); Stage 11 also scores it. Stage 4 can override the length range and receptors,
+and takes `n_peptides`, `route_a_ga_params`, `lam` and `tol`. The OpenAPI schemas list every stage's parameters.
+
+```json
+{
+  "request_id": "request-002",
+  "pipeline": "metabolic",
+  "stages": {
+    "s01_metabolic_therapeutic_product_brief": {
+      "brief": {
+        "target_receptors": ["GLP1R", "GIPR"],
+        "min_length": 6,
+        "max_length": 40
+      }
+    },
+    "s04_metabolic_candidate_generation": {"n_peptides": 100},
+    "s08_metabolic_safety_developability": {"hemolysis_screening": true, "hemolysis_probability_reject_max": 0.5}
+  }
+}
+```
+
+### Submission behaviour (both pipelines)
 
 The worker starts when the request-path config appears, waiting at most 120 seconds
 for a missing file. The API returns only after both writes complete. A config
@@ -210,11 +276,14 @@ Each entry of `candidates` is a flat
 tree is not included; read `candidates_final.json` for it). Scalar fields are
 `null` when the producing stage did not run or abstained.
 
+**The shape depends on the pipeline.** The response carries `pipeline` (`wound_healing` or `metabolic`), taken from the job's stored config, and `candidates` has the matching shape. The table below is the wound-healing one. Metabolic candidates are described under [Metabolic candidate fields](#metabolic-candidate-fields).
+
 | Field | Source |
 |---|---|
 | `id` | Candidate `id`; `"?"` if the record has none |
 | `sequence` | Top-level candidate `sequence` (not under `predictions`) |
-| `ranking` | `predictions.ranking.rank`, 1-based position among ranked candidates; `null` if not ranked |
+| `final_score_rank` | `predictions.ranking.final_score_rank`, 1-based position by weighted `final_score`; `null` if not ranked |
+| `pareto_rank` | `predictions.ranking.pareto_rank`, the Pareto front over the ranking modules' scores (after flag deductions): `1` is non-dominated, and candidates on the same front share a rank, so it is not a position. It does not affect the order of `final_score_rank`; `null` if not ranked |
 | `final_score` | `predictions.ranking.final_score`; `null` if not ranked |
 | `evidence_coverage` | `predictions.ranking.evidence_coverage` |
 | `missing_modules` | `predictions.ranking.missing_modules` |
@@ -239,6 +308,29 @@ tree is not included; read `candidates_final.json` for it). Scalar fields are
 Pathogen keys here use spaces (`Staphylococcus aureus`), unlike the request's
 brief vocabulary, which uses underscores (`Staphylococcus_aureus`). A key
 outside the listed pathogens fails response validation.
+
+### Metabolic candidate fields
+
+For a `metabolic` job each entry of `candidates` is a `MetabolicCandidateResponse`. The top-level fields (`job_id`, `run_id`, `status`, `n_final`, `ranked_candidates`, `insufficient_evidence_candidates`, `component_stats`) are the same as above. Per-receptor fields are objects keyed by `GLP1R`, `GIPR` and `GCGR`; a value is `null` when it was not predicted.
+
+| Field | Source |
+|---|---|
+| `id`, `sequence` | as for wound healing |
+| `final_score_rank`, `pareto_rank`, `final_score`, `evidence_coverage`, `missing_modules` | `predictions.ranking.*`, as for wound healing |
+| `pec50` | predicted potency per receptor, -log10(EC50 in M) |
+| `ec50_nm` | the same potency as EC50 in nM, floored at the Stage 6 `ec50_floor_nm` |
+| `binding_pkd` | predicted binding per receptor, pKd = 9 - log10(Kd in nM) |
+| `agonism_probability` | agonism classifier, P(EC50 below 1 nM) per receptor; `null` when the classifier is not installed |
+| `pec50_pkd_gap` | disagreement between the pEC50 and pKd models (geometric means over the target receptors); Route A candidates only, `null` for others |
+| `metabolic_activity_score` | Stage 6 combined potency score in [0, 1] |
+| `anti_inflammatory_probability` | `anti_inflammatory_probability` |
+| `half_life_minutes` | `plasma_half_life.minutes` |
+| `hemolytic_activity_phc50`, `p_hemolytic` | `hemolysis.phc50` and `hemolysis.p_hemolytic`; `null` when hemolysis screening is off |
+| `cleavage_stability`, `solubility`, `aggregation_tendency`, `cytotoxicity_probability` | `<name>.score` |
+| `molecular_weight`, `net_charge`, `instability_index`, `deamidation_risk`, `oxidation_risk` | as for wound healing |
+| `activated_pathways`, `inhibited_pathways`, `undetermined_pathways` | `mechanism.*`, as for wound healing |
+
+The wound-only fields (`amp_probability`, `log_mic_um`, `pmbic`, `angiogenic_activity`, `proliferation_probability`, `migration_probability`) are not in the metabolic shape.
 
 ## Cancel a job
 
@@ -305,7 +397,8 @@ forced termination; Vertex is authoritative.
 ## Server settings
 
 Required: `VERTEX_CLOUD_PROJECT`, `VERTEX_LOCATION`, `VERTEX_ARTIFACTS_DIR`, `VERTEX_MODEL_STORE`,
-`SEED_CANDIDATES_FILE`, `WORKER_IMAGE_URI`, `WORKER_SERVICE_ACCOUNT`.
+`SEED_CANDIDATES_FILE`, `WORKER_IMAGE_URI`, `WORKER_SERVICE_ACCOUNT`; `WORKER_METABOLIC_IMAGE_URI` is also
+required for `pipeline: metabolic` jobs.
 Use the project ID or number, not the display name. Artifact/model/seed paths
 must be GCS URIs. The service-account setting is an email, not a key file.
 

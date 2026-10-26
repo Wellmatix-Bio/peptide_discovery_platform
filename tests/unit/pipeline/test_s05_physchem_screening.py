@@ -35,6 +35,7 @@ CLEAN = {
     "length": 16,
     "net_charge": 2,
     "isoelectric_point": 11.0,  # far from pH 7.4; a pI near it flags by design
+    "hydrophobicity": 0.0,
     "hydrophobic_fraction": 0.3,
     "hydrophobic_moment": 0.2,
     "amphipathicity": 0.2,
@@ -128,3 +129,12 @@ def test_a_reject_still_outranks_an_unscreened_check():
     """Ordering matters: an unrun screen must not downgrade a genuine reject to a flag."""
     got = verdict(secondary_structure_consistency=S4PRED_ABSENT, molecular_weight=1e9)
     assert got["overall"] == "reject"
+
+
+def test_hydrophobicity_rejects_on_mean_eisenberg_not_on_residue_share():
+    """A Gly/Pro-rich peptide has a high share of 'hydrophobic-side' residues but a low mean, and must not be rejected."""
+    stage = Stage5.__new__(Stage5)
+    gly_pro_rich = {**CLEAN, "hydrophobic_fraction": 1.0, "hydrophobicity": stage.compute_hydrophobicity("CAGGGAPP")}
+    oily = {**CLEAN, "hydrophobicity": stage.compute_hydrophobicity("LLIVFAWLLIVFAWL")}
+    assert stage.compute_screening_verdict("CAGGGAPP", gly_pro_rich, {}, 50)["properties"]["hydrophobicity"] == "pass"
+    assert stage.compute_screening_verdict("LLIVFAWLLIVFAWL", oily, {}, 50)["properties"]["hydrophobicity"] == "reject"

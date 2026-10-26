@@ -1,0 +1,77 @@
+# Stage 4 (metabolism / weight control): reference-guided generation scored on the brief's target receptors.
+from __future__ import annotations
+
+from pipeline.base import RunContext
+from pipeline.s04_generation.routeA_metabolic import RouteAMetabolic
+from pipeline.s04_generation.routeB import RouteB
+from pipeline.s04_generation.stage import Stage4
+from schemas.candidate import Candidate
+from schemas.run_config import StageConfig
+from schemas.stage4_route import Stage4Route
+
+
+def _length_range(config: StageConfig, ctx: RunContext) -> tuple[int, int]:
+    """Stage params win; the brief supplies whichever bound the params leave unset."""
+    return (
+        config.params.get("min_length") or ctx.brief.min_length,
+        config.params.get("max_length") or ctx.brief.max_length,
+    )
+
+
+def _build_route_a_metabolic(
+    candidates: list[Candidate], config: StageConfig, ctx: RunContext
+) -> Stage4Route:
+    """One GA run per incoming candidate; the brief's receptors set the GA fitness and seed screening."""
+    receptors = config.params.get("target_receptors") or getattr(
+        ctx.brief, "target_receptors", None
+    )
+    min_length, max_length = _length_range(config, ctx)
+    shared = {
+        "min_length": min_length,
+        "max_length": max_length,
+        **({"target_receptors": list(receptors)} if receptors else {}),
+        "ga_params": {
+            "lam": config.params.get("lam", 0.5),
+            "tol": config.params.get("tol", 1.0),
+            **config.params.get("route_a_ga_params", {}),
+            "random_seed": ctx.seed,
+        },
+    }
+    return RouteAMetabolic(
+        {
+            "seed_candidates": [
+                {"seed_sequence": c.sequence} for c in candidates if c.sequence
+            ],
+            "feature_extractor": ctx.feature_extractor,
+            **shared,
+        }
+    )
+
+
+def _build_route_b_metabolic(
+    candidates: list[Candidate], config: StageConfig, ctx: RunContext
+) -> Stage4Route:
+    """Route B (ProtGPT2 + LoRA) with no conditioning tags: the metabolic target has no tag token."""
+    min_length, max_length = _length_range(config, ctx)
+    return RouteB(
+        {
+            "tags": [],
+            "n_peptides": config.params.get("n_peptides", 100),
+            "min_length": min_length,
+            "max_length": max_length,
+            "max_new_tokens": config.params.get("max_new_tokens", 120),
+            "batch_size": config.params.get("batch_size", 16),
+            "max_attempts": config.params.get("max_attempts", 20),
+            "generator": config.params.get("generator"),
+        }
+    )
+
+
+class Stage4Metabolic(Stage4):
+    """Stage 4 with the metabolic Route A and an untagged Route B in place of the wound-healing routes; opt-in."""
+
+    name = "s04_metabolic_candidate_generation"
+    routes = {
+        "Route A (metabolic)": _build_route_a_metabolic,
+        "Route B (untagged)": _build_route_b_metabolic,
+    }

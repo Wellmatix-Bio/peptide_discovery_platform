@@ -1,9 +1,9 @@
-﻿# Stage 1 product brief / Target Product Profile.
+# Stage 1 product brief / Target Product Profile.
 from __future__ import annotations
 import json
 from pathlib import Path
-from typing import List
-from pydantic import BaseModel, Field, model_validator
+from typing import List, Literal
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 
 class Brief(BaseModel):
@@ -28,3 +28,23 @@ class Brief(BaseModel):
         with open(path, "r") as f:
             data = json.load(f)
         return cls(**data)
+
+
+MetabolicReceptor = Literal["GLP1R", "GIPR", "GCGR"]
+
+
+class MetabolicBrief(Brief):
+    """Stage 1 brief for metabolism / weight control; the single configuration Stages 4, 6, 8 and 11 read.
+
+    The wound fields stay on the base class, empty. Lengths are held to the range the metabolic models cover.
+    """
+
+    min_length: int = Field(ge=5, le=50)
+    max_length: int = Field(ge=5, le=50)
+    #: Receptors the peptide should activate: Stage 4 GA fitness, Stage 6 screening and Stage 11 ranking.
+    target_receptors: List[MetabolicReceptor] = Field(min_length=1)
+
+    @field_validator("target_receptors")
+    @classmethod
+    def _drop_duplicate_receptors(cls, value):
+        return list(dict.fromkeys(value))

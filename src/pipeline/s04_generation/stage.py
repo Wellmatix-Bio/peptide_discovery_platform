@@ -25,6 +25,7 @@ def _build_route_a(
         "max_length": ctx.brief.max_length,
         **config.params.get("route_a_ga_params", {}),
         **config.params.get("route_a_constraint_config", {}),
+        "random_seed": ctx.seed,
     }
     return RouteA(
         {

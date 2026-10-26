@@ -1,0 +1,28 @@
+{
+  "model_name": "collagen_ecm_predictor_v1",
+  "task": "positive-unlabeled ranking score for collagen/ECM-promoting peptides; mean P(active) across bags in [0, 1]",
+  "architecture": "StandardScaler -> PCA (95% variance, 62 components) -> 500 bagged L2 logistic regressions (C=0.01, class_weight=balanced); each bag = all positives vs all negatives + 51 random unlabeled",
+  "esm_model_name": "facebook/esm2_t30_150M_UR50D",
+  "esm_embedding": "mean-pooled last_hidden_state over residue positions, BOS/EOS excluded",
+  "embedding_dim": 640,
+  "n_components": 62,
+  "n_bags": 500,
+  "weights_dir": "model_store/model_weights/collagen_ecm_predictor_v1",
+  "weights_layout": "reducer.joblib (scaler + PCA), bags.npz (coef 500x62, intercept 500), metadata.json",
+  "training_data": {
+    "n_train": {"P": 51, "N": 22, "U": 242},
+    "n_total": 315,
+    "length_range": [2, 50],
+    "residues": "20 standard amino acids",
+    "source_file": "datasets/Collagen Production/combined_collagen_data.csv",
+    "cv": "StratifiedGroupKFold(5) on CD-HIT 90% identity clusters, repeated 20 times; scaler, PCA and C refit inside each training fold"
+  },
+  "cv_metrics": {
+    "source": "pipeline.ipynb, pooled out-of-fold scores over 20 repeats",
+    "random_ranking_precision_baseline": 0.16,
+    "precision@10": {"mean": 0.875, "std": 0.044},
+    "precision@20": {"mean": 0.890, "std": 0.058},
+    "recall_N_score_below_0.5": {"mean": 0.557, "std": 0.041},
+    "recall_P_score_at_least_0.5": {"mean": 0.873, "std": 0.030}
+  }
+}

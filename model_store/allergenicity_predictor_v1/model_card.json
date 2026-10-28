@@ -1,0 +1,27 @@
+{
+  "model_name": "allergenicity_predictor_v1",
+  "task": "binary classification of protein sequences as allergen (positive) vs non-allergen; P(allergen) in [0, 1], the mean of three member probabilities, called allergen at >= 0.5",
+  "architecture": "equal-weight mean of three probabilities: RBF SVC (StandardScaler -> SVC, C=1, gamma=0.0005; sigmoid of the margin), LDA (StandardScaler -> LinearDiscriminantAnalysis; posterior) and an MLP (640-480-240-64-1, BatchNorm + GELU, dropout 0.5; sigmoid of the logit). The notebook's random forest is not part of the ensemble",
+  "esm_model_name": "facebook/esm2_t30_150M_UR50D",
+  "esm_embedding": "mean-pooled last_hidden_state over residue positions, BOS/EOS excluded",
+  "embedding_dim": 640,
+  "weights_dir": "model_store/model_weights/allergenicity_predictor_v1",
+  "weights_layout": "SVM.joblib, LDA.joblib (sklearn pipelines), MLP.pt (joblib dict: state, scaler, d_in)",
+  "training_data": {
+    "n_train": {"allergen": 8060, "non_allergen": 8060},
+    "n_validation": {"allergen": 2015, "non_allergen": 2015},
+    "length_range": [50, 3408],
+    "median_length": {"allergen": 170, "non_allergen": 345},
+    "residues": "20 standard amino acids",
+    "source_files": "datasets/AlgPred 2.0/{train,validation}_{positive,negative}.txt",
+    "note": "full-length proteins; no sequence is shorter than 50 residues"
+  },
+  "validation_metrics": {
+    "source": "Models/Allergenicity/training.ipynb, threshold at each member's own class boundary",
+    "SVM": {"Sens": 0.8104, "Spec": 0.9792, "Acc": 0.8948, "AUC": 0.9710, "MCC": 0.8011},
+    "LDA": {"Sens": 0.8069, "Spec": 0.9653, "Acc": 0.8861, "AUC": 0.9629, "MCC": 0.7821},
+    "MLP": {"Sens": 0.7380, "Spec": 0.9861, "Acc": 0.8620, "AUC": 0.9453, "MCC": 0.7474},
+    "ensemble_mean_of_probabilities": {"Sens": 0.7742, "Spec": 0.9811, "Acc": 0.8777, "AUC": 0.9731, "MCC": 0.7720},
+    "caveat": "the ensemble rule is not in the notebook; it was chosen here by validation AUC and does not beat SVM alone on MCC (0.801)"
+  }
+}

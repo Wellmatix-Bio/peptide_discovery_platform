@@ -1,0 +1,20 @@
+{
+  "model_name": "antioxidant_predictor_v1",
+  "task": "binary classification of peptides as antioxidant vs not; probability in [0, 1], called antioxidant at >= 0.5",
+  "architecture": "average-logit ensemble: sigmoid(mean of the logits of CNN, BiLSTM and Transformer base models on one-hot residues, padded to 68); the notebook's stacker is not used",
+  "input_encoding": "one-hot over 20 standard amino acids, zero-padded to 68",
+  "weights_dir": "model_store/model_weights/antioxidant_predictor_v1",
+  "weights_layout": "cnn.pt, bilstm.pt, transformer.pt (state_dicts)",
+  "training_data": {
+    "n_train": {"neg": 845, "pos": 816},
+    "n_val": {"neg": 212, "pos": 204},
+    "length_range": [1, 68],
+    "residues": "20 standard amino acids",
+    "source_file": "Models/Antioxidant/data/Antiox_dataset.xls (sheets Antiox_train, Antiox_test)",
+    "split": "train sheet split 80/20 into train/val by CD-HIT 90% identity clusters (StratifiedGroupKFold, seed 42); base models early-stopped on val loss; Antiox_test sheet (444 neg / 447 pos, lengths 1-29) held out"
+  },
+  "test_metrics": {
+    "source": "Models/Antioxidant/models/B/training.ipynb, threshold 0.5",
+    "avg_logit": {"accuracy": 0.899, "mcc": 0.801, "auroc": 0.950, "auprc": 0.964, "precision": 0.936, "recall": 0.857}
+  }
+}

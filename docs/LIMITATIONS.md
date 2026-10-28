@@ -20,6 +20,10 @@
 - **Not modeled:** GI tolerability, immunogenicity, selectivity, signaling bias, weight-loss efficacy and dosing.
 - **Generation:** Route B is untagged, so it is not conditioned on the target. Nevertheless, a PEFT modified model was used, so the results can be influenced by fine-tuned AMP, ANTIBIOFILM and ANTIFUNGAL masked data.
 
+## Cosmetic pipeline
+
+- **No penetration model, and no penetration filter.** Stage 8 computes a rule-based penetration check (epidermis: MW up to 1000 Da or a lipid tail; dermis: lipid tail required) and records it as `predictions["penetration"]`, but it no longer rejects. The rule was too blunt: nothing in Stage 4 adds a lipid tail, so a dermis brief rejected every candidate (all 193 of 209 that reached Stage 8 in `cosmetic-001` failed it). Until a model exists, candidates are not screened for skin penetration at all, so a dermis or epidermis target says nothing about whether the peptide reaches it. Stage 11's `delivery_fit` scores molecular weight only.
+
 ## Benchmark
 
 See [BENCHMARK.md](BENCHMARK.md). What limits what it can show:

@@ -1,0 +1,18 @@
+{
+    "functions": {
+        "primary": "pigmentation",
+        "secondary": ["antioxidant"]
+    },
+    "target_depth": "epidermis",
+    "application": {
+        "area": "face",
+        "sensitive_skin": false
+    },
+    "product": {
+        "ph": 5.0
+    },
+    "peptide": {
+        "min_length": 6,
+        "max_length": 10
+    }
+}

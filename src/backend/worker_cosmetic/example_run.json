@@ -1,0 +1,21 @@
+{
+  "run_id": "cosmetic-001",
+  "seed": 42,
+  "seed_candidates_path": "data/raw/cosmetic_seed_peptides.fasta",
+  "artifacts_dir": "./artifacts",
+  "model_store": "./model_store",
+  "stages": {
+    "s01_cosmetic_therapeutic_product_brief": {
+      "enabled": true,
+      "params": {
+        "brief": {
+          "functions": {"primary": "collagen_ecm", "secondary": ["antioxidant"]},
+          "application": {"area": "face", "sensitive_skin": false},
+          "product": {"ph": 5.5},
+          "peptide": {"min_length": 6, "max_length": 12}
+        },
+        "seed": 42
+      }
+    }
+  }
+}

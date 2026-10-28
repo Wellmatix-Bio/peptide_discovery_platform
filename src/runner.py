@@ -30,6 +30,7 @@ logger = get_logger(__name__)
 SETUP_STAGE_TARGET_FIELD = {
     "s01_therapeutic_product_brief": "brief",
     "s01_metabolic_therapeutic_product_brief": "brief",
+    "s01_cosmetic_therapeutic_product_brief": "brief",
     "s02_wound_biology_and_targets": "objectives",
     # "s03_data_integration": "standardized_records",
 }

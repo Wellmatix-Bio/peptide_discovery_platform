@@ -1,0 +1,17 @@
+{
+    "functions": {
+        "primary": "collagen_ecm",
+        "secondary": ["antioxidant"]
+    },
+    "application": {
+        "area": "eye_area",
+        "sensitive_skin": false
+    },
+    "product": {
+        "ph": 5.5
+    },
+    "peptide": {
+        "min_length": 6,
+        "max_length": 12
+    }
+}

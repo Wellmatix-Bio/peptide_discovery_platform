@@ -1,0 +1,23 @@
+{
+  "model_name": "pigmentation_predictor_v1",
+  "task": "binary classification of peptides as TIP (positive) vs non-TIP; P(TIP) in [0, 1], called TIP at >= 0.5. TIP is most likely tyrosinase inhibitory peptide, unconfirmed in the source data",
+  "architecture": "equal-weight soft-voting ensemble of RandomForest (500 trees, depth 10, leaf 3), XGBoost (300 trees, depth 3, lr 0.05), sigmoid-calibrated RBF SVC (C=10, gamma=0.001, scaled) and shrinkage LDA (lsqr, shrinkage 0.5, scaled)",
+  "esm_model_name": "facebook/esm2_t30_150M_UR50D",
+  "esm_embedding": "mean-pooled last_hidden_state over residue positions, BOS/EOS excluded",
+  "embedding_dim": 640,
+  "weights_dir": "model_store/model_weights/pigmentation_predictor_v1",
+  "weights_layout": "ensemble.joblib (dict: ensemble, embedding_metadata, threshold, classes, seed, feature_dimension), run_metadata.json",
+  "training_data": {
+    "n_train": {"TIP": 165, "non_TIP": 401},
+    "n_total_dataset": {"TIP": 206, "non_TIP": 502},
+    "length_range": [2, 22],
+    "residues": "20 standard amino acids",
+    "source_file": "Models/Pigmentation model/data/new206TIP.fasta, new502nonTIP.fasta",
+    "split": "stratified random 80/20 (566 train / 142 test), seed 42; hyperparameters tuned by 5-fold CV AUC on train only; model not refit on the test set"
+  },
+  "test_metrics": {
+    "source": "training.ipynb, held-out 41 TIP / 101 non-TIP, threshold 0.5",
+    "Ensemble": {"Sn": 0.780, "Sp": 0.921, "ACC": 0.880, "MCC": 0.707, "F1": 0.790, "AUC": 0.936},
+    "caveat": "random split, so homologous peptides may span train and test; does not show generalization to unrelated families"
+  }
+}

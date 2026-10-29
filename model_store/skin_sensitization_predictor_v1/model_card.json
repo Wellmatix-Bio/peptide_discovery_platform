@@ -1,0 +1,22 @@
+{
+  "model_name": "skin_sensitization_predictor_v1",
+  "task": "binary classification of peptides as skin sensitizer (positive) vs non-sensitizer; P(sensitizer) in [0, 1], the mean of four member probabilities, called sensitizer at >= 0.55 (fixed)",
+  "architecture": "equal-weight soft vote of RandomForest (500 trees, min_samples_leaf 2), LDA, RBF SVC and an MLP (14-480-200-64-1, BatchNorm + GELU, dropout 0.5), all trained with sensitizers weighted 5x",
+  "input": "peptide sequence (+ optional modifications) -> SMILES -> 14 RDKit/alert features",
+  "features": ["mol_weight", "logp", "tpsa", "hbd", "hba", "rotatable_bonds", "formal_charge", "heavy_atoms", "aromatic_rings", "fraction_csp3", "heteroatoms", "sulfur_atoms", "carbonyl_groups", "electrophilic_alerts"],
+  "decision_threshold": 0.55,
+  "weights_dir": "model_store/model_weights/skin_sensitization_predictor_v1",
+  "weights_layout": "RF.joblib, LDA.joblib, SVM.joblib (sklearn pipelines), MLP.pt (joblib dict: state, scaler, n_in, p_drop)",
+  "training_data": {
+    "n_rows": 1084,
+    "sensitizers": 169,
+    "sources": {"hppt": 921, "tx0c00186": 138, "peptides": 25},
+    "note": "mostly small molecules; 25 peptides (9 positive); the other 24 peptides were held out"
+  },
+  "validation_metrics": {
+    "source": "Models/SkinSense/training.ipynb, 24 held-out peptides, exploratory (set already inspected)",
+    "ensemble_at_0.55": {"TP": 5, "FP": 3, "TN": 13, "FN": 3, "balanced_accuracy": 0.719, "precision": 0.625, "recall": 0.625, "AUC": 0.734},
+    "cv_auc_training_data": {"RF": 0.863, "MLP": 0.836, "SVM": 0.835, "LDA": 0.802},
+    "caveat": "0.55 was explored for the RF on the held-out peptides, not validated for this ensemble"
+  }
+}

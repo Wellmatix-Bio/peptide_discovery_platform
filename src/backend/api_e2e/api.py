@@ -24,9 +24,9 @@ from common import storage
 
 # Imported for its side effect: common/env.py loads .env into os.environ; do not remove as unused.
 from common import env  # noqa: F401
-from schemas.brief import Brief, MetabolicBrief
+from schemas.brief import Brief, CosmeticBrief, MetabolicBrief
 from schemas.e2e_config import validate_job_config
-from schemas.stage_configs import E2ERequest, MetabolicE2ERequest
+from schemas.stage_configs import CosmeticE2ERequest, E2ERequest, MetabolicE2ERequest
 
 app = FastAPI(title="End-to-end Pipeline Job API")
 
@@ -49,7 +49,7 @@ def job_client():
     )
 
 
-Pipeline = Literal["wound_healing", "metabolic"]
+Pipeline = Literal["wound_healing", "metabolic", "cosmetic"]
 
 
 def _stages_pipeline(stages) -> str:
@@ -59,11 +59,11 @@ def _stages_pipeline(stages) -> str:
         if isinstance(stages, dict)
         else stages.model_fields_set | set(type(stages).model_fields)
     )
-    return (
-        "metabolic"
-        if "s01_metabolic_therapeutic_product_brief" in keys
-        else "wound_healing"
-    )
+    if "s01_cosmetic_therapeutic_product_brief" in keys:
+        return "cosmetic"
+    if "s01_metabolic_therapeutic_product_brief" in keys:
+        return "metabolic"
+    return "wound_healing"
 
 
 class CreateJobRequest(BaseModel):
@@ -75,6 +75,7 @@ class CreateJobRequest(BaseModel):
         Union[
             Annotated[E2ERequest, Tag("wound_healing")],
             Annotated[MetabolicE2ERequest, Tag("metabolic")],
+            Annotated[CosmeticE2ERequest, Tag("cosmetic")],
         ],
         Discriminator(_stages_pipeline),
     ]
@@ -84,6 +85,8 @@ class CreateJobRequest(BaseModel):
         actual = (
             "metabolic"
             if isinstance(self.stages, MetabolicE2ERequest)
+            else "cosmetic"
+            if isinstance(self.stages, CosmeticE2ERequest)
             else "wound_healing"
         )
         if actual != self.pipeline:
@@ -143,9 +146,21 @@ def create_job(request: CreateJobRequest):
     parent = f"projects/{required('VERTEX_CLOUD_PROJECT')}/locations/{required('VERTEX_LOCATION')}"
     artifacts = required("VERTEX_ARTIFACTS_DIR")
     models = required("VERTEX_MODEL_STORE")
-    seeds = required("SEED_CANDIDATES_FILE")
+    # Each pipeline has its own seed file; the request cannot choose it.
+    seeds = required(
+        {
+            "metabolic": "SEED_CANDIDATES_FILE_METABOLIC",
+            "cosmetic": "SEED_CANDIDATES_FILE_COSMETIC",
+        }.get(request.pipeline, "SEED_CANDIDATES_FILE")
+    )
     metabolic = request.pipeline == "metabolic"
-    image = required("WORKER_METABOLIC_IMAGE_URI" if metabolic else "WORKER_IMAGE_URI")
+    cosmetic = request.pipeline == "cosmetic"
+    image = required(
+        {
+            "metabolic": "WORKER_METABOLIC_IMAGE_URI",
+            "cosmetic": "WORKER_COSMETIC_IMAGE_URI",
+        }.get(request.pipeline, "WORKER_IMAGE_URI")
+    )
     service_account = required("WORKER_SERVICE_ACCOUNT")
     machine_type = required("MACHINE_TYPE")
     accelerator_type = required("ACCELERATOR_TYPE")
@@ -161,11 +176,10 @@ def create_job(request: CreateJobRequest):
     staging_dir = storage.join(artifacts, "requests", request.request_id)
     staging_config_path = storage.join(staging_dir, "config.json")
     try:
-        brief_stage = (
-            "s01_metabolic_therapeutic_product_brief"
-            if metabolic
-            else "s01_therapeutic_product_brief"
-        )
+        brief_stage = {
+            "metabolic": "s01_metabolic_therapeutic_product_brief",
+            "cosmetic": "s01_cosmetic_therapeutic_product_brief",
+        }.get(request.pipeline, "s01_therapeutic_product_brief")
         config = validate_job_config(
             {
                 "artifacts_dir": artifacts,
@@ -175,13 +189,14 @@ def create_job(request: CreateJobRequest):
             },
             pipeline=request.pipeline,
         )
-        (MetabolicBrief if metabolic else Brief).model_validate(
-            config.for_stage(brief_stage).params["brief"]
+        brief_model = {"metabolic": MetabolicBrief, "cosmetic": CosmeticBrief}.get(
+            request.pipeline, Brief
         )
+        brief_model.model_validate(config.for_stage(brief_stage).params["brief"])
     except (ValueError, TypeError) as exc:
         raise HTTPException(422, str(exc)) from exc
     custom_job = {
-        "display_name": f"ai-peptide-discovery-{'metabolic' if metabolic else 'e2e'}-{request.request_id[:12]}",
+        "display_name": f"ai-peptide-discovery-{ {'metabolic': 'metabolic', 'cosmetic': 'cosmetic'}.get(request.pipeline, 'e2e') }-{request.request_id[:12]}",
         "labels": {
             "service": "battery-ai",
             "pipeline": request.pipeline.replace("_", "-"),
@@ -529,15 +544,147 @@ def _metabolic_candidate_response(candidate: dict) -> MetabolicCandidateResponse
     )
 
 
+class CosmeticComponentScore(BaseModel):
+    score: float | None
+    screened: bool
+
+
+class CosmeticCandidateResponse(BaseModel):
+    id: str = "?"
+    sequence: str | None = None
+    final_score: float | None = None
+    final_score_rank: int | None = None
+    pareto_rank: int | None = None
+    evidence_coverage: float | None = None
+    not_screened: list[str] = []
+    component_scores: dict[str, CosmeticComponentScore] = {}
+    primary_function: str | None = None
+    functional_scores: dict[str, dict] = {}
+    antimicrobial_probability: float | None = None
+    molecular_weight: float | None = None
+    net_charge: float | None = None
+    hydrophobic_moment: float | None = None
+    physchem_flags: list[str] = []
+    physchem_flag_count: int | None = None
+    aggregation_tendency: float | None = None
+    solubility: float | None = None
+    irritation_tier: str | None = None
+    irritation_score: float | None = None
+    # penetration_passed: REMINDER, do not add back without restoring the Stage 8 reject. The penetration filter is
+    # commented out (no penetration model yet; see docs/TODO.md and docs/LIMITATIONS.md).
+    skin_sensitizer: bool | None = None
+    skin_sensitization_probability: float | None = None
+    hemolysis_probability: float | None = None
+    cytotoxicity: dict[str, dict] = {}
+    half_life_log10_seconds: float | None = None
+    allergenicity_probability: float | None = None
+    cleavage_stability: float | None = None
+    safety_flags: list[str] = []
+    synthesis_feasibility_probability: float | None = None
+    synthesis_flags: dict[str, list[int]] = {}
+
+
+class CosmeticJobResultsResponse(BaseModel):
+    pipeline: Literal["cosmetic"] = "cosmetic"
+    job_id: str
+    run_id: str
+    status: str
+    n_final: int | None = None
+    ranked_candidates: int | None = None
+    insufficient_evidence_candidates: int | None = None
+    component_stats: dict[str, ComponentStats] = Field(default_factory=dict)
+    candidates: list[CosmeticCandidateResponse] = []
+
+
 def _run_pipeline(run_dir: str, candidates: list[dict]) -> Pipeline:
     """The run's pipeline: from the config the API stored with the job, else from the shape of its candidates."""
     try:
         config = json.loads(storage.read_text(storage.join(run_dir, "config.json")))
-        brief_stage = (config.get("stages") or {}).get("s01_metabolic_therapeutic_product_brief") or {}
-        return "metabolic" if brief_stage.get("enabled") else "wound_healing"
+        stages = config.get("stages") or {}
+        for pipeline, brief_stage in (
+            ("cosmetic", "s01_cosmetic_therapeutic_product_brief"),
+            ("metabolic", "s01_metabolic_therapeutic_product_brief"),
+        ):
+            if (stages.get(brief_stage) or {}).get("enabled"):
+                return pipeline
+        return "wound_healing"
     except Exception:  # noqa: BLE001 - an older run or an unreadable config: infer from the candidates
-        metabolic = any("ec50_nm" in (c.get("predictions") or {}) for c in candidates)
-        return "metabolic" if metabolic else "wound_healing"
+        if any("ec50_nm" in (c.get("predictions") or {}) for c in candidates):
+            return "metabolic"
+        if any("components" in ((c.get("predictions") or {}).get("ranking") or {}) for c in candidates):
+            return "cosmetic"
+        return "wound_healing"
+
+
+def _cosmetic_component_stats(candidates: list[dict]) -> dict[str, ComponentStats]:
+    """Mean/median/min/max per ranking component over the candidates that screened it."""
+    values_by_component: dict[str, list[float]] = {}
+    for candidate in candidates:
+        components = ((candidate.get("predictions") or {}).get("ranking") or {}).get("components") or {}
+        for name, component in components.items():
+            if component.get("screened") and component.get("score") is not None:
+                values_by_component.setdefault(name, []).append(component["score"])
+    return {
+        name: ComponentStats(
+            count=len(values),
+            mean=statistics.fmean(values),
+            median=statistics.median(values),
+            min=min(values),
+            max=max(values),
+        )
+        for name, values in values_by_component.items()
+    }
+
+
+def _cosmetic_candidate_response(candidate: dict) -> CosmeticCandidateResponse:
+    preds = candidate.get("predictions") or {}
+    ranking = preds.get("ranking") or {}
+    components = ranking.get("components") or {}
+    verdict = preds.get("functional_verdict") or {}
+    irritation = preds.get("irritation") or {}
+    skin = preds.get("skin_sensitization") or {}
+    cleavage = preds.get("cleavage_stability") or {}
+    half_life = preds.get("half_life") or {}
+    allergen = preds.get("allergenicity") or {}
+    synthesis = preds.get("synthesis_feasibility") or {}
+    hemolysis = preds.get("hemolysis") or {}
+    aggregation = preds.get("aggregation_tendency") or {}
+    solubility = preds.get("solubility") or {}
+    return CosmeticCandidateResponse(
+        id=candidate.get("id", "?"),
+        sequence=candidate.get("sequence"),
+        final_score=ranking.get("final_score"),
+        final_score_rank=ranking.get("final_score_rank"),
+        pareto_rank=ranking.get("pareto_rank"),
+        evidence_coverage=ranking.get("coverage"),
+        not_screened=ranking.get("not_screened") or [],
+        component_scores={
+            name: CosmeticComponentScore(score=c.get("score"), screened=bool(c.get("screened")))
+            for name, c in components.items()
+        },
+        primary_function=verdict.get("primary_function"),
+        functional_scores=preds.get("functional_scores") or {},
+        antimicrobial_probability=(preds.get("antimicrobial") or {}).get("probability"),
+        molecular_weight=preds.get("molecular_weight"),
+        net_charge=preds.get("net_charge"),
+        hydrophobic_moment=preds.get("hydrophobic_moment"),
+        physchem_flags=sorted(preds.get("physchem_flags") or {}),
+        physchem_flag_count=preds.get("physchem_flag_count"),
+        aggregation_tendency=aggregation.get("score"),
+        solubility=solubility.get("score"),
+        irritation_tier=irritation.get("tier"),
+        irritation_score=irritation.get("score"),
+        skin_sensitizer=skin.get("sensitizer"),
+        skin_sensitization_probability=skin.get("p_sensitizer"),
+        hemolysis_probability=hemolysis.get("p_hemolytic"),
+        cytotoxicity=(preds.get("cytotoxicity") or {}).get("by_cell_type") or {},
+        half_life_log10_seconds=half_life.get("log10_seconds"),
+        allergenicity_probability=allergen.get("p_allergen"),
+        cleavage_stability=cleavage.get("score"),
+        safety_flags=preds.get("safety_flags") or [],
+        synthesis_feasibility_probability=synthesis.get("probability"),
+        synthesis_flags=synthesis.get("flags") or {},
+    )
 
 
 def _component_stats(candidates: list[dict]) -> dict[str, ComponentStats]:
@@ -567,7 +714,7 @@ def _component_stats(candidates: list[dict]) -> dict[str, ComponentStats]:
 @app.get(
     "/api/v1/jobs/{job_id:path}/results",
     response_model=Annotated[
-        Union[JobResultsResponse, MetabolicJobResultsResponse],
+        Union[JobResultsResponse, MetabolicJobResultsResponse, CosmeticJobResultsResponse],
         Field(discriminator="pipeline"),
     ],
 )
@@ -619,7 +766,19 @@ def get_job_results(job_id: str):
         insufficient_evidence_candidates=len(candidates) - ranked,
         component_stats=_component_stats(candidates),
     )
-    if _run_pipeline(run_dir, candidates) == "metabolic":
+    pipeline = _run_pipeline(run_dir, candidates)
+    if pipeline == "cosmetic":
+        ranking_of = lambda c: (c.get("predictions") or {}).get("ranking") or {}  # noqa: E731
+        cosmetic_common = {
+            **common,
+            "ranked_candidates": sum(1 for c in candidates if ranking_of(c).get("final_score") is not None),
+            "insufficient_evidence_candidates": sum(1 for c in candidates if ranking_of(c).get("not_screened")),
+            "component_stats": _cosmetic_component_stats(candidates),
+        }
+        return CosmeticJobResultsResponse(
+            **cosmetic_common, candidates=[_cosmetic_candidate_response(c) for c in candidates]
+        )
+    if pipeline == "metabolic":
         return MetabolicJobResultsResponse(
             **common, candidates=[_metabolic_candidate_response(c) for c in candidates]
         )

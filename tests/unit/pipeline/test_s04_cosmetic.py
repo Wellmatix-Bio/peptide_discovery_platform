@@ -254,9 +254,9 @@ class TestStage:
 
     def test_params_override_the_brief(self, monkeypatch) -> None:
         out = self.stage_run(
-            monkeypatch, self.seeds(), {"min_length": 4, "max_length": 6}
+            monkeypatch, self.seeds(), {"min_length": 6, "max_length": 8}
         )
-        assert all(4 <= len(c.sequence) <= 6 for c in out)
+        assert all(6 <= len(c.sequence) <= 8 for c in out)
 
     def test_missing_brief_and_params_is_an_error(self, monkeypatch) -> None:
         monkeypatch.setattr(

@@ -227,11 +227,13 @@ paths:
                 oneOf:
                 - $ref: '#/components/schemas/JobResultsResponse'
                 - $ref: '#/components/schemas/MetabolicJobResultsResponse'
+                - $ref: '#/components/schemas/CosmeticJobResultsResponse'
                 discriminator:
                   propertyName: pipeline
                   mapping:
                     wound_healing: '#/components/schemas/JobResultsResponse'
                     metabolic: '#/components/schemas/MetabolicJobResultsResponse'
+                    cosmetic: '#/components/schemas/CosmeticJobResultsResponse'
               example:
                 job_id: projects/123/locations/us-central1/customJobs/456
                 run_id: '456'
@@ -381,6 +383,7 @@ components:
           enum:
           - wound_healing
           - metabolic
+          - cosmetic
           default: wound_healing
           title: Pipeline
           description: Which pipeline runs, and which worker image executes it. Must match
@@ -389,9 +392,11 @@ components:
           oneOf:
           - $ref: '#/components/schemas/E2ERequest'
           - $ref: '#/components/schemas/MetabolicE2ERequest'
+          - $ref: '#/components/schemas/CosmeticE2ERequest'
           title: Stages
           description: The wound-healing stages for `pipeline` wound_healing, the metabolic
-            stages (keyed by `s01_metabolic_therapeutic_product_brief`) for `metabolic`.
+            stages (keyed by `s01_metabolic_therapeutic_product_brief`) for `metabolic`, and
+            the cosmetic stages (keyed by `s01_cosmetic_therapeutic_product_brief`) for `cosmetic`.
       additionalProperties: false
       type: object
       required:
@@ -1978,3 +1983,817 @@ components:
           type: object
       title: Stage11MetabolicRequest
       type: object
+    CosmeticBrief:
+      type: object
+      additionalProperties: false
+      title: CosmeticBrief
+      description: Stage 1 brief for cosmetics and skin beauty. Every field has a default, so an empty brief is valid. `target_depth` is filled from the primary function when omitted. `safety_level` is derived (strict for the eye area or sensitive skin) and is never supplied.
+      properties:
+        functions:
+          type: object
+          additionalProperties: false
+          properties:
+            primary:
+              type: string
+              enum:
+              - collagen_ecm
+              - antioxidant
+              - pigmentation
+              default: collagen_ecm
+            secondary:
+              type: array
+              maxItems: 2
+              uniqueItems: true
+              items:
+                type: string
+                enum:
+                - collagen_ecm
+                - antioxidant
+                - pigmentation
+              default: []
+              description: Up to two functions; must not include the primary.
+          default: {}
+        target_depth:
+          type: string
+          enum:
+          - outer_layer
+          - epidermis
+          - dermis
+          description: Skin layer the peptide must reach. Omitted, it is set from the primary function (collagen_ecm dermis, antioxidant epidermis, pigmentation epidermis).
+        application:
+          type: object
+          additionalProperties: false
+          properties:
+            area:
+              type: string
+              enum:
+              - face
+              - eye_area
+              - body
+              default: face
+            sensitive_skin:
+              type: boolean
+              default: false
+          default: {}
+        product:
+          type: object
+          additionalProperties: false
+          properties:
+            ph:
+              type: number
+              minimum: 4.0
+              maximum: 7.5
+              default: 5.5
+          default: {}
+        peptide:
+          type: object
+          additionalProperties: false
+          properties:
+            min_length:
+              type: integer
+              minimum: 6
+              maximum: 20
+              default: 6
+              description: Shortest peptide, in residues. Floor is 6.
+            max_length:
+              type: integer
+              minimum: 6
+              maximum: 20
+              default: 12
+              description: Longest peptide, in residues. Must be at least `min_length`.
+          default: {}
+      default: {}
+
+    Stage1CosmeticRequest:
+      type: object
+      additionalProperties: false
+      title: Stage1CosmeticRequest
+      required:
+      - brief
+      properties:
+        brief:
+          $ref: '#/components/schemas/CosmeticBrief'
+        enabled:
+          type: boolean
+          default: true
+          title: Enabled
+        seed:
+          type: integer
+          default: 42
+          title: Seed
+          description: Random seed for reproducibility
+
+    CosmeticE2ERequest:
+      type: object
+      additionalProperties: false
+      title: CosmeticE2ERequest
+      description: 'The public cosmetic job request shape (`pipeline: "cosmetic"`). Only the brief is required; every other stage defaults.
+
+
+        Stage 7 is the shared structure stage and stays on. The cosmetic stages replace their wound-healing peers,
+        so the wound-healing stage names are not accepted here.'
+      required:
+      - s01_cosmetic_therapeutic_product_brief
+      properties:
+        s01_cosmetic_therapeutic_product_brief:
+          $ref: '#/components/schemas/Stage1CosmeticRequest'
+        s04_cosmetic_candidate_generation:
+          $ref: '#/components/schemas/Stage4CosmeticRequest'
+        s05_cosmetic_physchem_screening:
+          $ref: '#/components/schemas/Stage5CosmeticRequest'
+        s06_cosmetic_functional_models:
+          $ref: '#/components/schemas/Stage6CosmeticRequest'
+        s07_structure_mechanism:
+          $ref: '#/components/schemas/Stage7Request'
+        s08_cosmetic_safety_developability:
+          $ref: '#/components/schemas/Stage8CosmeticRequest'
+        s09_cosmetic_synthesis_cmc:
+          $ref: '#/components/schemas/Stage9CosmeticRequest'
+        s11_cosmetic_ranking:
+          $ref: '#/components/schemas/Stage11CosmeticRequest'
+
+    CosmeticComponentScore:
+      type: object
+      additionalProperties: false
+      title: CosmeticComponentScore
+      required:
+      - score
+      - screened
+      properties:
+        score:
+          anyOf:
+          - type: number
+          - type: 'null'
+          description: The component's 0-1 score. A component that was not screened is neutral (0.5 by default).
+        screened:
+          type: boolean
+          description: False when the check did not run for this candidate.
+
+    CosmeticCandidateResponse:
+      type: object
+      additionalProperties: false
+      title: CosmeticCandidateResponse
+      description: Flat per-candidate summary projected from the cosmetic candidate record. The full prediction tree is in candidates_final.json. A field is null when the producing stage did not run or abstained.
+      required:
+      - id
+      properties:
+        id:
+          type: string
+        sequence:
+          anyOf:
+          - type: string
+          - type: 'null'
+        final_score:
+          anyOf:
+          - type: number
+          - type: 'null'
+          description: 0-100 weighted score (`predictions.ranking.final_score`).
+        final_score_rank:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          description: 1-based position by final_score.
+        pareto_rank:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          description: Pareto front over the weighted components. Candidates on one front share a rank; it is not a position.
+        evidence_coverage:
+          anyOf:
+          - type: number
+          - type: 'null'
+          description: Share of the total component weight that was actually screened (`predictions.ranking.coverage`).
+        not_screened:
+          type: array
+          items:
+            type: string
+          description: Names of the ranking components that were not screened.
+        component_scores:
+          type: object
+          additionalProperties: false
+          description: One entry per ranking component.
+          properties:
+            primary_function:
+              $ref: '#/components/schemas/CosmeticComponentScore'
+            secondary_functions:
+              $ref: '#/components/schemas/CosmeticComponentScore'
+            safety:
+              $ref: '#/components/schemas/CosmeticComponentScore'
+            delivery_fit:
+              $ref: '#/components/schemas/CosmeticComponentScore'
+            stability:
+              $ref: '#/components/schemas/CosmeticComponentScore'
+            developability:
+              $ref: '#/components/schemas/CosmeticComponentScore'
+        primary_function:
+          anyOf:
+          - type: string
+            enum:
+            - collagen_ecm
+            - antioxidant
+            - pigmentation
+          - type: 'null'
+        functional_scores:
+          type: object
+          additionalProperties:
+            type: object
+            additionalProperties: false
+            properties:
+              score:
+                type: number
+              pass:
+                type: boolean
+          description: Per function, the model score and whether it met the threshold. The primary is always present; secondaries are recorded only.
+        antimicrobial_probability:
+          anyOf:
+          - type: number
+          - type: 'null'
+        molecular_weight:
+          anyOf:
+          - type: number
+          - type: 'null'
+          description: Daltons, including the modification shifts.
+        net_charge:
+          anyOf:
+          - type: number
+          - type: 'null'
+        hydrophobic_moment:
+          anyOf:
+          - type: number
+          - type: 'null'
+        physchem_flags:
+          type: array
+          items:
+            type: string
+        physchem_flag_count:
+          anyOf:
+          - type: integer
+          - type: 'null'
+        aggregation_tendency:
+          anyOf:
+          - type: number
+          - type: 'null'
+        solubility:
+          anyOf:
+          - type: number
+          - type: 'null'
+        irritation_tier:
+          anyOf:
+          - type: string
+            enum:
+            - low
+            - medium
+            - high
+          - type: 'null'
+        irritation_score:
+          anyOf:
+          - type: number
+          - type: 'null'
+        # penetration_passed: boolean or null
+        #   REMINDER, do not delete: the penetration filter is commented out in Stage 8 (no penetration model yet).
+        #   The rule result is recorded under predictions.penetration but does not reject. Restore this field, and the
+        #   reject in Stage 8, when a penetration model exists (see docs/TODO.md and docs/LIMITATIONS.md).
+        skin_sensitizer:
+          anyOf:
+          - type: boolean
+          - type: 'null'
+          description: True when the skin sensitization probability is at or above 0.55 (fixed). Only a kept candidate can be true, when `reject_skin_sensitizers` is false.
+        skin_sensitization_probability:
+          anyOf:
+          - type: number
+          - type: 'null'
+        hemolysis_probability:
+          anyOf:
+          - type: number
+          - type: 'null'
+        cytotoxicity:
+          type: object
+          additionalProperties:
+            type: object
+            additionalProperties: false
+            properties:
+              p_cytotoxic:
+                type: number
+              requested:
+                type: string
+                description: The cell type name asked for in the stage params.
+              exact:
+                type: boolean
+                description: False when the model did not offer the requested name and used the closest label.
+          description: Keyed by the cell type the model used. Empty when cytotoxicity did not run.
+        half_life_log10_seconds:
+          anyOf:
+          - type: number
+          - type: 'null'
+          description: Null when the sequence is outside the model's 5-50 residue range.
+        allergenicity_probability:
+          anyOf:
+          - type: number
+          - type: 'null'
+          description: Null for sequences under 50 residues (not screened).
+        cleavage_stability:
+          anyOf:
+          - type: number
+          - type: 'null'
+        safety_flags:
+          type: array
+          items:
+            type: string
+        synthesis_feasibility_probability:
+          anyOf:
+          - type: number
+          - type: 'null'
+        synthesis_flags:
+          type: array
+          items:
+            type: string
+          description: Rule flags that never reject, e.g. aspartimide_risk and met_trp_cleavage_oxidation.
+
+    CosmeticJobResultsResponse:
+      type: object
+      additionalProperties: false
+      title: CosmeticJobResultsResponse
+      description: Results of a cosmetic job. `ranked_candidates` counts candidates with a `final_score`. `insufficient_evidence_candidates` counts candidates with at least one component not screened. Component statistics average each ranking component's score over the candidates that screened it.
+      required:
+      - job_id
+      - run_id
+      - status
+      properties:
+        pipeline:
+          type: string
+          const: cosmetic
+          default: cosmetic
+          title: Pipeline
+        job_id:
+          type: string
+        run_id:
+          type: string
+        status:
+          type: string
+        n_final:
+          anyOf:
+          - type: integer
+          - type: 'null'
+        ranked_candidates:
+          anyOf:
+          - type: integer
+          - type: 'null'
+        insufficient_evidence_candidates:
+          anyOf:
+          - type: integer
+          - type: 'null'
+        component_stats:
+          type: object
+          additionalProperties:
+            $ref: '#/components/schemas/ComponentStats'
+          description: Keyed by ranking component name.
+        candidates:
+          type: array
+          items:
+            $ref: '#/components/schemas/CosmeticCandidateResponse'
+          default: []
+
+    Stage4CosmeticRequest:
+      type: object
+      additionalProperties: false
+      title: Stage4CosmeticRequest
+      description: 'Cosmetic Stage 4: GA settings; function, lengths and pH fall back to the cosmetic brief
+        when unset here.'
+      properties:
+        primary_function:
+          anyOf:
+          - enum:
+            - collagen_ecm
+            - antioxidant
+            - pigmentation
+            type: string
+          - type: 'null'
+          default: null
+        min_length:
+          anyOf:
+          - maximum: 20
+            minimum: 2
+            type: integer
+          - type: 'null'
+          default: null
+          minimum: 6
+          description: Shortest peptide. Floor is 6 residues.
+        max_length:
+          anyOf:
+          - maximum: 20
+            minimum: 2
+            type: integer
+          - type: 'null'
+          default: null
+        product_ph:
+          anyOf:
+          - maximum: 7.5
+            minimum: 4.0
+            type: number
+          - type: 'null'
+          default: null
+        primary_threshold:
+          default: 0.5
+          maximum: 1
+          minimum: 0
+          type: number
+        pop_size:
+          default: 7
+          minimum: 2
+          type: integer
+        n_generations:
+          default: 25
+          minimum: 1
+          type: integer
+        tournament_size:
+          default: 3
+          minimum: 2
+          type: integer
+        crossover_prob:
+          default: 0.5
+          maximum: 1
+          minimum: 0
+          type: number
+        top_k:
+          default: 3
+          minimum: 1
+          type: integer
+        enabled:
+          type: boolean
+          default: true
+          title: Enabled
+    Stage5CosmeticRequest:
+      type: object
+      additionalProperties: false
+      title: Stage5CosmeticRequest
+      description: 'Cosmetic Stage 5: every cutoff is a run parameter and the defaults are the specification;
+        the pH falls back to the brief.'
+      properties:
+        product_ph:
+          anyOf:
+          - maximum: 7.5
+            minimum: 4.0
+            type: number
+          - type: 'null'
+          default: null
+        seed_sequences:
+          anyOf:
+          - items:
+              type: string
+            type: array
+          - type: 'null'
+          default: null
+        molecular_weight_reject_max:
+          default: 3000.0
+          type: number
+        net_charge_reject_min:
+          default: -1.0
+          type: number
+        net_charge_reject_max:
+          default: 2.0
+          type: number
+        hydrophobicity_percentile_low:
+          default: 5.0
+          maximum: 100
+          minimum: 0
+          type: number
+        hydrophobicity_percentile_high:
+          default: 95.0
+          maximum: 100
+          minimum: 0
+          type: number
+        moment_percentile:
+          default: 90.0
+          maximum: 100
+          minimum: 0
+          type: number
+        membrane_active_min_charge:
+          default: 2.0
+          type: number
+        repeat_run_length:
+          default: 3
+          minimum: 2
+          type: integer
+        molecular_weight_flag_min:
+          default: 1000.0
+          type: number
+        molecular_weight_flag_max:
+          default: 1500.0
+          type: number
+        flag_lower_risk_motifs:
+          default: false
+          type: boolean
+        aggregation_flag_min:
+          default: 0.6
+          maximum: 1
+          minimum: 0
+          type: number
+        solubility_threshold:
+          default: 0.5
+          maximum: 1
+          minimum: 0
+          type: number
+        solubility_solvent:
+          default: Ultrapure water
+          type: string
+        enabled:
+          type: boolean
+          default: true
+          title: Enabled
+    Stage6CosmeticRequest:
+      type: object
+      additionalProperties: false
+      title: Stage6CosmeticRequest
+      description: 'Cosmetic Stage 6: the function gates and the antimicrobial reject filter; thresholds are
+        run parameters.'
+      properties:
+        primary_function:
+          anyOf:
+          - enum:
+            - collagen_ecm
+            - antioxidant
+            - pigmentation
+            type: string
+          - type: 'null'
+          default: null
+        secondary_functions:
+          anyOf:
+          - items:
+              enum:
+              - collagen_ecm
+              - antioxidant
+              - pigmentation
+              type: string
+            type: array
+          - type: 'null'
+          default: null
+        collagen_ecm_threshold:
+          default: 0.5
+          maximum: 1
+          minimum: 0
+          type: number
+        antioxidant_threshold:
+          default: 0.5
+          maximum: 1
+          minimum: 0
+          type: number
+        pigmentation_threshold:
+          default: 0.5
+          maximum: 1
+          minimum: 0
+          type: number
+        antimicrobial_reject_min:
+          default: 0.6
+          maximum: 1
+          minimum: 0
+          type: number
+        enabled:
+          type: boolean
+          default: true
+          title: Enabled
+    Stage8CosmeticRequest:
+      type: object
+      additionalProperties: false
+      title: Stage8CosmeticRequest
+      description: 'Cosmetic Stage 8: every cutoff is a run parameter. All defaults are provisional guesses,
+        to be tuned or replaced.'
+      properties:
+        target_depth:
+          anyOf:
+          - enum:
+            - outer_layer
+            - epidermis
+            - dermis
+            type: string
+          - type: 'null'
+          default: null
+        safety_level:
+          anyOf:
+          - enum:
+            - standard
+            - strict
+            type: string
+          - type: 'null'
+          default: null
+        product_ph:
+          anyOf:
+          - maximum: 7.5
+            minimum: 4.0
+            type: number
+          - type: 'null'
+          default: null
+        irritation_percentile_medium:
+          default: 75.0
+          maximum: 100
+          minimum: 0
+          type: number
+        irritation_percentile_high:
+          default: 90.0
+          maximum: 100
+          minimum: 0
+          type: number
+        penetration_epidermis_mw_max:
+          default: 1000.0
+          type: number
+        reject_skin_sensitizers:
+          default: true
+          type: boolean
+        cytotoxicity_cell_types:
+          default:
+          - Human keratinocytes HaCat
+          - Human skin fibroblasts
+          items:
+            type: string
+          type: array
+        cytotoxicity_reject_min:
+          default: 0.5
+          maximum: 1
+          minimum: 0
+          type: number
+        hemolysis_reject_min:
+          default: 0.5
+          maximum: 1
+          minimum: 0
+          type: number
+        allergenicity_reject_min:
+          default: 0.5
+          maximum: 1
+          minimum: 0
+          type: number
+        allergenicity_min_length:
+          default: 50
+          minimum: 1
+          type: integer
+        half_life_reject_min:
+          default: 3.5563025007672873
+          type: number
+        skin_protease_accessions:
+          default:
+          - Q9Y337
+          - P49862
+          - Q9P0G3
+          items:
+            type: string
+          type: array
+        dermis_extra_protease_accessions:
+          default:
+          - P03956
+          items:
+            type: string
+          type: array
+        cleavage_stability_reject_min:
+          default: 0.3
+          maximum: 1
+          minimum: 0
+          type: number
+        cleavage_decay_rate:
+          default: 0.5
+          minimum: 0
+          type: number
+        enabled:
+          type: boolean
+          default: true
+          title: Enabled
+    Stage9CosmeticRequest:
+      type: object
+      additionalProperties: false
+      title: Stage9CosmeticRequest
+      description: 'Cosmetic Stage 9: the synthesis-feasibility cutoff is a run parameter.'
+      properties:
+        synthesis_feasibility_min:
+          default: 0.5
+          maximum: 1
+          minimum: 0
+          type: number
+        enabled:
+          type: boolean
+          default: true
+          title: Enabled
+    Stage11CosmeticRequest:
+      type: object
+      additionalProperties: false
+      title: Stage11CosmeticRequest
+      description: 'Cosmetic Stage 11: component base points, the brief-driven scalings and the score scales;
+        all provisional.'
+      properties:
+        target_depth:
+          anyOf:
+          - enum:
+            - outer_layer
+            - epidermis
+            - dermis
+            type: string
+          - type: 'null'
+          default: null
+        safety_level:
+          anyOf:
+          - enum:
+            - standard
+            - strict
+            type: string
+          - type: 'null'
+          default: null
+        product_ph:
+          anyOf:
+          - maximum: 7.5
+            minimum: 4.0
+            type: number
+          - type: 'null'
+          default: null
+        points_primary:
+          default: 4.0
+          minimum: 0
+          type: number
+        points_secondary_each:
+          default: 1.0
+          minimum: 0
+          type: number
+        points_safety:
+          default: 3.0
+          minimum: 0
+          type: number
+        points_delivery:
+          default: 2.0
+          minimum: 0
+          type: number
+        points_stability:
+          default: 2.0
+          minimum: 0
+          type: number
+        points_developability:
+          default: 1.0
+          minimum: 0
+          type: number
+        safety_strict_multiplier:
+          default: 1.5
+          minimum: 0
+          type: number
+        delivery_depth_multiplier:
+          additionalProperties:
+            type: number
+          default:
+            outer_layer: 0.0
+            epidermis: 1.0
+            dermis: 1.5
+          type: object
+        stability_depth_multiplier:
+          additionalProperties:
+            type: number
+          default:
+            outer_layer: 0.5
+            epidermis: 1.0
+            dermis: 1.5
+          type: object
+        ph_comfort_range:
+          default:
+          - 4.5
+          - 6.5
+          maxItems: 2
+          minItems: 2
+          prefixItems:
+          - type: number
+          - type: number
+          type: array
+        developability_ph_multiplier:
+          default: 1.5
+          minimum: 0
+          type: number
+        lipid_safety_factor:
+          default: 0.75
+          maximum: 1
+          minimum: 0
+          type: number
+        skin_sensitizer_safety_factor:
+          default: 0.5
+          maximum: 1
+          minimum: 0
+          type: number
+        delivery_mw_full:
+          default: 500.0
+          type: number
+        delivery_mw_span:
+          default: 1000.0
+          exclusiveMinimum: 0
+          type: number
+        delivery_max_penalty:
+          default: 0.5
+          maximum: 1
+          minimum: 0
+          type: number
+        developability_flag_penalty:
+          default: 0.25
+          minimum: 0
+          type: number
+        developability_flag_cap:
+          default: 4
+          minimum: 1
+          type: integer
+        not_screened_score:
+          default: 0.5
+          maximum: 1
+          minimum: 0
+          type: number
+        enabled:
+          type: boolean
+          default: true
+          title: Enabled

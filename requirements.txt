@@ -6,7 +6,7 @@
 # Install them yourself only if you accept their terms:  pip install propy3
 # Install locally with: python -m pip install -r requirements.txt
 # Worker Dockerfiles select the CUDA 12.8 PyTorch wheel before installing this file.
-torch==2.14.1
+torch==2.11.0
 pydantic>=2.13.5,<3
 PyYAML>=6.0.3,<7
 structlog>=25,<27

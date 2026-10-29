@@ -154,8 +154,9 @@ class Stage4CosmeticParams(BaseStageParams):
     """Cosmetic Stage 4: GA settings; function, lengths and pH fall back to the cosmetic brief when unset here."""
 
     primary_function: Literal["collagen_ecm", "antioxidant", "pigmentation"] | None = None
-    min_length: int | None = Field(None, ge=2, le=20)
-    max_length: int | None = Field(None, ge=2, le=20)
+    #: Floor of 6 residues, the same as the cosmetic brief.
+    min_length: int | None = Field(None, ge=6, le=20)
+    max_length: int | None = Field(None, ge=6, le=20)
     product_ph: float | None = Field(None, ge=4.0, le=7.5)
     #: The primary function counts as active at a model score at or above this.
     primary_threshold: float = Field(0.5, ge=0, le=1)
@@ -572,6 +573,60 @@ class MetabolicE2ERequest(BaseModel):
     s08_metabolic_safety_developability: Stage8MetabolicRequest = Stage8MetabolicRequest()
     s09_synthesis_cmc: Stage9Request = Stage9Request()
     s11_metabolic_ranking: Stage11MetabolicRequest = Stage11MetabolicRequest()
+
+
+class Stage1CosmeticRequest(Stage1CosmeticParams):
+    model_config = ConfigDict(extra="forbid")
+    enabled: bool = True
+
+
+class Stage4CosmeticRequest(Stage4CosmeticParams):
+    model_config = ConfigDict(extra="forbid")
+    enabled: bool = True
+
+
+class Stage5CosmeticRequest(Stage5CosmeticParams):
+    model_config = ConfigDict(extra="forbid")
+    enabled: bool = True
+
+
+class Stage6CosmeticRequest(Stage6CosmeticParams):
+    model_config = ConfigDict(extra="forbid")
+    enabled: bool = True
+
+
+class Stage8CosmeticRequest(Stage8CosmeticParams):
+    model_config = ConfigDict(extra="forbid")
+    enabled: bool = True
+
+
+class Stage9CosmeticRequest(Stage9CosmeticParams):
+    model_config = ConfigDict(extra="forbid")
+    enabled: bool = True
+
+
+class Stage11CosmeticRequest(Stage11CosmeticParams):
+    model_config = ConfigDict(extra="forbid")
+    enabled: bool = True
+
+
+class CosmeticE2ERequest(BaseModel):
+    """The public cosmetic job request shape (`pipeline: "cosmetic"`): only the brief is required, every other stage defaults.
+
+    Stage 7 is the shared structure stage and stays on; the cosmetic stages replace their wound-healing peers, so
+    the wound-healing stage names are not accepted here.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    s01_cosmetic_therapeutic_product_brief: Stage1CosmeticRequest
+    s04_cosmetic_candidate_generation: Stage4CosmeticRequest = Stage4CosmeticRequest()
+    s05_cosmetic_physchem_screening: Stage5CosmeticRequest = Stage5CosmeticRequest()
+    s06_cosmetic_functional_models: Stage6CosmeticRequest = Stage6CosmeticRequest()
+    s07_structure_mechanism: Stage7Request = Stage7Request()
+    s08_cosmetic_safety_developability: Stage8CosmeticRequest = Stage8CosmeticRequest()
+    s09_cosmetic_synthesis_cmc: Stage9CosmeticRequest = Stage9CosmeticRequest()
+    s11_cosmetic_ranking: Stage11CosmeticRequest = Stage11CosmeticRequest()
 
 
 def resolve_params(stage_name: str, raw_params: dict[str, Any]) -> dict[str, Any]:

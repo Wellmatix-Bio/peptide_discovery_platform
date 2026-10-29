@@ -147,19 +147,20 @@ class TestRunGa:
             result["history"]["fitness_score"].max()
         )
 
-    def test_predictor_out_of_range_raises(self) -> None:
-        with pytest.raises(ValueError, match="AMP predictor returned"):
-            run_ga(
-                seed_sequence=SEED_SEQUENCE,
-                min_length=6,
-                max_length=40,
-                pop_size=2,
-                n_generations=1,
-                mutation_rate=0.1,
-                random_seed=42,
-                amp_predictor=failing_amp_predictor,
-                hemolysis_predictor=mock_hemolysis_predictor,
-            )
+    def test_predictor_out_of_range_scores_at_the_rejection_floor(self) -> None:
+        # An out-of-range AMP score is logged and scored at REJECTED_FITNESS_FLOOR, not raised.
+        result = run_ga(
+            seed_sequence=SEED_SEQUENCE,
+            min_length=6,
+            max_length=40,
+            pop_size=2,
+            n_generations=1,
+            mutation_rate=0.1,
+            random_seed=42,
+            amp_predictor=failing_amp_predictor,
+            hemolysis_predictor=mock_hemolysis_predictor,
+        )
+        assert result["best"]["fitness_score"] == REJECTED_FITNESS_FLOOR
 
     def test_invalid_seed_sequence_raises(self) -> None:
         with pytest.raises(ValueError):
@@ -227,10 +228,10 @@ class TestRunGa:
 
 
 class TestRouteA:
-    def test_missing_seed_sequence_raises(self) -> None:
+    def test_seed_without_a_sequence_is_skipped_so_nothing_is_generated(self) -> None:
+        # RouteA.run() drops invalid seeds before the GA runs, so a seed with no sequence produces no candidates.
         route = RouteA({"seed_candidates": [{}]})
-        with pytest.raises(ValueError, match="seed_sequence"):
-            route.run()
+        assert route.run() == []
 
     def test_run_returns_candidate_per_population_member(self) -> None:
         """RouteA.run() converts every DEAP individual in the final population

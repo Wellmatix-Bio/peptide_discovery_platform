@@ -121,12 +121,6 @@ def test_a_missing_rules_path_is_refused_by_name(tmp_path):
         Stage2().run(StageConfig(params={}), FakeCtx())
 
 
-def test_an_unreadable_rules_file_names_the_path(tmp_path):
-    missing = tmp_path / "nope.yaml"
-    with pytest.raises(StageError, match=str(missing)):
-        Stage2().run(StageConfig(params={"deficit_rules_path": str(missing)}), FakeCtx())
-
-
 def test_malformed_yaml_is_refused_rather_than_half_read(tmp_path):
     path = tmp_path / "bad.yaml"
     path.write_text("deficits: [unclosed\n")

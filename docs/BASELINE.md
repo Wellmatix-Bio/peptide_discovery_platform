@@ -614,3 +614,52 @@ This is the same defect as `example_request.json`, whose fix is recorded two lin
 offending entry in `.gitignore`: ignored, required by tests, therefore missing from a fresh
 clone, therefore tracked instead. The note left there did not stop it happening again, so it now
 names both files and says plainly that adding an example means tracking it.
+
+## 547 passed / 7 failed, and why the number moved twice in one day
+
+The recorded baseline became 538/4 and CI answered **545/9**. Both numbers were measured
+honestly; neither described the other's environment. Two separate causes, found by building a
+venv exactly the way `.github/workflows/ci.yml` builds one and running the suite in it.
+
+### rdkit: one skip hiding twelve tests
+
+`rdkit` is in `requirements.txt`, so CI has it. The venv the baseline was measured in did not.
+`tests/unit/test_skin_sensitization_predictor.py` imports it at module level, so without it
+pytest reports **`1 skipped`** -- one line, for a module holding **12 tests**. The recorded count
+was therefore 12 lower than CI's, and CI reported a move of +7 passed / +5 failed that read
+exactly like a regression.
+
+This is the third time the guard's environment premise has been wrong rather than the code (see
+the slim-install episode above), so `rdkit` is now in `ASSUMED_IMPORTS`: a venv without it is
+told so, instead of being shown a phantom regression.
+
+### Two metabolic tests that only passed when a developer had a .env
+
+`src/common/env.py` loads `.env` at import and `setdefault`s every key into the process
+environment. A developer's `.env` carries `SEED_CANDIDATES_FILE_METABOLIC`; CI has no `.env` at
+all. The `service` fixture in `tests/integration/test_api_e2e.py` never set it.
+
+`create_job` reads the seed file through `required()` **before** the image, so with the metabolic
+seed file absent:
+
+- `test_metabolic_pipeline_routes_to_metabolic_image_and_stages` expected 202 and got a 503 about
+  the seed file.
+- `test_metabolic_pipeline_needs_its_own_image_setting` asserted the 503 names
+  `WORKER_METABOLIC_IMAGE_URI`; it named the seed file instead.
+
+Neither test is about seeds. This is the trap the deployment comments warn about -- set half a
+per-pipeline pair and the 503 names the other half, reading like a different fault -- reaching
+into the test suite, where it was invisible to anyone whose `.env` happened to be populated. The
+fixture now sets `SEED_CANDIDATES_FILE_METABOLIC`.
+
+### What the new baseline is worth
+
+**All seven remaining failures are missing weight files**, so the recorded count reproduces
+identically with and without a `.env`, verified both ways in the CI-identical venv. A failure
+that is not about a weight file is now a regression, not an environment difference. That property
+is the useful part of the number; the number itself is incidental.
+
+`check_baseline.py` also prints **which** tests failed when the count moves. It captured pytest's
+output and printed only the final summary line, so a red CI job said "9 failed" and gave no way
+to learn which nine -- not from the log, and not by re-running, because the difference did not
+reproduce locally.

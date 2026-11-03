@@ -117,6 +117,11 @@ export interface paths {
          *     calls out to Google turns a Google incident into an unhealthy container, and this process
          *     is perfectly able to answer 503s explaining itself. Whether the settings are present is
          *     reported here as a fact rather than as health.
+         *
+         *     `settings_missing` covers only what EVERY pipeline needs, so it stays comparable with what
+         *     it has always meant. Each pipeline's own image and seed file are reported per pipeline:
+         *     they are required for requests naming that pipeline and irrelevant to the others, and a
+         *     deployment that runs one pipeline is not misconfigured for lacking another's settings.
          */
         get: operations["healthz_healthz_get"];
         put?: never;
@@ -245,11 +250,354 @@ export interface components {
             /** Min */
             min: number;
         };
+        /** CosmeticApplication */
+        CosmeticApplication: {
+            /**
+             * Area
+             * @default face
+             * @enum {string}
+             */
+            area: "face" | "eye_area" | "body";
+            /**
+             * Sensitive Skin
+             * @default false
+             */
+            sensitive_skin: boolean;
+        };
+        /**
+         * CosmeticBrief
+         * @description Stage 1 brief for cosmetics and skin beauty; the single configuration the cosmetic stages read.
+         *
+         *     Every field has a default, so an empty brief is valid. `target_depth` is filled from the primary function when
+         *     omitted, and `safety_level` is derived, never supplied.
+         */
+        CosmeticBrief: {
+            application?: components["schemas"]["CosmeticApplication"];
+            functions?: components["schemas"]["CosmeticFunctions"];
+            peptide?: components["schemas"]["CosmeticPeptide"];
+            product?: components["schemas"]["CosmeticProduct"];
+            /** Target Depth */
+            target_depth?: ("outer_layer" | "epidermis" | "dermis") | null;
+        };
+        /** CosmeticCandidateResponse */
+        CosmeticCandidateResponse: {
+            /** Aggregation Tendency */
+            aggregation_tendency?: number | null;
+            /** Allergenicity Probability */
+            allergenicity_probability?: number | null;
+            /** Antimicrobial Probability */
+            antimicrobial_probability?: number | null;
+            /** Cleavage Stability */
+            cleavage_stability?: number | null;
+            /**
+             * Component Scores
+             * @default {}
+             */
+            component_scores: {
+                [key: string]: components["schemas"]["CosmeticComponentScore"];
+            };
+            /**
+             * Cytotoxicity
+             * @default {}
+             */
+            cytotoxicity: {
+                [key: string]: {
+                    [key: string]: unknown;
+                };
+            };
+            /** Evidence Coverage */
+            evidence_coverage?: number | null;
+            /** Final Score */
+            final_score?: number | null;
+            /** Final Score Rank */
+            final_score_rank?: number | null;
+            /**
+             * Functional Scores
+             * @default {}
+             */
+            functional_scores: {
+                [key: string]: {
+                    [key: string]: unknown;
+                };
+            };
+            /** Half Life Log10 Seconds */
+            half_life_log10_seconds?: number | null;
+            /** Hemolysis Probability */
+            hemolysis_probability?: number | null;
+            /** Hydrophobic Moment */
+            hydrophobic_moment?: number | null;
+            /**
+             * Id
+             * @default ?
+             */
+            id: string;
+            /** Irritation Score */
+            irritation_score?: number | null;
+            /** Irritation Tier */
+            irritation_tier?: string | null;
+            /** Molecular Weight */
+            molecular_weight?: number | null;
+            /** Net Charge */
+            net_charge?: number | null;
+            /**
+             * Not Screened
+             * @default []
+             */
+            not_screened: string[];
+            /** Pareto Rank */
+            pareto_rank?: number | null;
+            /** Physchem Flag Count */
+            physchem_flag_count?: number | null;
+            /**
+             * Physchem Flags
+             * @default []
+             */
+            physchem_flags: string[];
+            /** Primary Function */
+            primary_function?: string | null;
+            /**
+             * Safety Flags
+             * @default []
+             */
+            safety_flags: string[];
+            /** Sequence */
+            sequence?: string | null;
+            /** Skin Sensitization Probability */
+            skin_sensitization_probability?: number | null;
+            /** Skin Sensitizer */
+            skin_sensitizer?: boolean | null;
+            /** Solubility */
+            solubility?: number | null;
+            /** Synthesis Feasibility Probability */
+            synthesis_feasibility_probability?: number | null;
+            /**
+             * Synthesis Flags
+             * @default {}
+             */
+            synthesis_flags: {
+                [key: string]: number[];
+            };
+        };
+        /** CosmeticComponentScore */
+        CosmeticComponentScore: {
+            /** Score */
+            score: number | null;
+            /** Screened */
+            screened: boolean;
+        };
+        /**
+         * CosmeticE2ERequest
+         * @description The public cosmetic job request shape (`pipeline: "cosmetic"`): only the brief is required, every other stage defaults.
+         *
+         *     Stage 7 is the shared structure stage and stays on; the cosmetic stages replace their wound-healing peers, so
+         *     the wound-healing stage names are not accepted here.
+         */
+        CosmeticE2ERequest: {
+            s01_cosmetic_therapeutic_product_brief: components["schemas"]["Stage1CosmeticRequest"];
+            /**
+             * @default {
+             *       "crossover_prob": 0.5,
+             *       "enabled": true,
+             *       "n_generations": 25,
+             *       "pop_size": 7,
+             *       "primary_threshold": 0.5,
+             *       "top_k": 3,
+             *       "tournament_size": 3
+             *     }
+             */
+            s04_cosmetic_candidate_generation: components["schemas"]["Stage4CosmeticRequest"];
+            /**
+             * @default {
+             *       "aggregation_flag_min": 0.6,
+             *       "enabled": true,
+             *       "flag_lower_risk_motifs": false,
+             *       "hydrophobicity_percentile_high": 95,
+             *       "hydrophobicity_percentile_low": 5,
+             *       "membrane_active_min_charge": 2,
+             *       "molecular_weight_flag_max": 1500,
+             *       "molecular_weight_flag_min": 1000,
+             *       "molecular_weight_reject_max": 3000,
+             *       "moment_percentile": 90,
+             *       "net_charge_reject_max": 2,
+             *       "net_charge_reject_min": -1,
+             *       "repeat_run_length": 3,
+             *       "solubility_solvent": "Ultrapure water",
+             *       "solubility_threshold": 0.5
+             *     }
+             */
+            s05_cosmetic_physchem_screening: components["schemas"]["Stage5CosmeticRequest"];
+            /**
+             * @default {
+             *       "antimicrobial_reject_min": 0.6,
+             *       "antioxidant_threshold": 0.5,
+             *       "collagen_ecm_threshold": 0.5,
+             *       "enabled": true,
+             *       "pigmentation_threshold": 0.5
+             *     }
+             */
+            s06_cosmetic_functional_models: components["schemas"]["Stage6CosmeticRequest"];
+            /**
+             * @default {
+             *       "enabled": true,
+             *       "helix_phi_max": -30,
+             *       "helix_phi_min": -100,
+             *       "helix_psi_max": -5,
+             *       "helix_psi_min": -77,
+             *       "pathway_engagement_min_probability": 0.5,
+             *       "plddt_low_confidence_max": 0.5,
+             *       "sheet_phi_max": -45,
+             *       "sheet_phi_min": -180,
+             *       "sheet_psi_max": 180,
+             *       "sheet_psi_min": 90
+             *     }
+             */
+            s07_structure_mechanism: components["schemas"]["Stage7Request"];
+            /**
+             * @default {
+             *       "allergenicity_min_length": 50,
+             *       "allergenicity_reject_min": 0.5,
+             *       "cleavage_decay_rate": 0.5,
+             *       "cleavage_stability_reject_min": 0.3,
+             *       "cytotoxicity_cell_types": [
+             *         "Human keratinocytes HaCat",
+             *         "Human skin fibroblasts"
+             *       ],
+             *       "cytotoxicity_reject_min": 0.5,
+             *       "dermis_extra_protease_accessions": [
+             *         "P03956"
+             *       ],
+             *       "enabled": true,
+             *       "half_life_reject_min": 3.5563025007672873,
+             *       "hemolysis_reject_min": 0.5,
+             *       "irritation_percentile_high": 90,
+             *       "irritation_percentile_medium": 75,
+             *       "penetration_epidermis_mw_max": 1000,
+             *       "reject_skin_sensitizers": true,
+             *       "skin_protease_accessions": [
+             *         "Q9Y337",
+             *         "P49862",
+             *         "Q9P0G3"
+             *       ]
+             *     }
+             */
+            s08_cosmetic_safety_developability: components["schemas"]["Stage8CosmeticRequest"];
+            /**
+             * @default {
+             *       "enabled": true,
+             *       "synthesis_feasibility_min": 0.5
+             *     }
+             */
+            s09_cosmetic_synthesis_cmc: components["schemas"]["Stage9CosmeticRequest"];
+            /**
+             * @default {
+             *       "delivery_depth_multiplier": {
+             *         "dermis": 1.5,
+             *         "epidermis": 1,
+             *         "outer_layer": 0
+             *       },
+             *       "delivery_max_penalty": 0.5,
+             *       "delivery_mw_full": 500,
+             *       "delivery_mw_span": 1000,
+             *       "developability_flag_cap": 4,
+             *       "developability_flag_penalty": 0.25,
+             *       "developability_ph_multiplier": 1.5,
+             *       "enabled": true,
+             *       "lipid_safety_factor": 0.75,
+             *       "not_screened_score": 0.5,
+             *       "ph_comfort_range": [
+             *         4.5,
+             *         6.5
+             *       ],
+             *       "points_delivery": 2,
+             *       "points_developability": 1,
+             *       "points_primary": 4,
+             *       "points_safety": 3,
+             *       "points_secondary_each": 1,
+             *       "points_stability": 2,
+             *       "safety_strict_multiplier": 1.5,
+             *       "skin_sensitizer_safety_factor": 0.5,
+             *       "stability_depth_multiplier": {
+             *         "dermis": 1.5,
+             *         "epidermis": 1,
+             *         "outer_layer": 0.5
+             *       }
+             *     }
+             */
+            s11_cosmetic_ranking: components["schemas"]["Stage11CosmeticRequest"];
+        };
+        /** CosmeticFunctions */
+        CosmeticFunctions: {
+            /**
+             * Primary
+             * @default collagen_ecm
+             * @enum {string}
+             */
+            primary: "collagen_ecm" | "antioxidant" | "pigmentation";
+            /** Secondary */
+            secondary?: ("collagen_ecm" | "antioxidant" | "pigmentation")[];
+        };
+        /** CosmeticJobResultsResponse */
+        CosmeticJobResultsResponse: {
+            /**
+             * Candidates
+             * @default []
+             */
+            candidates: components["schemas"]["CosmeticCandidateResponse"][];
+            /** Component Stats */
+            component_stats?: {
+                [key: string]: components["schemas"]["ComponentStats"];
+            };
+            /** Insufficient Evidence Candidates */
+            insufficient_evidence_candidates?: number | null;
+            /** Job Id */
+            job_id: string;
+            /** N Final */
+            n_final?: number | null;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            pipeline: "cosmetic";
+            /** Ranked Candidates */
+            ranked_candidates?: number | null;
+            /** Run Id */
+            run_id: string;
+            /** Status */
+            status: string;
+        };
+        /** CosmeticPeptide */
+        CosmeticPeptide: {
+            /**
+             * Max Length
+             * @default 12
+             */
+            max_length: number;
+            /**
+             * Min Length
+             * @default 6
+             */
+            min_length: number;
+        };
+        /** CosmeticProduct */
+        CosmeticProduct: {
+            /**
+             * Ph
+             * @default 5.5
+             */
+            ph: number;
+        };
         /** CreateJobRequest */
         CreateJobRequest: {
+            /**
+             * Pipeline
+             * @default wound_healing
+             * @enum {string}
+             */
+            pipeline: "wound_healing" | "metabolic" | "cosmetic";
             /** Request Id */
             request_id: string;
-            stages: components["schemas"]["E2ERequest"];
+            /** Stages */
+            stages: components["schemas"]["E2ERequest"] | components["schemas"]["MetabolicE2ERequest"] | components["schemas"]["CosmeticE2ERequest"];
         };
         /** CreateJobResponse */
         CreateJobResponse: {
@@ -295,6 +643,11 @@ export interface components {
             job_id: string;
             /** N Final */
             n_final?: number | null;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            pipeline: "wound_healing";
             /** Ranked Candidates */
             ranked_candidates?: number | null;
             /** Run Id */
@@ -322,6 +675,267 @@ export interface components {
             status: string;
             /** Vertex State */
             vertex_state: string;
+        };
+        /**
+         * MetabolicBrief
+         * @description Stage 1 brief for metabolism / weight control; the single configuration Stages 4, 6, 8 and 11 read.
+         *
+         *     The wound fields stay on the base class, empty. Lengths are held to the range the metabolic models cover.
+         */
+        MetabolicBrief: {
+            /** Desired Functions */
+            desired_functions?: string[];
+            /** Max Length */
+            max_length: number;
+            /** Min Length */
+            min_length: number;
+            /** Pathogens */
+            pathogens?: string[];
+            /** Target Receptors */
+            target_receptors: ("GLP1R" | "GIPR" | "GCGR")[];
+            /** Wound Context */
+            wound_context?: string[];
+        };
+        /**
+         * MetabolicCandidateResponse
+         * @description A metabolic candidate: the ranks and shared physicochemical and safety values, plus the receptor predictions.
+         */
+        MetabolicCandidateResponse: {
+            /** Activated Pathways */
+            activated_pathways?: string[] | null;
+            /** Aggregation Tendency */
+            aggregation_tendency?: number | null;
+            /** Agonism Probability */
+            agonism_probability?: {
+                [key: string]: number | null;
+            };
+            /** Anti Inflammatory Probability */
+            anti_inflammatory_probability?: number | null;
+            /** Binding Pkd */
+            binding_pkd?: {
+                [key: string]: number | null;
+            };
+            /** Cleavage Stability */
+            cleavage_stability?: number | null;
+            /** Cytotoxicity Probability */
+            cytotoxicity_probability?: number | null;
+            /** Deamidation Risk */
+            deamidation_risk?: ("low" | "medium" | "high") | null;
+            /** Ec50 Nm */
+            ec50_nm?: {
+                [key: string]: number | null;
+            };
+            /** Evidence Coverage */
+            evidence_coverage?: number | null;
+            /** Final Score */
+            final_score?: number | null;
+            /** Final Score Rank */
+            final_score_rank?: number | null;
+            /** Half Life Minutes */
+            half_life_minutes?: number | null;
+            /** Hemolytic Activity Phc50 */
+            hemolytic_activity_phc50?: number | null;
+            /**
+             * Id
+             * @default ?
+             */
+            id: string;
+            /** Inhibited Pathways */
+            inhibited_pathways?: string[] | null;
+            /** Instability Index */
+            instability_index?: number | null;
+            /** Metabolic Activity Score */
+            metabolic_activity_score?: number | null;
+            /** Missing Modules */
+            missing_modules?: string[] | null;
+            /** Molecular Weight */
+            molecular_weight?: number | null;
+            /** Net Charge */
+            net_charge?: number | null;
+            /** Oxidation Risk */
+            oxidation_risk?: ("low" | "medium" | "high") | null;
+            /** P Hemolytic */
+            p_hemolytic?: number | null;
+            /** Pareto Rank */
+            pareto_rank?: number | null;
+            /** Pec50 */
+            pec50?: {
+                [key: string]: number | null;
+            };
+            /** Pec50 Pkd Gap */
+            pec50_pkd_gap?: number | null;
+            /** Potency Unreliable Note */
+            potency_unreliable_note?: string | null;
+            /** Potency Unreliable Receptors */
+            potency_unreliable_receptors?: string[];
+            /** Sequence */
+            sequence?: string | null;
+            /** Solubility */
+            solubility?: number | null;
+            /** Undetermined Pathways */
+            undetermined_pathways?: string[] | null;
+        };
+        /**
+         * MetabolicE2ERequest
+         * @description The public metabolic job request shape (`pipeline: "metabolic"`): only the brief is required, every other stage defaults.
+         *
+         *     Stages 7 and 9 are the shared wound-pipeline stages and stay on; the metabolic stages replace their wound peers, so
+         *     the wound stage names are not accepted here.
+         */
+        MetabolicE2ERequest: {
+            s01_metabolic_therapeutic_product_brief: components["schemas"]["Stage1MetabolicRequest"];
+            /**
+             * @default {
+             *       "batch_size": 16,
+             *       "enabled": true,
+             *       "lam": 0.5,
+             *       "max_attempts": 20,
+             *       "max_new_tokens": 120,
+             *       "n_peptides": 100,
+             *       "route_a_ga_params": {},
+             *       "tol": 1
+             *     }
+             */
+            s04_metabolic_candidate_generation: components["schemas"]["Stage4MetabolicRequest"];
+            /**
+             * @default {
+             *       "aggregation_tendency_flag_max": 0.47,
+             *       "amphipathicity_flag_max": 0.245,
+             *       "deamidation_count_flag_max": 1,
+             *       "enabled": true,
+             *       "hydrophobic_moment_flag_max": 0.189,
+             *       "hydrophobicity_reject_max": 0.3,
+             *       "instability_index_flag_max": 70.5,
+             *       "isoelectric_point_flag_ph_window": 0.233,
+             *       "molecular_weight_flag_max": 4577.6,
+             *       "molecular_weight_reject_max": 5000,
+             *       "net_charge_flag_max": 1.03,
+             *       "net_charge_flag_min": -3.02,
+             *       "oxidation_count_flag_max": 3,
+             *       "ph": 7.4,
+             *       "solubility_flag_min": 0.173,
+             *       "solubility_solvent": "Ultrapure water",
+             *       "ss_confidence_ambiguous_max": 0.7,
+             *       "ss_confidence_unstable_max": 0.5
+             *     }
+             */
+            s05_metabolic_physchem_screening: components["schemas"]["Stage5MetabolicRequest"];
+            /**
+             * @default {
+             *       "agonism_probability_min": {},
+             *       "anti_inflammatory_probability_min": 0.5,
+             *       "ec50_floor_nm": 0.001,
+             *       "ec50_max_nm": {
+             *         "GCGR": 1000,
+             *         "GIPR": 1000,
+             *         "GLP1R": 1000
+             *       },
+             *       "enabled": true,
+             *       "target_receptors": [
+             *         "GLP1R"
+             *       ]
+             *     }
+             */
+            s06_metabolic_functional_screening: components["schemas"]["Stage6MetabolicRequest"];
+            /**
+             * @default {
+             *       "enabled": true,
+             *       "helix_phi_max": -30,
+             *       "helix_phi_min": -100,
+             *       "helix_psi_max": -5,
+             *       "helix_psi_min": -77,
+             *       "pathway_engagement_min_probability": 0.5,
+             *       "plddt_low_confidence_max": 0.5,
+             *       "sheet_phi_max": -45,
+             *       "sheet_phi_min": -180,
+             *       "sheet_psi_max": 180,
+             *       "sheet_psi_min": 90
+             *     }
+             */
+            s07_structure_mechanism: components["schemas"]["Stage7Request"];
+            /**
+             * @default {
+             *       "aggregation_reject_max": 0.7,
+             *       "cleavage_decay_rate": 0.5,
+             *       "cleavage_stability_reject_min": 0.3,
+             *       "cytotoxicity_cell_type": "DRAMP_aggregate",
+             *       "cytotoxicity_reject_max": 0.5,
+             *       "enabled": true,
+             *       "hemolysis_probability_reject_max": 0.5,
+             *       "hemolysis_screening": true,
+             *       "plasma_half_life_min_minutes": 60,
+             *       "solubility_flag_min": 0.173,
+             *       "solubility_solvent": "Ultrapure water"
+             *     }
+             */
+            s08_metabolic_safety_developability: components["schemas"]["Stage8MetabolicRequest"];
+            /**
+             * @default {
+             *       "enabled": true,
+             *       "rejected_difficulty_classes": [
+             *         "high"
+             *       ]
+             *     }
+             */
+            s09_synthesis_cmc: components["schemas"]["Stage9Request"];
+            /**
+             * @default {
+             *       "ec50_floor_nm": 0.001,
+             *       "ec50_max_nm": {
+             *         "GCGR": 1000,
+             *         "GIPR": 1000,
+             *         "GLP1R": 1000
+             *       },
+             *       "enabled": true,
+             *       "half_life_target_minutes": 60,
+             *       "hemolysis_phc50_reject_max": 4,
+             *       "pkd_range": [
+             *         5,
+             *         11
+             *       ],
+             *       "target_receptors": [
+             *         "GLP1R"
+             *       ],
+             *       "weights": {
+             *         "anti_inflammatory": 0.1,
+             *         "developability": 0.15,
+             *         "mechanistic_confidence": 0.05,
+             *         "receptor_agonism": 0.35,
+             *         "safety": 0.15,
+             *         "stability": 0.2
+             *       }
+             *     }
+             */
+            s11_metabolic_ranking: components["schemas"]["Stage11MetabolicRequest"];
+        };
+        /** MetabolicJobResultsResponse */
+        MetabolicJobResultsResponse: {
+            /**
+             * Candidates
+             * @default []
+             */
+            candidates: components["schemas"]["MetabolicCandidateResponse"][];
+            /** Component Stats */
+            component_stats?: {
+                [key: string]: components["schemas"]["ComponentStats"];
+            };
+            /** Insufficient Evidence Candidates */
+            insufficient_evidence_candidates?: number | null;
+            /** Job Id */
+            job_id: string;
+            /** N Final */
+            n_final?: number | null;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            pipeline: "metabolic";
+            /** Ranked Candidates */
+            ranked_candidates?: number | null;
+            /** Run Id */
+            run_id: string;
+            /** Status */
+            status: string;
         };
         /** ModelEntry */
         ModelEntry: {
@@ -403,6 +1017,250 @@ export interface components {
              */
             pop_size: number;
         };
+        /** Stage11CosmeticRequest */
+        Stage11CosmeticRequest: {
+            /**
+             * Delivery Depth Multiplier
+             * @default {
+             *       "dermis": 1.5,
+             *       "epidermis": 1,
+             *       "outer_layer": 0
+             *     }
+             */
+            delivery_depth_multiplier: {
+                [key: string]: number;
+            };
+            /**
+             * Delivery Max Penalty
+             * @default 0.5
+             */
+            delivery_max_penalty: number;
+            /**
+             * Delivery Mw Full
+             * @default 500
+             */
+            delivery_mw_full: number;
+            /**
+             * Delivery Mw Span
+             * @default 1000
+             */
+            delivery_mw_span: number;
+            /**
+             * Developability Flag Cap
+             * @default 4
+             */
+            developability_flag_cap: number;
+            /**
+             * Developability Flag Penalty
+             * @default 0.25
+             */
+            developability_flag_penalty: number;
+            /**
+             * Developability Ph Multiplier
+             * @default 1.5
+             */
+            developability_ph_multiplier: number;
+            /**
+             * Enabled
+             * @default true
+             */
+            enabled: boolean;
+            /**
+             * Lipid Safety Factor
+             * @default 0.75
+             */
+            lipid_safety_factor: number;
+            /**
+             * Not Screened Score
+             * @default 0.5
+             */
+            not_screened_score: number;
+            /**
+             * Ph Comfort Range
+             * @default [
+             *       4.5,
+             *       6.5
+             *     ]
+             */
+            ph_comfort_range: [
+                number,
+                number
+            ];
+            /**
+             * Points Delivery
+             * @default 2
+             */
+            points_delivery: number;
+            /**
+             * Points Developability
+             * @default 1
+             */
+            points_developability: number;
+            /**
+             * Points Primary
+             * @default 4
+             */
+            points_primary: number;
+            /**
+             * Points Safety
+             * @default 3
+             */
+            points_safety: number;
+            /**
+             * Points Secondary Each
+             * @default 1
+             */
+            points_secondary_each: number;
+            /**
+             * Points Stability
+             * @default 2
+             */
+            points_stability: number;
+            /** Product Ph */
+            product_ph?: number | null;
+            /** Safety Level */
+            safety_level?: ("standard" | "strict") | null;
+            /**
+             * Safety Strict Multiplier
+             * @default 1.5
+             */
+            safety_strict_multiplier: number;
+            /**
+             * Skin Sensitizer Safety Factor
+             * @default 0.5
+             */
+            skin_sensitizer_safety_factor: number;
+            /**
+             * Stability Depth Multiplier
+             * @default {
+             *       "dermis": 1.5,
+             *       "epidermis": 1,
+             *       "outer_layer": 0.5
+             *     }
+             */
+            stability_depth_multiplier: {
+                [key: string]: number;
+            };
+            /** Target Depth */
+            target_depth?: ("outer_layer" | "epidermis" | "dermis") | null;
+        };
+        /** Stage11MetabolicRequest */
+        Stage11MetabolicRequest: {
+            /**
+             * Ec50 Floor Nm
+             * @default 0.001
+             */
+            ec50_floor_nm: number;
+            /**
+             * Ec50 Max Nm
+             * @default {
+             *       "GCGR": 1000,
+             *       "GIPR": 1000,
+             *       "GLP1R": 1000
+             *     }
+             */
+            ec50_max_nm: {
+                [key: string]: number;
+            };
+            /**
+             * Enabled
+             * @default true
+             */
+            enabled: boolean;
+            /**
+             * Half Life Target Minutes
+             * @default 60
+             */
+            half_life_target_minutes: number;
+            /**
+             * Hemolysis Phc50 Reject Max
+             * @default 4
+             */
+            hemolysis_phc50_reject_max: number | null;
+            /**
+             * Pkd Range
+             * @default [
+             *       5,
+             *       11
+             *     ]
+             */
+            pkd_range: [
+                number,
+                number
+            ];
+            /**
+             * Target Receptors
+             * @default [
+             *       "GLP1R"
+             *     ]
+             */
+            target_receptors: ("GLP1R" | "GIPR" | "GCGR")[];
+            /**
+             * Weights
+             * @default {
+             *       "anti_inflammatory": 0.1,
+             *       "developability": 0.15,
+             *       "mechanistic_confidence": 0.05,
+             *       "receptor_agonism": 0.35,
+             *       "safety": 0.15,
+             *       "stability": 0.2
+             *     }
+             */
+            weights: {
+                [key: string]: number;
+            };
+        };
+        /** Stage1CosmeticRequest */
+        Stage1CosmeticRequest: {
+            /**
+             * @default {
+             *       "application": {
+             *         "area": "face",
+             *         "sensitive_skin": false
+             *       },
+             *       "functions": {
+             *         "primary": "collagen_ecm",
+             *         "secondary": []
+             *       },
+             *       "peptide": {
+             *         "max_length": 12,
+             *         "min_length": 6
+             *       },
+             *       "product": {
+             *         "ph": 5.5
+             *       },
+             *       "safety_level": "standard",
+             *       "target_depth": "dermis"
+             *     }
+             */
+            brief: components["schemas"]["CosmeticBrief"];
+            /**
+             * Enabled
+             * @default true
+             */
+            enabled: boolean;
+            /**
+             * Seed
+             * @description Random seed for reproducibility
+             * @default 42
+             */
+            seed: number;
+        };
+        /** Stage1MetabolicRequest */
+        Stage1MetabolicRequest: {
+            brief: components["schemas"]["MetabolicBrief"];
+            /**
+             * Enabled
+             * @default true
+             */
+            enabled: boolean;
+            /**
+             * Seed
+             * @description Random seed for reproducibility
+             * @default 42
+             */
+            seed: number;
+        };
         /** Stage1Request */
         Stage1Request: {
             brief: components["schemas"]["BriefFields"];
@@ -417,6 +1275,103 @@ export interface components {
              * @default 42
              */
             seed: number;
+        };
+        /** Stage4CosmeticRequest */
+        Stage4CosmeticRequest: {
+            /**
+             * Crossover Prob
+             * @default 0.5
+             */
+            crossover_prob: number;
+            /**
+             * Enabled
+             * @default true
+             */
+            enabled: boolean;
+            /** Max Length */
+            max_length?: number | null;
+            /** Min Length */
+            min_length?: number | null;
+            /**
+             * N Generations
+             * @default 25
+             */
+            n_generations: number;
+            /**
+             * Pop Size
+             * @default 7
+             */
+            pop_size: number;
+            /** Primary Function */
+            primary_function?: ("collagen_ecm" | "antioxidant" | "pigmentation") | null;
+            /**
+             * Primary Threshold
+             * @default 0.5
+             */
+            primary_threshold: number;
+            /** Product Ph */
+            product_ph?: number | null;
+            /**
+             * Top K
+             * @default 3
+             */
+            top_k: number;
+            /**
+             * Tournament Size
+             * @default 3
+             */
+            tournament_size: number;
+        };
+        /** Stage4MetabolicRequest */
+        Stage4MetabolicRequest: {
+            /**
+             * Batch Size
+             * @default 16
+             */
+            batch_size: number;
+            /**
+             * Enabled
+             * @default true
+             */
+            enabled: boolean;
+            /**
+             * Lam
+             * @default 0.5
+             */
+            lam: number;
+            /**
+             * Max Attempts
+             * @default 20
+             */
+            max_attempts: number;
+            /** Max Length */
+            max_length?: number | null;
+            /**
+             * Max New Tokens
+             * @default 120
+             */
+            max_new_tokens: number;
+            /** Min Length */
+            min_length?: number | null;
+            /**
+             * N Peptides
+             * @default 100
+             */
+            n_peptides: number;
+            /**
+             * Route A Ga Params
+             * @default {}
+             */
+            route_a_ga_params: {
+                [key: string]: unknown;
+            };
+            /** Target Receptors */
+            target_receptors?: ("GLP1R" | "GIPR" | "GCGR")[] | null;
+            /**
+             * Tol
+             * @default 1
+             */
+            tol: number;
         };
         /** Stage4Request */
         Stage4Request: {
@@ -473,6 +1428,181 @@ export interface components {
              *     ]
              */
             tags: ("<AMP>" | "<ANTIBIOFILM>" | "<ANTIBACTERIAL>")[];
+        };
+        /** Stage5CosmeticRequest */
+        Stage5CosmeticRequest: {
+            /**
+             * Aggregation Flag Min
+             * @default 0.6
+             */
+            aggregation_flag_min: number;
+            /**
+             * Enabled
+             * @default true
+             */
+            enabled: boolean;
+            /**
+             * Flag Lower Risk Motifs
+             * @default false
+             */
+            flag_lower_risk_motifs: boolean;
+            /**
+             * Hydrophobicity Percentile High
+             * @default 95
+             */
+            hydrophobicity_percentile_high: number;
+            /**
+             * Hydrophobicity Percentile Low
+             * @default 5
+             */
+            hydrophobicity_percentile_low: number;
+            /**
+             * Membrane Active Min Charge
+             * @default 2
+             */
+            membrane_active_min_charge: number;
+            /**
+             * Molecular Weight Flag Max
+             * @default 1500
+             */
+            molecular_weight_flag_max: number;
+            /**
+             * Molecular Weight Flag Min
+             * @default 1000
+             */
+            molecular_weight_flag_min: number;
+            /**
+             * Molecular Weight Reject Max
+             * @default 3000
+             */
+            molecular_weight_reject_max: number;
+            /**
+             * Moment Percentile
+             * @default 90
+             */
+            moment_percentile: number;
+            /**
+             * Net Charge Reject Max
+             * @default 2
+             */
+            net_charge_reject_max: number;
+            /**
+             * Net Charge Reject Min
+             * @default -1
+             */
+            net_charge_reject_min: number;
+            /** Product Ph */
+            product_ph?: number | null;
+            /**
+             * Repeat Run Length
+             * @default 3
+             */
+            repeat_run_length: number;
+            /** Seed Sequences */
+            seed_sequences?: string[] | null;
+            /**
+             * Solubility Solvent
+             * @default Ultrapure water
+             */
+            solubility_solvent: string;
+            /**
+             * Solubility Threshold
+             * @default 0.5
+             */
+            solubility_threshold: number;
+        };
+        /** Stage5MetabolicRequest */
+        Stage5MetabolicRequest: {
+            /**
+             * Aggregation Tendency Flag Max
+             * @default 0.47
+             */
+            aggregation_tendency_flag_max: number;
+            /**
+             * Amphipathicity Flag Max
+             * @default 0.245
+             */
+            amphipathicity_flag_max: number;
+            /**
+             * Deamidation Count Flag Max
+             * @default 1
+             */
+            deamidation_count_flag_max: number;
+            /**
+             * Enabled
+             * @default true
+             */
+            enabled: boolean;
+            /**
+             * Hydrophobic Moment Flag Max
+             * @default 0.189
+             */
+            hydrophobic_moment_flag_max: number;
+            /**
+             * Hydrophobicity Reject Max
+             * @default 0.3
+             */
+            hydrophobicity_reject_max: number;
+            /**
+             * Instability Index Flag Max
+             * @default 70.5
+             */
+            instability_index_flag_max: number;
+            /**
+             * Isoelectric Point Flag Ph Window
+             * @default 0.233
+             */
+            isoelectric_point_flag_ph_window: number;
+            /**
+             * Molecular Weight Flag Max
+             * @default 4577.6
+             */
+            molecular_weight_flag_max: number;
+            /**
+             * Molecular Weight Reject Max
+             * @default 5000
+             */
+            molecular_weight_reject_max: number;
+            /**
+             * Net Charge Flag Max
+             * @default 1.03
+             */
+            net_charge_flag_max: number;
+            /**
+             * Net Charge Flag Min
+             * @default -3.02
+             */
+            net_charge_flag_min: number;
+            /**
+             * Oxidation Count Flag Max
+             * @default 3
+             */
+            oxidation_count_flag_max: number;
+            /**
+             * Ph
+             * @default 7.4
+             */
+            ph: number;
+            /**
+             * Solubility Flag Min
+             * @default 0.173
+             */
+            solubility_flag_min: number;
+            /**
+             * Solubility Solvent
+             * @default Ultrapure water
+             */
+            solubility_solvent: string;
+            /**
+             * Ss Confidence Ambiguous Max
+             * @default 0.7
+             */
+            ss_confidence_ambiguous_max: number;
+            /**
+             * Ss Confidence Unstable Max
+             * @default 0.5
+             */
+            ss_confidence_unstable_max: number;
         };
         /** Stage5Request */
         Stage5Request: {
@@ -531,6 +1661,81 @@ export interface components {
              * @default 0.5
              */
             ss_confidence_unstable_max: number;
+        };
+        /** Stage6CosmeticRequest */
+        Stage6CosmeticRequest: {
+            /**
+             * Antimicrobial Reject Min
+             * @default 0.6
+             */
+            antimicrobial_reject_min: number;
+            /**
+             * Antioxidant Threshold
+             * @default 0.5
+             */
+            antioxidant_threshold: number;
+            /**
+             * Collagen Ecm Threshold
+             * @default 0.5
+             */
+            collagen_ecm_threshold: number;
+            /**
+             * Enabled
+             * @default true
+             */
+            enabled: boolean;
+            /**
+             * Pigmentation Threshold
+             * @default 0.5
+             */
+            pigmentation_threshold: number;
+            /** Primary Function */
+            primary_function?: ("collagen_ecm" | "antioxidant" | "pigmentation") | null;
+            /** Secondary Functions */
+            secondary_functions?: ("collagen_ecm" | "antioxidant" | "pigmentation")[] | null;
+        };
+        /** Stage6MetabolicRequest */
+        Stage6MetabolicRequest: {
+            /**
+             * Agonism Probability Min
+             * @default {}
+             */
+            agonism_probability_min: {
+                [key: string]: number;
+            };
+            /**
+             * Anti Inflammatory Probability Min
+             * @default 0.5
+             */
+            anti_inflammatory_probability_min: number;
+            /**
+             * Ec50 Floor Nm
+             * @default 0.001
+             */
+            ec50_floor_nm: number;
+            /**
+             * Ec50 Max Nm
+             * @default {
+             *       "GCGR": 1000,
+             *       "GIPR": 1000,
+             *       "GLP1R": 1000
+             *     }
+             */
+            ec50_max_nm: {
+                [key: string]: number;
+            };
+            /**
+             * Enabled
+             * @default true
+             */
+            enabled: boolean;
+            /**
+             * Target Receptors
+             * @default [
+             *       "GLP1R"
+             *     ]
+             */
+            target_receptors: ("GLP1R" | "GIPR" | "GCGR")[];
         };
         /** Stage6Request */
         Stage6Request: {
@@ -662,6 +1867,158 @@ export interface components {
              */
             sheet_psi_min: number;
         };
+        /** Stage8CosmeticRequest */
+        Stage8CosmeticRequest: {
+            /**
+             * Allergenicity Min Length
+             * @default 50
+             */
+            allergenicity_min_length: number;
+            /**
+             * Allergenicity Reject Min
+             * @default 0.5
+             */
+            allergenicity_reject_min: number;
+            /**
+             * Cleavage Decay Rate
+             * @default 0.5
+             */
+            cleavage_decay_rate: number;
+            /**
+             * Cleavage Stability Reject Min
+             * @default 0.3
+             */
+            cleavage_stability_reject_min: number;
+            /**
+             * Cytotoxicity Cell Types
+             * @default [
+             *       "Human keratinocytes HaCat",
+             *       "Human skin fibroblasts"
+             *     ]
+             */
+            cytotoxicity_cell_types: string[];
+            /**
+             * Cytotoxicity Reject Min
+             * @default 0.5
+             */
+            cytotoxicity_reject_min: number;
+            /**
+             * Dermis Extra Protease Accessions
+             * @default [
+             *       "P03956"
+             *     ]
+             */
+            dermis_extra_protease_accessions: string[];
+            /**
+             * Enabled
+             * @default true
+             */
+            enabled: boolean;
+            /**
+             * Half Life Reject Min
+             * @default 3.5563025007672873
+             */
+            half_life_reject_min: number;
+            /**
+             * Hemolysis Reject Min
+             * @default 0.5
+             */
+            hemolysis_reject_min: number;
+            /**
+             * Irritation Percentile High
+             * @default 90
+             */
+            irritation_percentile_high: number;
+            /**
+             * Irritation Percentile Medium
+             * @default 75
+             */
+            irritation_percentile_medium: number;
+            /**
+             * Penetration Epidermis Mw Max
+             * @default 1000
+             */
+            penetration_epidermis_mw_max: number;
+            /** Product Ph */
+            product_ph?: number | null;
+            /**
+             * Reject Skin Sensitizers
+             * @default true
+             */
+            reject_skin_sensitizers: boolean;
+            /** Safety Level */
+            safety_level?: ("standard" | "strict") | null;
+            /**
+             * Skin Protease Accessions
+             * @default [
+             *       "Q9Y337",
+             *       "P49862",
+             *       "Q9P0G3"
+             *     ]
+             */
+            skin_protease_accessions: string[];
+            /** Target Depth */
+            target_depth?: ("outer_layer" | "epidermis" | "dermis") | null;
+        };
+        /** Stage8MetabolicRequest */
+        Stage8MetabolicRequest: {
+            /**
+             * Aggregation Reject Max
+             * @default 0.7
+             */
+            aggregation_reject_max: number;
+            /**
+             * Cleavage Decay Rate
+             * @default 0.5
+             */
+            cleavage_decay_rate: number;
+            /**
+             * Cleavage Stability Reject Min
+             * @default 0.3
+             */
+            cleavage_stability_reject_min: number;
+            /**
+             * Cytotoxicity Cell Type
+             * @default DRAMP_aggregate
+             * @enum {string}
+             */
+            cytotoxicity_cell_type: "DBAASP_no_cytotoxicity_hit" | "DRAMP_aggregate" | "Human PBMC" | "Human Primary Epidermal Keratinocytes (HEK)" | "Human keratinocytes HaCat" | "Human microvascular endothelial cells HMEC-1" | "Human skin fibroblasts";
+            /**
+             * Cytotoxicity Reject Max
+             * @default 0.5
+             */
+            cytotoxicity_reject_max: number;
+            /**
+             * Enabled
+             * @default true
+             */
+            enabled: boolean;
+            /**
+             * Hemolysis Probability Reject Max
+             * @default 0.5
+             */
+            hemolysis_probability_reject_max: number | null;
+            /**
+             * Hemolysis Screening
+             * @default true
+             */
+            hemolysis_screening: boolean;
+            /**
+             * Plasma Half Life Min Minutes
+             * @default 60
+             */
+            plasma_half_life_min_minutes: number;
+            /**
+             * Solubility Flag Min
+             * @default 0.173
+             */
+            solubility_flag_min: number;
+            /**
+             * Solubility Solvent
+             * @default Ultrapure water
+             */
+            solubility_solvent: string;
+        };
         /** Stage8Request */
         Stage8Request: {
             /**
@@ -710,6 +2067,19 @@ export interface components {
              * @default Ultrapure water
              */
             solubility_solvent: string;
+        };
+        /** Stage9CosmeticRequest */
+        Stage9CosmeticRequest: {
+            /**
+             * Enabled
+             * @default true
+             */
+            enabled: boolean;
+            /**
+             * Synthesis Feasibility Min
+             * @default 0.5
+             */
+            synthesis_feasibility_min: number;
         };
         /** Stage9Request */
         Stage9Request: {
@@ -829,7 +2199,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["JobResultsResponse"];
+                    "application/json": components["schemas"]["JobResultsResponse"] | components["schemas"]["MetabolicJobResultsResponse"] | components["schemas"]["CosmeticJobResultsResponse"];
                 };
             };
             /** @description Validation Error */

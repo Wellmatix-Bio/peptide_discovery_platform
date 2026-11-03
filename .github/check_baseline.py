@@ -1,11 +1,14 @@
 """Fail if the backend suite's result has moved from the recorded baseline.
 
-The backend suite cannot be green: 3 tests need model weights that are gitignored and synced at
+The backend suite cannot be green: 4 tests need model weights that are gitignored and synced at
 run time (docs/BASELINE.md). A CI job that simply required a zero exit code would therefore
 always fail, and one that ignored the exit code would notice nothing.
 
 The 4 stale test_api_e2e disagreements that used to sit alongside them are gone -- PR #6 rewrote
-those tests to describe what api.py actually does.
+those tests to describe what api.py actually does. The weight-dependent group is no longer the
+same 3 tests: the cosmetic pipeline's 3 allergenicity tests joined it and one stage-7 test left,
+so it is 4. The three tests/integration/test_worker_e2e failures are NOT in this count; they
+need DEV_MODE=true, which this check and the CI job both set.
 
 So this compares the OUTCOME to the recorded numbers. Any movement in either direction fails --
 a new failure is a regression, and a new pass means the baseline is stale and docs/BASELINE.md
@@ -22,7 +25,7 @@ import subprocess
 import sys
 
 #: From docs/BASELINE.md. Update BOTH together, never just this.
-EXPECTED = {"passed": 310, "failed": 3, "errors": 0}
+EXPECTED = {"passed": 538, "failed": 4, "errors": 0}
 
 #: THE BASELINE IS A PROPERTY OF AN ENVIRONMENT, NOT JUST OF THE CODE. A module the suite imports
 #: but that is not installed turns tests into collection ERRORS, and the count moves exactly as it

@@ -536,3 +536,81 @@ an API that predates the field.
 
 Baseline 304 → 310 — the API tests replaced one that documented the defect with six
 that pin the fix. Web 109 → 145.
+
+# Two more pipelines
+
+`20f5d8d` (PR #51) added the metabolic pipeline and `71eac9e` (PR #56) the cosmetic one, each a
+set of stages slotted in beside their wound-healing peers by `registry.py`'s opt-in pairs, each
+with its own worker image. Between them they brought 11 new predictors and their tests.
+
+**Baseline 310 → 538 passed, 3 → 4 failed, 0 errors**, under `DEV_MODE=true`, with no model
+weights present, and `--ignore=services --ignore=web` -- which is what `check_baseline.py`
+measures. 533 of the passes are the two pipelines' own; the last 5 are
+`tests/unit/test_metabolic_gipr.py`, below.
+
+Three things move this number and none of them is a code change, so check all three before
+concluding anything: a bare `pytest` adds the 127 accounts tests the baseline ignores (665), a
+checkout WITH `model_store/model_weights` turns the 4 failures into passes (and
+`check_baseline.py` refuses to run rather than record it), and an unset `DEV_MODE` fails 3
+`tests/integration/test_worker_e2e.py` tests on top. Each of those was walked into while
+recording this entry.
+
+The failing 4 are still the weight-dependent group, but it is not the same 4 it was. The cosmetic
+pipeline's three `test_allergenicity_predictor` tests joined it, and `test_s04_generation.py::
+TestRouteA::test_run_returns_candidate_per_population_member` is the fourth. **Measure this on a
+checkout with no `model_store/model_weights`**: with weights present the count is 664 / 0, and
+`check_baseline.py` refuses to run rather than record that richer number -- a guard that was
+needed in practice while writing this entry.
+
+The 3 `tests/integration/test_worker_e2e.py` failures seen on a developer machine are a third
+thing again: they need `DEV_MODE=true`, which CI sets and an interactive shell usually does not.
+
+`tests/unit/test_cosmetic_worker.py::test_other_pipelines_do_not_build_cosmetic_stages` arrived
+broken: it reads `src/backend/worker_e2e/example_run.json`, which had never been added --
+`worker_e2e` was the only worker without the example its two siblings carry. The file is now
+there, derived from `api_e2e/example_request.json` plus the three path fields a run config needs
+that a request does not, and the test passes.
+
+## GIPR is returned, and now says it cannot be trusted
+
+`functional_potency_predictor_v1` scores leave-one-cluster-out **R2 -0.108, Pearson 0.094 on
+n=55** for GIPR -- a negative R2 means it does worse than predicting the training mean, so its
+ordering of two candidates carries no information. GLP1R is 0.511 on n=271.
+
+The codebase already knew. `routeA_metabolic.py` kept GIPR out of the GA's default fitness and
+carried a constant recording why -- which **nothing read**: the exclusion was separately written
+out by hand in `DEFAULT_TARGET_RECEPTORS` beside it. Nothing else knew at all. Stage 6 gated on
+GIPR, Stage 11 ranked on it, and the API returned its pEC50 and EC50 in the same shape and with
+the same apparent authority as GLP1R's.
+
+The number is still returned -- withholding it would change the response shape and an unreliable
+number a caller knows about beats a missing one they must guess at. What changed is that every
+layer now says so, the way a screen that did not run reports `not_screened` instead of passing
+quietly: one owning definition on the predictor, a list on each candidate scoped to the receptors
+that run actually targeted, and `potency_unreliable_receptors` plus a note on the API response.
+
+**The gates and the ranking score still use it.** That is a product decision left open, and the
+note says it outright rather than letting the flag read as "this was excluded".
+
+`tests/unit/test_metabolic_gipr.py` holds `DEFAULT_TARGET_RECEPTORS` and the owning constant in
+step, which is what the dead constant failed to do.
+
+### A circular import, found by the first test to import the package first
+
+`model_store.functional_potency_predictor_v1` could not be imported before `pipeline`: its
+`__init__` imports `predictor`, which imported `pipeline.feature_extractor`, which runs
+`pipeline/__init__.py`, which eagerly imports every stage -- one of which imports this package
+back, still half-initialised. Pre-existing on `main` and reproducible there; no test had happened
+to import in that order. `FeatureExtractor` was only ever a type annotation here and the module
+already has `from __future__ import annotations`, so it moved under `TYPE_CHECKING`.
+
+### The ignored-example bug, a second time
+
+`src/backend/worker_e2e/example_run.json` was not merely absent -- it was listed in `.gitignore`,
+so creating it was not enough and a clean checkout could never have it. `test_cosmetic_worker.py`
+reads it, so that test could not pass anywhere.
+
+This is the same defect as `example_request.json`, whose fix is recorded two lines below the
+offending entry in `.gitignore`: ignored, required by tests, therefore missing from a fresh
+clone, therefore tracked instead. The note left there did not stop it happening again, so it now
+names both files and says plainly that adding an example means tracking it.

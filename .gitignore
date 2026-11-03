@@ -156,12 +156,16 @@ src/backend/api_stage/Dockerfile
 
 
 # --------- Miscellaneous ----------
-src/backend/worker_e2e/example_run.json
 pipeline_compare_out/
 # example_request.json was listed here, and that is why it was missing from a fresh clone.
 # It is now TRACKED instead: three test modules, README.md and API_SPECIFICATION.md all require
 # it, so ignoring it meant the test suite could not pass on a clean checkout. See docs/BASELINE.md.
 # (.venv/ is already covered at the top of this file.)
+#
+# src/backend/worker_e2e/example_run.json was listed here too, and went the same way for the
+# same reason: tests/unit/test_cosmetic_worker.py reads it, so ignoring it meant that test could
+# never pass on a clean checkout -- and it did not. It is TRACKED now, like the example_run.json
+# its two sibling workers already ship. Adding an example here means tracking it.
 
 # ---------- Web app (node) ----------
 node_modules/

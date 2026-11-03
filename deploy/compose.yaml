@@ -39,7 +39,14 @@ services:
       VERTEX_ARTIFACTS_DIR: ${VERTEX_ARTIFACTS_DIR:?set it in deploy/.env}
       SEED_CANDIDATES_FILE: ${SEED_CANDIDATES_FILE:?set it in deploy/.env}
       WORKER_IMAGE_URI: ${WORKER_IMAGE_URI:?set it in deploy/.env}
+      # Per-pipeline settings, each required only by requests naming that pipeline -- hence the
+      # `:-` default, which lets a wound-healing-only deployment start without them. BOTH of a
+      # pipeline's two are needed: api.py reads the image AND the seed file through required(),
+      # so setting only the image still answers 503, naming the seed file.
       WORKER_METABOLIC_IMAGE_URI: ${WORKER_METABOLIC_IMAGE_URI:-}
+      SEED_CANDIDATES_FILE_METABOLIC: ${SEED_CANDIDATES_FILE_METABOLIC:-}
+      WORKER_COSMETIC_IMAGE_URI: ${WORKER_COSMETIC_IMAGE_URI:-}
+      SEED_CANDIDATES_FILE_COSMETIC: ${SEED_CANDIDATES_FILE_COSMETIC:-}
       WORKER_SERVICE_ACCOUNT: ${WORKER_SERVICE_ACCOUNT:?set it in deploy/.env}
       MACHINE_TYPE: ${MACHINE_TYPE:?set it in deploy/.env}
       ACCELERATOR_TYPE: ${ACCELERATOR_TYPE:?set it in deploy/.env}

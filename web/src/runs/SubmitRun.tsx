@@ -10,7 +10,7 @@ import {
   WOUND_CONTEXTS,
   humanise,
 } from "../api/schema";
-import type { BriefFields, CreateJobRequest } from "../api/types";
+import type { BriefFields, WoundHealingCreateJobRequest } from "../api/types";
 import { ErrorBox, Hero } from "../components/ui";
 import { lastRun } from "../workspace";
 import { EMPTY_BRIEF, EXAMPLES } from "./examples";
@@ -80,12 +80,13 @@ function checks(brief: BriefFields, advanced: Advanced): string[] {
   return problems;
 }
 
-function buildRequest(name: string, brief: BriefFields, advanced: Advanced): CreateJobRequest {
+function buildRequest(name: string, brief: BriefFields, advanced: Advanced): WoundHealingCreateJobRequest {
   const enabled = (stage: string) => ({ enabled: advanced.stages[stage] ?? true });
   return {
     /* The proxy replaces this with u<user id>:<uuid> before it reaches the API and keeps the text
        as this run's name. Sending the name is how the name is recorded. */
     request_id: name.trim() || "unnamed run",
+    pipeline: "wound_healing",
     stages: {
       s01_therapeutic_product_brief: { brief, seed: advanced.seed },
       s04_candidate_generation: { ...enabled("s04_candidate_generation"), n_peptides: advanced.n_peptides },
@@ -98,7 +99,7 @@ function buildRequest(name: string, brief: BriefFields, advanced: Advanced): Cre
       },
       s09_synthesis_cmc: enabled("s09_synthesis_cmc"),
     },
-  } as CreateJobRequest;
+  } as WoundHealingCreateJobRequest;
 }
 
 function Chooser({
@@ -164,7 +165,7 @@ export function SubmitRun() {
   const submit = async (payload: CriticalPayload) => {
     setError(null);
     setProblems([]);
-    let body: CreateJobRequest;
+    let body: WoundHealingCreateJobRequest;
     if (payload.kind === "form") {
       const found = checks(brief, advanced);
       if (found.length > 0) {
@@ -180,7 +181,7 @@ export function SubmitRun() {
         setProblems([`That is not valid JSON: ${(problem as Error).message}`]);
         return;
       }
-      const candidate = parsed as CreateJobRequest;
+      const candidate = parsed as WoundHealingCreateJobRequest;
       const candidateBrief = candidate?.stages?.s01_therapeutic_product_brief?.brief;
       if (!candidateBrief) {
         setProblems(["The JSON must contain stages.s01_therapeutic_product_brief.brief."]);
@@ -192,7 +193,10 @@ export function SubmitRun() {
         setProblems(found);
         return;
       }
-      body = candidate;
+      /* The brief check above already refused anything that is not a wound-healing request, so
+         naming the pipeline here cannot override a caller's real choice -- it fills in the one
+         field a request written before there were three pipelines would not carry. */
+      body = { ...candidate, pipeline: "wound_healing" };
     }
     setBusy(true);
     try {

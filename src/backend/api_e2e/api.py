@@ -421,6 +421,12 @@ class MetabolicCandidateResponse(BaseModel):
     binding_pkd: dict[Receptor, float | None] = Field(default_factory=dict)  # predicted binding, 9 - log10(Kd [nM])
     agonism_probability: dict[Receptor, float | None] = Field(default_factory=dict)  # P(EC50 < 1 nM)
     pec50_pkd_gap: float | None = None  # disagreement of the pEC50 and pKd models; Route A candidates only
+    #: Receptors among this run's targets whose pec50/ec50_nm are returned but carry no ranking
+    #: information (the potency model's leave-one-cluster-out R2 is below zero for them). Empty
+    #: unless the run targeted one. Read it the way you would read `not_screened`: the number is
+    #: present, the evidence is not.
+    potency_unreliable_receptors: list[str] = Field(default_factory=list)
+    potency_unreliable_note: str | None = None
     metabolic_activity_score: float | None = None  # Stage 6 combined potency score
     anti_inflammatory_probability: float | None = None
     half_life_minutes: float | None = None  # 'plasma_half_life.minutes' key in predictions
@@ -524,6 +530,8 @@ def _metabolic_candidate_response(candidate: dict) -> MetabolicCandidateResponse
         binding_pkd=preds.get("binding_pkd") or {},
         agonism_probability=preds.get("agonism_probability") or {},
         pec50_pkd_gap=preds.get("pec50_pkd_gap"),
+        potency_unreliable_receptors=preds.get("potency_unreliable_receptors") or [],
+        potency_unreliable_note=preds.get("potency_unreliable_note"),
         metabolic_activity_score=preds.get("metabolic_activity_score"),
         anti_inflammatory_probability=preds.get("anti_inflammatory_probability"),
         half_life_minutes=nested("plasma_half_life", "minutes"),
@@ -845,37 +853,66 @@ class ModelManifest(BaseModel):
     caveat: str
 
 
+#: Read through required() for EVERY create, whatever the pipeline.
+SHARED_SETTINGS = (
+    "VERTEX_CLOUD_PROJECT",
+    "VERTEX_LOCATION",
+    "VERTEX_ARTIFACTS_DIR",
+    "VERTEX_MODEL_STORE",
+    "WORKER_SERVICE_ACCOUNT",
+    "MACHINE_TYPE",
+    "ACCELERATOR_TYPE",
+    "ACCELERATOR_COUNT",
+)
+
+#: The image and seed FASTA each pipeline reads, in step with create_job's two lookups above.
+#: A pipeline whose pair is absent answers 503 and the other pipelines are unaffected, so these
+#: are NOT in settings_missing -- a wound-healing-only deployment is correctly configured, and
+#: reporting it as missing four settings would say otherwise.
+PIPELINE_SETTINGS: dict[str, tuple[str, str]] = {
+    "wound_healing": ("WORKER_IMAGE_URI", "SEED_CANDIDATES_FILE"),
+    "metabolic": ("WORKER_METABOLIC_IMAGE_URI", "SEED_CANDIDATES_FILE_METABOLIC"),
+    "cosmetic": ("WORKER_COSMETIC_IMAGE_URI", "SEED_CANDIDATES_FILE_COSMETIC"),
+}
+
+
 @app.get("/healthz")
 def healthz():
     """Liveness only. It deliberately does NOT check Vertex or GCS: a readiness probe that
     calls out to Google turns a Google incident into an unhealthy container, and this process
     is perfectly able to answer 503s explaining itself. Whether the settings are present is
-    reported here as a fact rather than as health."""
-    missing = [
-        name
-        for name in (
-            "VERTEX_CLOUD_PROJECT",
-            "VERTEX_LOCATION",
-            "VERTEX_ARTIFACTS_DIR",
-            "VERTEX_MODEL_STORE",
-            "SEED_CANDIDATES_FILE",
-            "WORKER_IMAGE_URI",
-            "WORKER_SERVICE_ACCOUNT",
-            "MACHINE_TYPE",
-            "ACCELERATOR_TYPE",
-            "ACCELERATOR_COUNT",
-        )
-        if not os.environ.get(name)
-    ]
+    reported here as a fact rather than as health.
+
+    `settings_missing` covers only what EVERY pipeline needs, so it stays comparable with what
+    it has always meant. Each pipeline's own image and seed file are reported per pipeline:
+    they are required for requests naming that pipeline and irrelevant to the others, and a
+    deployment that runs one pipeline is not misconfigured for lacking another's settings.
+    """
+    missing = [name for name in SHARED_SETTINGS if not os.environ.get(name)]
+    pipelines = {
+        name: {
+            "ready": not (absent := [s for s in settings if not os.environ.get(s)])
+            and not missing,
+            "settings_missing": absent,
+        }
+        for name, settings in PIPELINE_SETTINGS.items()
+    }
+    unavailable = sorted(n for n, p in pipelines.items() if not p["ready"])
     return {
         "ok": True,
         "settings_missing": missing,
+        "pipelines": pipelines,
         "note": (
             "ok reports only that this process is answering. Job creation returns 503 while"
             " settings_missing is non-empty."
             if missing
             else "ok reports only that this process is answering; Vertex and Cloud Storage are"
             " not contacted by this endpoint."
+        )
+        + (
+            f" Pipelines that would answer 503: {', '.join(unavailable)}."
+            if unavailable
+            else ""
         ),
     }
 

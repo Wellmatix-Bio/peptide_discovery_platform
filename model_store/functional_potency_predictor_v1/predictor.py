@@ -5,18 +5,41 @@ from __future__ import annotations
 import json
 import re
 from pathlib import Path
-from typing import Sequence
+from typing import TYPE_CHECKING, Sequence
 
 import joblib
 import numpy as np
 
 from common.model_sync import sync_model_weights, weights_dir_for
-from pipeline.feature_extractor import FeatureExtractor
+
+# TYPE-ONLY, and it has to be: importing it for real runs pipeline/__init__.py, which eagerly
+# imports every stage, one of which (s06's metabolic stage) imports this package back. Importing
+# model_store.functional_potency_predictor_v1 BEFORE pipeline therefore failed outright with a
+# partially-initialized-module ImportError. `from __future__ import annotations` above makes
+# every annotation a string, so nothing below needs the real class at run time.
+if TYPE_CHECKING:
+    from pipeline.feature_extractor import FeatureExtractor
 
 CODE_DIR = Path(__file__).resolve().parent
 MODEL_DIR = weights_dir_for(CODE_DIR)
 
 RECEPTORS = ("GCGR", "GLP1R", "GIPR")
+
+#: Receptors this ensemble predicts but CANNOT RANK, from the leave-one-cluster-out metrics in
+#: model_card.json. GIPR scores R2 -0.108 and Pearson 0.094 on n=55 -- a negative R2 means the
+#: model does worse than always predicting the training mean, so its ordering of two candidates
+#: carries no information. Trained on 55 labels against 271 for GLP1R.
+#:
+#: The prediction is still returned: suppressing it would silently change the response shape and
+#: an unreliable number a caller knows about is more useful than a missing one they must guess
+#: at. Everything downstream must say so -- Stage 6 records this list on each candidate and the
+#: API returns it per candidate, the same way a screen that did not run reports `not_screened`
+#: rather than passing quietly.
+#:
+#: This is the single definition. pipeline/s04_generation/routeA_metabolic.py imports it to keep
+#: GIPR out of the GA's default fitness, which was the first and for a while the only place that
+#: acted on it.
+UNRELIABLE_POTENCY_RECEPTORS = ("GIPR",)
 
 # The four members whose unweighted mean was evaluated in the training notebook (its label omits RF; the code includes it).
 ALL_MEMBERS = ("ridge", "rf", "xgb", "mlp")

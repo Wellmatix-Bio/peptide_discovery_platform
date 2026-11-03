@@ -448,8 +448,13 @@ def run_metabolic_ga(
     }
 
 
-# Potency receptors the model cannot rank (leave-one-cluster-out R2 < 0), kept out of the default fitness.
-POTENCY_UNRELIABLE_RECEPTORS = ("GIPR",)
+# The receptors the GA optimises by default: every one the potency model can actually rank.
+# GIPR is left out because that model scores leave-one-cluster-out R2 < 0 for it; the owning
+# definition is UNRELIABLE_POTENCY_RECEPTORS in functional_potency_predictor_v1/predictor.py.
+# Written out rather than derived from it because importing that module here would pull torch
+# in at import time, which build_model_predictors() defers deliberately. The two are held in
+# step by test_metabolic_gipr.py instead -- a local constant that nothing read used to sit here
+# and had already drifted out of use.
 DEFAULT_TARGET_RECEPTORS = ("GLP1R", "GCGR")
 
 

@@ -6,8 +6,9 @@
 # the INGRESS default below enforces. Do NOT set INGRESS=all unless your proxy
 # is the thing answering that URL (and then auth is on you).
 #
-# The GPU worker is NOT here: it runs as a Vertex AI Custom Job from the image
-# referenced by WORKER_IMAGE_URI, exactly as in the compose deployment.
+# The GPU workers are NOT here: each runs as a Vertex AI Custom Job from the image
+# referenced by WORKER_IMAGE_URI (wound healing), WORKER_METABOLIC_IMAGE_URI or
+# WORKER_COSMETIC_IMAGE_URI, exactly as in the compose deployment.
 #
 # Usage:
 #   cp deploy/cloudrun/env.sh.example deploy/cloudrun/env.sh   # fill it in
@@ -34,6 +35,16 @@ VERTEX_MODEL_STORE="${VERTEX_MODEL_STORE:?set VERTEX_MODEL_STORE, e.g. gs://<buc
 SEED_CANDIDATES_FILE="${SEED_CANDIDATES_FILE:?set SEED_CANDIDATES_FILE, e.g. gs://<bucket>/curated_peptides.fasta}"
 WORKER_IMAGE_URI="${WORKER_IMAGE_URI:?set WORKER_IMAGE_URI to the worker image in Artifact Registry}"
 WORKER_SERVICE_ACCOUNT="${WORKER_SERVICE_ACCOUNT:?set WORKER_SERVICE_ACCOUNT, e.g. worker@PROJECT.iam.gserviceaccount.com}"
+
+# ---- Per-pipeline settings (optional; each pipeline needs BOTH of its two) -----
+# `pipeline` on a create request picks the worker image and the seed FASTA, and api.py reads
+# both through required(). Leaving a pair empty is fine -- that pipeline then answers 503 naming
+# what is missing, and the wound-healing one is unaffected. Setting ONLY the image is the trap:
+# the 503 then names the seed file instead, which reads like a different problem.
+WORKER_METABOLIC_IMAGE_URI="${WORKER_METABOLIC_IMAGE_URI:-}"
+SEED_CANDIDATES_FILE_METABOLIC="${SEED_CANDIDATES_FILE_METABOLIC:-}"
+WORKER_COSMETIC_IMAGE_URI="${WORKER_COSMETIC_IMAGE_URI:-}"
+SEED_CANDIDATES_FILE_COSMETIC="${SEED_CANDIDATES_FILE_COSMETIC:-}"
 
 # Required pairing: NVIDIA_L4 only attaches to g2-standard-*.
 MACHINE_TYPE="${MACHINE_TYPE:-g2-standard-4}"
@@ -100,6 +111,10 @@ gcloud run deploy "$SERVICE" \
 "VERTEX_MODEL_STORE=${VERTEX_MODEL_STORE},"\
 "SEED_CANDIDATES_FILE=${SEED_CANDIDATES_FILE},"\
 "WORKER_IMAGE_URI=${WORKER_IMAGE_URI},"\
+"WORKER_METABOLIC_IMAGE_URI=${WORKER_METABOLIC_IMAGE_URI},"\
+"SEED_CANDIDATES_FILE_METABOLIC=${SEED_CANDIDATES_FILE_METABOLIC},"\
+"WORKER_COSMETIC_IMAGE_URI=${WORKER_COSMETIC_IMAGE_URI},"\
+"SEED_CANDIDATES_FILE_COSMETIC=${SEED_CANDIDATES_FILE_COSMETIC},"\
 "WORKER_SERVICE_ACCOUNT=${WORKER_SERVICE_ACCOUNT},"\
 "MACHINE_TYPE=${MACHINE_TYPE},"\
 "ACCELERATOR_TYPE=${ACCELERATOR_TYPE},"\

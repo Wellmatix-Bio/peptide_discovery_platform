@@ -23,11 +23,24 @@ if str(MODEL_STORE_DIR) not in sys.path:
 
 from model_store.anti_inflammatory_predictor_v1 import AntiInflammatoryPredictor  # noqa: E402
 from model_store.binding_affinity_predictor_v1 import BindingAffinityPredictor  # noqa: E402
-from model_store.functional_potency_predictor_v1 import FunctionalPotencyPredictor  # noqa: E402
+from model_store.functional_potency_predictor_v1 import (  # noqa: E402
+    UNRELIABLE_POTENCY_RECEPTORS,
+    FunctionalPotencyPredictor,
+)
 
 RECEPTORS = ("GLP1R", "GIPR", "GCGR")
 STANDARD_AA = set("ACDEFGHIKLMNPQRSTVWY")
 SCORE_EPSILON = 1e-6
+
+#: Said once, here, and carried through to the API response so a reader of a candidate sees it
+#: without having to find the model card.
+UNRELIABLE_POTENCY_NOTE = (
+    "The potency model cannot rank these receptors: its leave-one-cluster-out R2 is below zero"
+    " for them, meaning it does worse than predicting the training mean, so the pEC50 and EC50"
+    " returned for them order candidates no better than chance. They are reported rather than"
+    " withheld, and they still count toward the gates and the ranking score. Treat them as"
+    " unscreened, not as evidence. See the model card for functional_potency_predictor_v1."
+)
 
 _potency_model: FunctionalPotencyPredictor | None = None
 _binding_model: BindingAffinityPredictor | None = None
@@ -176,6 +189,12 @@ class Stage6Metabolic(CandidateStage):
         receptors = [r for r in RECEPTORS if r in (brief_receptors or params["target_receptors"])]
         if not receptors:
             raise ValueError("Stage 6 (metabolic) needs at least one target receptor")
+        unreliable_targets = [r for r in receptors if r in UNRELIABLE_POTENCY_RECEPTORS]
+        if unreliable_targets:
+            logger.warning(
+                "s06m.unreliable_potency_receptors",
+                extra={"receptors": unreliable_targets, "note": UNRELIABLE_POTENCY_NOTE},
+            )
         floor = params["ec50_floor_nm"]
 
         sequences = [c.sequence for c in candidates if c.sequence]
@@ -225,6 +244,17 @@ class Stage6Metabolic(CandidateStage):
                     "agonism_probability": probability,
                     "binding_pkd": {r: pkd[r][i] for r in RECEPTORS},
                     "anti_inflammatory_probability": anti_inflammatory[i],
+                    # Receptors whose potency number is returned but must not be read as a
+                    # ranking -- the same contract as a screen reporting `not_screened` rather
+                    # than passing quietly. Scoped to the receptors THIS run asked for, so a
+                    # run that never targeted GIPR carries an empty list instead of a warning
+                    # about something it did not do.
+                    "potency_unreliable_receptors": unreliable_targets,
+                    **(
+                        {"potency_unreliable_note": UNRELIABLE_POTENCY_NOTE}
+                        if unreliable_targets
+                        else {}
+                    ),
                 }
             )
             result = evaluate_candidate(candidate.predictions, receptors, params)

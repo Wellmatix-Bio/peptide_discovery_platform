@@ -19,6 +19,19 @@ export type WoundHealingCreateJobRequest = Omit<CreateJobRequest, "stages" | "pi
   pipeline: "wound_healing";
   stages: E2ERequest;
 };
+
+/* The same narrowing for the metabolic pipeline. Its stage names are NOT the wound-healing ones
+   -- the API rejects `s01_therapeutic_product_brief` under `pipeline: "metabolic"` with a 422 --
+   so the two request shapes cannot be mixed, and a request built for one cannot be sent as the
+   other by changing the tag. */
+export type MetabolicCreateJobRequest = Omit<CreateJobRequest, "stages" | "pipeline"> & {
+  pipeline: "metabolic";
+  stages: MetabolicE2ERequest;
+};
+export type MetabolicE2ERequest = components["schemas"]["MetabolicE2ERequest"];
+export type MetabolicBrief = components["schemas"]["MetabolicBrief"];
+/** GLP1R | GIPR | GCGR, from the API's own enum: a receptor it drops is a compile error here. */
+export type TargetReceptor = MetabolicBrief["target_receptors"][number];
 export type CreateJobResponse = components["schemas"]["CreateJobResponse"];
 export type JobStatusResponse = components["schemas"]["JobStatusResponse"];
 export type JobResultsResponse = components["schemas"]["JobResultsResponse"];

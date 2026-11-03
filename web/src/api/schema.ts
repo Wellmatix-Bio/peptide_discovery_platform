@@ -65,5 +65,11 @@ export const GENERATION_TAGS = options("Stage4Request", "tags");
 export const LENGTH_BOUND = bound("BriefFields", "min_length");
 export const DOSING_BOUND = bound("BriefFields", "dosing_interval_hours");
 
+/* The metabolic brief is a different schema, not the wound-healing one with extra fields: its
+   only enum is the receptor list, and it has no dosing interval at all. Read from MetabolicBrief
+   for the same reason as everything above -- so the form cannot offer a receptor the API dropped. */
+export const TARGET_RECEPTORS = options("MetabolicBrief", "target_receptors");
+export const METABOLIC_LENGTH_BOUND = bound("MetabolicBrief", "min_length");
+
 /** "high_glucose" -> "high glucose". Underscores are the API's spelling, not a person's. */
 export const humanise = (value: string): string => value.replace(/_/g, " ");

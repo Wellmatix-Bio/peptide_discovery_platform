@@ -6,14 +6,21 @@ import {
   DESIRED_FUNCTIONS,
   DOSING_BOUND,
   LENGTH_BOUND,
+  METABOLIC_LENGTH_BOUND,
   PATHOGENS,
+  TARGET_RECEPTORS,
   WOUND_CONTEXTS,
   humanise,
 } from "../api/schema";
-import type { BriefFields, WoundHealingCreateJobRequest } from "../api/types";
-import { ErrorBox, Hero } from "../components/ui";
+import type {
+  BriefFields,
+  MetabolicBrief,
+  MetabolicCreateJobRequest,
+  WoundHealingCreateJobRequest,
+} from "../api/types";
+import { ErrorBox, Hero, Pill } from "../components/ui";
 import { lastRun } from "../workspace";
-import { EMPTY_BRIEF, EXAMPLES } from "./examples";
+import { EMPTY_BRIEF, EMPTY_METABOLIC_BRIEF, EXAMPLES, METABOLIC_EXAMPLES } from "./examples";
 
 /* Start a run.
  *
@@ -22,9 +29,17 @@ import { EMPTY_BRIEF, EXAMPLES } from "./examples";
  * own and the JSON tab's -- run the same checks() before sending anything.
  *
  * The examples are this app's own, because none of the repository's 32 briefs is a valid request
- * (docs/BRIEF_VALIDITY.md). */
+ * (docs/BRIEF_VALIDITY.md).
+ *
+ * TWO PIPELINES, TWO BRIEF SCHEMAS. The API routes wound-healing, metabolic and cosmetic jobs
+ * through one endpoint, discriminated by `pipeline`, and each one accepts its OWN stage names: a
+ * wound-healing brief sent as `pipeline: "metabolic"` is a 422, not a reinterpretation. So the
+ * two briefs are separate state with separate checks, and switching pipeline does not carry one
+ * schema's answers into the other. Cosmetic is not offered here yet; its results render, and the
+ * JSON tab can submit one. */
 
 type Tab = "form" | "json";
+type Pipeline = "wound_healing" | "metabolic";
 
 interface Advanced {
   seed: number;
@@ -43,13 +58,52 @@ const STAGES = [
   ["s09_synthesis_cmc", "Synthesis & CMC", "Difficulty, cost band, purity ceiling."],
 ] as const;
 
+/* The metabolic pipeline's stages. Stages 7 and 9 are the SAME stages as wound healing's and keep
+   their names; the other four are metabolic peers that replace their wound-healing counterparts,
+   and the API refuses the wound-healing name under this pipeline. s11_metabolic_ranking is not
+   offered for the same reason s11_ranking is not offered above: turning the ranking stage off
+   leaves a run with no shortlist, which is not a thing this form should make easy. */
+const METABOLIC_STAGES = [
+  [
+    "s04_metabolic_candidate_generation",
+    "Generation",
+    "Route A (genetic algorithm) and Route B, seeded from known incretin analogues.",
+  ],
+  [
+    "s05_metabolic_physchem_screening",
+    "Physicochemical screening",
+    "Charge, hydrophobicity, amphipathicity, stability.",
+  ],
+  [
+    "s06_metabolic_functional_screening",
+    "Receptor potency & function",
+    "pEC50 and EC50 per receptor, binding, agonism probability, plasma half-life.",
+  ],
+  ["s07_structure_mechanism", "Structure & mechanism", "ESMFold. The slowest stage by far."],
+  [
+    "s08_metabolic_safety_developability",
+    "Safety & developability",
+    "Haemolysis, cytotoxicity, aggregation, cleavage.",
+  ],
+  ["s09_synthesis_cmc", "Synthesis & CMC", "Difficulty, cost band, purity ceiling."],
+] as const;
+
 const ADVANCED_DEFAULTS: Advanced = {
   seed: 42,
   n_peptides: 100,
   ph: 7.4,
   cytotoxicity_cell_type: "DRAMP_aggregate",
-  stages: Object.fromEntries(STAGES.map(([name]) => [name, true])),
+  // Both pipelines' stage names, so switching pipeline does not read an undefined toggle.
+  stages: Object.fromEntries(
+    [...STAGES, ...METABOLIC_STAGES].map(([name]) => [name, true]),
+  ),
 };
+
+/** The receptor whose potency model cannot rank candidates. Mirrors
+ *  UNRELIABLE_POTENCY_RECEPTORS in model_store/functional_potency_predictor_v1; the API returns
+ *  the same list per candidate in `potency_unreliable_receptors`, and RunView shows it there. It
+ *  is repeated here so the warning arrives BEFORE a GPU job is paid for, not after. */
+const UNRELIABLE_RECEPTORS = ["GIPR"];
 
 /** Everything wrong with a brief, as a list a person can act on. Runs on EVERY submit path. */
 function checks(brief: BriefFields, advanced: Advanced): string[] {
@@ -80,6 +134,36 @@ function checks(brief: BriefFields, advanced: Advanced): string[] {
   return problems;
 }
 
+/** The metabolic brief's own rules. A SEPARATE function rather than a flag on checks(): the two
+ *  schemas share two field names and nothing else, and the metabolic brief has no dosing
+ *  interval, no wound context and no pathogen requirement. */
+function metabolicChecks(brief: MetabolicBrief, advanced: Advanced): string[] {
+  const problems: string[] = [];
+  if (brief.target_receptors.length === 0) {
+    problems.push("Choose at least one target receptor — the API requires a non-empty list.");
+  }
+  for (const receptor of brief.target_receptors) {
+    if (!TARGET_RECEPTORS.includes(receptor)) {
+      problems.push(`${receptor} is not a receptor the API accepts.`);
+    }
+  }
+  if (brief.min_length > brief.max_length) {
+    problems.push("Shortest peptide cannot be longer than the longest.");
+  }
+  for (const [label, value] of [
+    ["Shortest peptide", brief.min_length],
+    ["Longest peptide", brief.max_length],
+  ] as const) {
+    if (value < METABOLIC_LENGTH_BOUND.min || value > METABOLIC_LENGTH_BOUND.max) {
+      problems.push(
+        `${label} must be between ${METABOLIC_LENGTH_BOUND.min} and ${METABOLIC_LENGTH_BOUND.max}.`,
+      );
+    }
+  }
+  if (advanced.n_peptides < 1) problems.push("Generate at least 1 candidate.");
+  return problems;
+}
+
 function buildRequest(name: string, brief: BriefFields, advanced: Advanced): WoundHealingCreateJobRequest {
   const enabled = (stage: string) => ({ enabled: advanced.stages[stage] ?? true });
   return {
@@ -100,6 +184,33 @@ function buildRequest(name: string, brief: BriefFields, advanced: Advanced): Wou
       s09_synthesis_cmc: enabled("s09_synthesis_cmc"),
     },
   } as WoundHealingCreateJobRequest;
+}
+
+function buildMetabolicRequest(
+  name: string,
+  brief: MetabolicBrief,
+  advanced: Advanced,
+): MetabolicCreateJobRequest {
+  const enabled = (stage: string) => ({ enabled: advanced.stages[stage] ?? true });
+  return {
+    request_id: name.trim() || "unnamed run",
+    pipeline: "metabolic",
+    stages: {
+      s01_metabolic_therapeutic_product_brief: { brief, seed: advanced.seed },
+      s04_metabolic_candidate_generation: {
+        ...enabled("s04_metabolic_candidate_generation"),
+        n_peptides: advanced.n_peptides,
+      },
+      s05_metabolic_physchem_screening: enabled("s05_metabolic_physchem_screening"),
+      s06_metabolic_functional_screening: enabled("s06_metabolic_functional_screening"),
+      s07_structure_mechanism: enabled("s07_structure_mechanism"),
+      s08_metabolic_safety_developability: enabled("s08_metabolic_safety_developability"),
+      s09_synthesis_cmc: enabled("s09_synthesis_cmc"),
+    },
+    /* Every stage not named above, s11_metabolic_ranking included, takes the API's own default.
+       The casts are the same one buildRequest() makes: each stage schema has many more fields
+       than this form sets, and all of them are optional server-side. */
+  } as unknown as MetabolicCreateJobRequest;
 }
 
 function Chooser({
@@ -149,25 +260,124 @@ function Chooser({
   );
 }
 
+function NameAndExample({
+  name,
+  setName,
+  placeholder,
+  examples,
+  onPick,
+  exampleHelp,
+}: {
+  name: string;
+  setName: (next: string) => void;
+  placeholder: string;
+  examples: { id: string; label: string }[];
+  onPick: (id: string) => void;
+  exampleHelp: React.ReactNode;
+}) {
+  return (
+    <>
+      <div className="field">
+        <label htmlFor="name">Name this run</label>
+        <input
+          id="name"
+          value={name}
+          onChange={(event) => setName(event.target.value)}
+          placeholder={placeholder}
+        />
+        <p className="help">
+          For your own history only. It never reaches the pipeline &mdash; the submission id is
+          generated for you.
+        </p>
+      </div>
+
+      <div className="field">
+        <label htmlFor="example">Start from an example</label>
+        <select id="example" defaultValue="" onChange={(event) => onPick(event.target.value)}>
+          <option value="">Choose an example…</option>
+          {examples.map((example) => (
+            <option key={example.id} value={example.id}>
+              {example.label}
+            </option>
+          ))}
+        </select>
+        <p className="help">{exampleHelp}</p>
+      </div>
+    </>
+  );
+}
+
+function StageToggles({
+  stages,
+  advanced,
+  setAdvanced,
+}: {
+  stages: readonly (readonly [string, string, string])[];
+  advanced: Advanced;
+  setAdvanced: (next: Advanced) => void;
+}) {
+  return (
+    <div className="toggles">
+      {stages.map(([stage, label, note]) => {
+        const on = advanced.stages[stage] ?? true;
+        return (
+          <label key={stage} className={`toggle${on ? " on" : " off"}`}>
+            <input
+              type="checkbox"
+              checked={on}
+              onChange={(event) =>
+                setAdvanced({
+                  ...advanced,
+                  stages: { ...advanced.stages, [stage]: event.target.checked },
+                })
+              }
+            />
+            <span className="switch" aria-hidden="true" />
+            <span>
+              <b>{label}</b>
+              <small>{note}</small>
+            </span>
+          </label>
+        );
+      })}
+    </div>
+  );
+}
+
 export function SubmitRun() {
   const navigate = useNavigate();
+  const [pipeline, setPipeline] = useState<Pipeline>("wound_healing");
   const [tab, setTab] = useState<Tab>("form");
   const [name, setName] = useState("");
   const [brief, setBrief] = useState<BriefFields>(EMPTY_BRIEF);
+  const [metabolicBrief, setMetabolicBrief] = useState<MetabolicBrief>(EMPTY_METABOLIC_BRIEF);
   const [advanced, setAdvanced] = useState<Advanced>(ADVANCED_DEFAULTS);
   const [json, setJson] = useState("");
   const [error, setError] = useState<unknown>(null);
   const [problems, setProblems] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
 
-  const request = useMemo(() => buildRequest(name, brief, advanced), [name, brief, advanced]);
+  const request = useMemo(
+    () =>
+      pipeline === "metabolic"
+        ? buildMetabolicRequest(name, metabolicBrief, advanced)
+        : buildRequest(name, brief, advanced),
+    [pipeline, name, brief, metabolicBrief, advanced],
+  );
+
+  const unreliableChosen = metabolicBrief.target_receptors.filter((receptor) =>
+    UNRELIABLE_RECEPTORS.includes(receptor),
+  );
 
   const submit = async (payload: CriticalPayload) => {
     setError(null);
     setProblems([]);
-    let body: WoundHealingCreateJobRequest;
+    let body: WoundHealingCreateJobRequest | MetabolicCreateJobRequest;
     if (payload.kind === "form") {
-      const found = checks(brief, advanced);
+      const found =
+        pipeline === "metabolic"
+          ? metabolicChecks(metabolicBrief, advanced)
+          : checks(brief, advanced);
       if (found.length > 0) {
         setProblems(found);
         return;
@@ -181,22 +391,52 @@ export function SubmitRun() {
         setProblems([`That is not valid JSON: ${(problem as Error).message}`]);
         return;
       }
-      const candidate = parsed as WoundHealingCreateJobRequest;
-      const candidateBrief = candidate?.stages?.s01_therapeutic_product_brief?.brief;
-      if (!candidateBrief) {
-        setProblems(["The JSON must contain stages.s01_therapeutic_product_brief.brief."]);
+      /* THE PASTED JSON NAMES ITS OWN PIPELINE, and the tag is read from the text rather than
+         from the picker: a request pasted from elsewhere describes what it is, and silently
+         retagging it to whatever the form happens to show would send the API a brief under a
+         pipeline that rejects its stage names. An absent tag means wound healing, which is the
+         API's own default for requests written before there was more than one pipeline. */
+      const tag = (parsed as { pipeline?: unknown })?.pipeline ?? "wound_healing";
+      if (tag === "metabolic") {
+        const candidate = parsed as MetabolicCreateJobRequest;
+        const candidateBrief = candidate?.stages?.s01_metabolic_therapeutic_product_brief?.brief;
+        if (!candidateBrief) {
+          setProblems([
+            "A metabolic request must contain" +
+              " stages.s01_metabolic_therapeutic_product_brief.brief.",
+          ]);
+          return;
+        }
+        const found = metabolicChecks(candidateBrief as MetabolicBrief, advanced);
+        if (found.length > 0) {
+          setProblems(found);
+          return;
+        }
+        body = { ...candidate, pipeline: "metabolic" };
+      } else if (tag === "wound_healing") {
+        const candidate = parsed as WoundHealingCreateJobRequest;
+        const candidateBrief = candidate?.stages?.s01_therapeutic_product_brief?.brief;
+        if (!candidateBrief) {
+          setProblems(["The JSON must contain stages.s01_therapeutic_product_brief.brief."]);
+          return;
+        }
+        /* The SAME checks as the form, not a shortcut past them. */
+        const found = checks(candidateBrief as BriefFields, advanced);
+        if (found.length > 0) {
+          setProblems(found);
+          return;
+        }
+        body = { ...candidate, pipeline: "wound_healing" };
+      } else {
+        /* Refused rather than forwarded. The cosmetic pipeline is real and the API would accept
+           it, but nothing here can check a cosmetic brief, and submitting an unchecked request
+           starts a GPU job that bills. */
+        setProblems([
+          `This app cannot submit a "${String(tag)}" request: it has no checks for that` +
+            " pipeline's brief, and it will not start a billed GPU job it could not check.",
+        ]);
         return;
       }
-      /* The SAME checks as the form, not a shortcut past them. */
-      const found = checks(candidateBrief as BriefFields, advanced);
-      if (found.length > 0) {
-        setProblems(found);
-        return;
-      }
-      /* The brief check above already refused anything that is not a wound-healing request, so
-         naming the pipeline here cannot override a caller's real choice -- it fills in the one
-         field a request written before there were three pipelines would not carry. */
-      body = { ...candidate, pipeline: "wound_healing" };
     }
     setBusy(true);
     try {
@@ -218,18 +458,63 @@ export function SubmitRun() {
     setProblems([]);
   };
 
+  const loadMetabolicExample = (id: string) => {
+    const example = METABOLIC_EXAMPLES.find((one) => one.id === id);
+    if (!example) return;
+    setMetabolicBrief(example.brief);
+    setName(example.label);
+    setProblems([]);
+  };
+
   return (
     <>
       <Hero
         title="Start a run"
         sub={
-          <>
-            Describe the wound and what the peptide should do. The pipeline generates candidates,
-            screens them and returns a ranked shortlist.
-          </>
+          pipeline === "metabolic" ? (
+            <>
+              Choose the receptors the peptide should agonise. The pipeline generates candidates,
+              screens them for potency and safety, and returns a ranked shortlist.
+            </>
+          ) : (
+            <>
+              Describe the wound and what the peptide should do. The pipeline generates candidates,
+              screens them and returns a ranked shortlist.
+            </>
+          )
         }
         badge="Each run starts a GPU job"
       />
+
+      <div className="card">
+        <h2>Which pipeline</h2>
+        <div className="tabs" style={{ marginTop: 0 }} role="group" aria-label="pipeline">
+          <button
+            className={`tab${pipeline === "wound_healing" ? " on" : ""}`}
+            onClick={() => {
+              setPipeline("wound_healing");
+              setProblems([]);
+            }}
+          >
+            Wound healing
+          </button>
+          <button
+            className={`tab${pipeline === "metabolic" ? " on" : ""}`}
+            onClick={() => {
+              setPipeline("metabolic");
+              setProblems([]);
+            }}
+          >
+            Metabolic
+          </button>
+        </div>
+        <p className="help">
+          Two different briefs, not one brief with extra fields &mdash; each pipeline accepts its
+          own stages, so switching keeps the two sets of answers apart rather than carrying one
+          across. The cosmetic pipeline&rsquo;s results render in this app, but submitting one is
+          only possible through the JSON tab.
+        </p>
+      </div>
 
       <div className="tabs">
         <button className={`tab${tab === "form" ? " on" : ""}`} onClick={() => setTab("form")}>
@@ -246,45 +531,200 @@ export function SubmitRun() {
         </button>
       </div>
 
-      {tab === "form" ? (
+      {tab === "json" ? (
+        <div className="card">
+          <h2>Advanced: the request as JSON</h2>
+          <p className="help" style={{ marginTop: 0 }}>
+            Everything the API accepts, including stage parameters this form does not show. Edit or
+            paste, then submit. The same checks run either way, and the{" "}
+            <span className="mono">pipeline</span> field in the text decides which checks those are
+            &mdash; not the picker above.
+          </p>
+          <div className="field">
+            <textarea
+              className="json"
+              value={json}
+              onChange={(event) => setJson(event.target.value)}
+              spellCheck={false}
+              aria-label="request JSON"
+            />
+          </div>
+          <div className="btns">
+            <button
+              className="btn secondary"
+              type="button"
+              onClick={() => setJson(JSON.stringify(request, null, 2))}
+            >
+              Reset from the form
+            </button>
+          </div>
+        </div>
+      ) : pipeline === "metabolic" ? (
+        <div className="grid">
+          <div>
+            <div className="card">
+              <h2>The target</h2>
+              <NameAndExample
+                name={name}
+                setName={setName}
+                placeholder="e.g. dual agonist, attempt 2"
+                examples={METABOLIC_EXAMPLES}
+                onPick={loadMetabolicExample}
+                exampleHelp={
+                  <>
+                    Fills the fields below, which you can then change. Each example says which
+                    receptors it targets and why.
+                  </>
+                }
+              />
+
+              <Chooser
+                legend="Target receptors"
+                hint={`The API's own enum, and the one thing a metabolic brief must say. ${TARGET_RECEPTORS.length} values.`}
+                values={TARGET_RECEPTORS}
+                chosen={metabolicBrief.target_receptors}
+                onChange={(next) =>
+                  setMetabolicBrief({
+                    ...metabolicBrief,
+                    target_receptors: next as MetabolicBrief["target_receptors"],
+                  })
+                }
+              />
+
+              {/* SAID BEFORE THE JOB IS PAID FOR, not only on the results page. The potency model
+                  for this receptor scores a negative R2 under leave-one-cluster-out, so its
+                  ordering of two candidates carries no information -- and the value still counts
+                  toward the gates and the ranking score, which is why this is worth a warning
+                  rather than a footnote. It does not block submission: wanting the numbers anyway
+                  is a legitimate reason to run it. */}
+              {unreliableChosen.length > 0 ? (
+                <div className="field">
+                  <Pill tone="warn">{unreliableChosen.join(", ")} potency is not predictive</Pill>
+                  <p className="help">
+                    Leave-one-cluster-out R&sup2; for {unreliableChosen.join(" and ")} is negative
+                    &mdash; worse than always predicting the training mean &mdash; on 55 labels
+                    against 271 for GLP1R. The values are returned and flagged, and they{" "}
+                    <b>still count toward the gates and the ranking score</b>. You can submit this;
+                    just do not read the resulting order as evidence about{" "}
+                    {unreliableChosen.join(" or ")}.
+                  </p>
+                </div>
+              ) : null}
+            </div>
+          </div>
+
+          <div>
+            <div className="card">
+              <h2>Constraints</h2>
+              <div className="row">
+                <div className="field">
+                  <label htmlFor="m-min-length">Shortest peptide</label>
+                  <input
+                    id="m-min-length"
+                    type="number"
+                    min={METABOLIC_LENGTH_BOUND.min}
+                    max={METABOLIC_LENGTH_BOUND.max}
+                    value={metabolicBrief.min_length}
+                    onChange={(event) =>
+                      setMetabolicBrief({
+                        ...metabolicBrief,
+                        min_length: Number(event.target.value),
+                      })
+                    }
+                  />
+                </div>
+                <div className="field">
+                  <label htmlFor="m-max-length">Longest peptide</label>
+                  <input
+                    id="m-max-length"
+                    type="number"
+                    min={METABOLIC_LENGTH_BOUND.min}
+                    max={METABOLIC_LENGTH_BOUND.max}
+                    value={metabolicBrief.max_length}
+                    onChange={(event) =>
+                      setMetabolicBrief({
+                        ...metabolicBrief,
+                        max_length: Number(event.target.value),
+                      })
+                    }
+                  />
+                </div>
+              </div>
+              <p className="help">
+                Residues, {METABOLIC_LENGTH_BOUND.min}&ndash;{METABOLIC_LENGTH_BOUND.max}. The
+                incretin analogues this pipeline is seeded from are around 30 residues, so a range
+                far below that asks for something unlike its training data.
+              </p>
+              <p className="help">
+                A metabolic brief has no dosing interval, no wound context and no pathogen list.
+                Its three optional free-text fields take no enum, so this form leaves them unset
+                &mdash; the JSON tab reaches them.
+              </p>
+            </div>
+
+            <div className="card">
+              <h2>Generation</h2>
+              <div className="row">
+                <div className="field">
+                  <label htmlFor="m-n-peptides">Candidates to generate</label>
+                  <input
+                    id="m-n-peptides"
+                    type="number"
+                    min={1}
+                    value={advanced.n_peptides}
+                    onChange={(event) =>
+                      setAdvanced({ ...advanced, n_peptides: Number(event.target.value) })
+                    }
+                  />
+                  <p className="help">The main driver of how long the run takes, and what it costs.</p>
+                </div>
+                <div className="field">
+                  <label htmlFor="m-seed">Random seed</label>
+                  <input
+                    id="m-seed"
+                    type="number"
+                    value={advanced.seed}
+                    onChange={(event) => setAdvanced({ ...advanced, seed: Number(event.target.value) })}
+                  />
+                  <p className="help">Same seed and same brief, same candidates.</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="card">
+              <h2>Stages</h2>
+              <p className="help" style={{ marginTop: 0 }}>
+                All on by default. Turning one off skips its scoring &mdash; and its filtering, so
+                candidates it would have rejected survive. Every stage parameter not shown here
+                takes the API&rsquo;s default; the JSON tab has them all.
+              </p>
+              <StageToggles
+                stages={METABOLIC_STAGES}
+                advanced={advanced}
+                setAdvanced={setAdvanced}
+              />
+            </div>
+          </div>
+        </div>
+      ) : (
         <div className="grid">
           <div>
             <div className="card">
               <h2>The wound</h2>
-              <div className="field">
-                <label htmlFor="name">Name this run</label>
-                <input
-                  id="name"
-                  value={name}
-                  onChange={(event) => setName(event.target.value)}
-                  placeholder="e.g. diabetic foot ulcer, attempt 3"
-                />
-                <p className="help">
-                  For your own history only. It never reaches the pipeline &mdash; the submission
-                  id is generated for you.
-                </p>
-              </div>
-
-              <div className="field">
-                <label htmlFor="example">Start from an example</label>
-                <select
-                  id="example"
-                  defaultValue=""
-                  onChange={(event) => loadExample(event.target.value)}
-                >
-                  <option value="">Choose an example…</option>
-                  {EXAMPLES.map((example) => (
-                    <option key={example.id} value={example.id}>
-                      {example.label}
-                    </option>
-                  ))}
-                </select>
-                <p className="help">
-                  Fills the fields below, which you can then change. These are written for this
-                  form; the briefs in <span className="mono">data/briefs/</span> are not valid API
-                  requests (see Models &amp; health).
-                </p>
-              </div>
+              <NameAndExample
+                name={name}
+                setName={setName}
+                placeholder="e.g. diabetic foot ulcer, attempt 3"
+                examples={EXAMPLES}
+                onPick={loadExample}
+                exampleHelp={
+                  <>
+                    Fills the fields below, which you can then change. These are written for this
+                    form; the briefs in <span className="mono">data/briefs/</span> are not valid API
+                    requests (see Models &amp; health).
+                  </>
+                }
+              />
 
               <Chooser
                 legend="Wound context"
@@ -403,30 +843,7 @@ export function SubmitRun() {
                 All on by default. Turning one off skips its scoring &mdash; and its filtering, so
                 candidates it would have rejected survive.
               </p>
-              <div className="toggles">
-                {STAGES.map(([stage, label, note]) => {
-                  const on = advanced.stages[stage] ?? true;
-                  return (
-                    <label key={stage} className={`toggle${on ? " on" : " off"}`}>
-                      <input
-                        type="checkbox"
-                        checked={on}
-                        onChange={(event) =>
-                          setAdvanced({
-                            ...advanced,
-                            stages: { ...advanced.stages, [stage]: event.target.checked },
-                          })
-                        }
-                      />
-                      <span className="switch" aria-hidden="true" />
-                      <span>
-                        <b>{label}</b>
-                        <small>{note}</small>
-                      </span>
-                    </label>
-                  );
-                })}
-              </div>
+              <StageToggles stages={STAGES} advanced={advanced} setAdvanced={setAdvanced} />
               <div className="field">
                 <label htmlFor="cell-type">Cytotoxicity reference cells</label>
                 <select
@@ -455,32 +872,6 @@ export function SubmitRun() {
                 />
               </div>
             </div>
-          </div>
-        </div>
-      ) : (
-        <div className="card">
-          <h2>Advanced: the request as JSON</h2>
-          <p className="help" style={{ marginTop: 0 }}>
-            Everything the API accepts, including stage parameters this form does not show. Edit or
-            paste, then submit. The same checks run either way.
-          </p>
-          <div className="field">
-            <textarea
-              className="json"
-              value={json}
-              onChange={(event) => setJson(event.target.value)}
-              spellCheck={false}
-              aria-label="request JSON"
-            />
-          </div>
-          <div className="btns">
-            <button
-              className="btn secondary"
-              type="button"
-              onClick={() => setJson(JSON.stringify(request, null, 2))}
-            >
-              Reset from the form
-            </button>
           </div>
         </div>
       )}

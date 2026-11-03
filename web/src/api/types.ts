@@ -5,6 +5,20 @@
 import type { components } from "./peptide.gen";
 
 export type CreateJobRequest = components["schemas"]["CreateJobRequest"];
+
+/* `stages` on the generated CreateJobRequest is a union of all three pipelines' request shapes,
+   because the API now routes wound-healing, metabolic and cosmetic jobs through one endpoint.
+   THIS APP SUBMITS WOUND-HEALING RUNS ONLY, so it names that member rather than narrowing the
+   union at every use. `pipeline` is sent explicitly rather than left to the API's default: the
+   default is a compatibility affordance for requests written before there was more than one
+   pipeline, and nothing new should lean on it.
+
+   When the app learns to submit the other two, this alias is the thing to remove -- and the
+   compile errors that follow are the list of places that assume one pipeline. */
+export type WoundHealingCreateJobRequest = Omit<CreateJobRequest, "stages" | "pipeline"> & {
+  pipeline: "wound_healing";
+  stages: E2ERequest;
+};
 export type CreateJobResponse = components["schemas"]["CreateJobResponse"];
 export type JobStatusResponse = components["schemas"]["JobStatusResponse"];
 export type JobResultsResponse = components["schemas"]["JobResultsResponse"];

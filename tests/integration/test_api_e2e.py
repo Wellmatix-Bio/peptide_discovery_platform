@@ -20,6 +20,13 @@ def service(monkeypatch):
         "VERTEX_ARTIFACTS_DIR": "gs://test/artifacts",
         "VERTEX_MODEL_STORE": "gs://test/models",
         "SEED_CANDIDATES_FILE": "gs://test/seeds.fasta",
+        # The metabolic pipeline reads its OWN seed file, and create_job checks it BEFORE the
+        # image. Without this, the two metabolic tests below failed in CI and passed on any
+        # machine with a populated .env: one expected 202 and got a 503 about the seed file, and
+        # the other asserted the 503 names WORKER_METABOLIC_IMAGE_URI when it actually named the
+        # seed file. Neither was about seeds. (No cosmetic equivalent is set because nothing here
+        # creates a cosmetic job yet; a test that does will need SEED_CANDIDATES_FILE_COSMETIC.)
+        "SEED_CANDIDATES_FILE_METABOLIC": "gs://test/seeds-metabolic.fasta",
         "WORKER_IMAGE_URI": "us-central1-docker.pkg.dev/test/images/worker:latest",
         "WORKER_SERVICE_ACCOUNT": "worker@test.iam.gserviceaccount.com",
         # api.py reads all three through required(); there is no code fallback,

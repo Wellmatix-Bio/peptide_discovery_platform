@@ -23,6 +23,38 @@ export type CreateJobResponse = components["schemas"]["CreateJobResponse"];
 export type JobStatusResponse = components["schemas"]["JobStatusResponse"];
 export type JobResultsResponse = components["schemas"]["JobResultsResponse"];
 export type CandidateResponse = components["schemas"]["CandidateResponse"];
+export type MetabolicJobResultsResponse = components["schemas"]["MetabolicJobResultsResponse"];
+export type MetabolicCandidateResponse = components["schemas"]["MetabolicCandidateResponse"];
+export type CosmeticJobResultsResponse = components["schemas"]["CosmeticJobResultsResponse"];
+export type CosmeticCandidateResponse = components["schemas"]["CosmeticCandidateResponse"];
+
+/* WHAT GET /jobs/{id}/results ACTUALLY RETURNS: one of three shapes, tagged by `pipeline`.
+   This app read it as JobResultsResponse alone, which typechecks and is wrong -- a metabolic
+   run then rendered a page of "no value" while its real fields sat unread in the payload. No
+   compile error and no runtime error, because the type was asserted at the fetch rather than
+   discriminated. Read this union and switch on the tag.
+
+   The three envelopes differ ONLY in `candidates`; job_id, run_id, status, the three counts and
+   component_stats are identical across all of them, so envelope-level code needs no branch. */
+export type AnyJobResultsResponse =
+  | JobResultsResponse
+  | MetabolicJobResultsResponse
+  | CosmeticJobResultsResponse;
+
+export type AnyCandidateResponse =
+  | CandidateResponse
+  | MetabolicCandidateResponse
+  | CosmeticCandidateResponse;
+
+/** The `pipeline` tag, defaulting to wound healing when ABSENT -- which is not hypothetical: every
+ *  captured response in src/test/fixtures/ predates the field, so a deployed API really does
+ *  answer without it. api.py's default for that field is "wound_healing", so this agrees with the
+ *  server rather than guessing. */
+export function resultsPipeline(
+  results: Pick<AnyJobResultsResponse, "pipeline"> | null | undefined,
+): "wound_healing" | "metabolic" | "cosmetic" {
+  return results?.pipeline ?? "wound_healing";
+}
 export type ComponentStats = components["schemas"]["ComponentStats"];
 export type BriefFields = components["schemas"]["BriefFields"];
 export type E2ERequest = components["schemas"]["E2ERequest"];

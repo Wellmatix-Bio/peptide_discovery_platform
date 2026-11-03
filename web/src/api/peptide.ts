@@ -2,11 +2,11 @@
    Nothing here computes a value the API did not return. */
 import { call } from "./client";
 import type {
+  AnyJobResultsResponse,
   CreateJobRequest,
   CreateJobResponse,
   HistoryDetail,
   HistoryPage,
-  JobResultsResponse,
   JobStatusResponse,
 } from "./types";
 
@@ -105,9 +105,14 @@ export function jobStatus(jobId: string, signal?: AbortSignal) {
 }
 
 /** Results are only present once the worker wrote them; a 404 here is an answer ("not yet"),
- *  not a failure, so it is accepted rather than thrown. */
+ *  not a failure, so it is accepted rather than thrown.
+ *
+ *  The union is deliberate. This asserted JobResultsResponse -- the wound-healing member -- so a
+ *  metabolic or cosmetic run came back typed as a shape it is not, and the fields the caller then
+ *  read were all undefined. Callers must discriminate on `pipeline` (resultsPipeline() in
+ *  ./types handles the deployed APIs that predate the tag). */
 export function jobResults(jobId: string, signal?: AbortSignal) {
-  return call<JobResultsResponse>(`${BASE}/${jobId}/results`, { accept: [404], signal });
+  return call<AnyJobResultsResponse>(`${BASE}/${jobId}/results`, { accept: [404], signal });
 }
 
 export function cancelJob(jobId: string) {

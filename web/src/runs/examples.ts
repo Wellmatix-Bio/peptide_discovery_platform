@@ -13,6 +13,7 @@
  */
 import type {
   BriefFields,
+  CosmeticBrief,
   DesiredFunction,
   MetabolicBrief,
   Pathogen,
@@ -213,4 +214,93 @@ export const EMPTY_METABOLIC_BRIEF: MetabolicBrief = {
   target_receptors: [],
   min_length: 20,
   max_length: 40,
+};
+
+/* ---- The cosmetic pipeline ----
+ *
+ * A NESTED brief, and one where the API requires nothing: every field has a server-side default,
+ * so `{}` is a valid cosmetic brief. The examples still spell every field out, because a default
+ * is not an answer -- someone reading back what they submitted should see what was asked for, not
+ * have to look up what the server filled in.
+ *
+ * Checked against CosmeticBrief and its four nested objects by src/test/examples.test.ts.
+ */
+export interface CosmeticExample {
+  id: string;
+  label: string;
+  note: string;
+  brief: CosmeticBrief;
+}
+
+export const COSMETIC_EXAMPLES: CosmeticExample[] = [
+  {
+    id: "anti-wrinkle-face",
+    label: "Anti-wrinkle face serum",
+    note:
+      "The pipeline's main cosmetic case: collagen and ECM synthesis for facial skin, delivered" +
+      " to the dermis where the fibroblasts are.",
+    brief: {
+      application: { area: "face", sensitive_skin: false },
+      functions: { primary: "collagen_ecm", secondary: ["antioxidant"] },
+      peptide: { min_length: 6, max_length: 12 },
+      product: { ph: 5.5 },
+      target_depth: "dermis",
+    },
+  },
+  {
+    id: "brightening-pigmentation",
+    label: "Brightening / pigmentation",
+    note:
+      "Targets pigmentation first. The epidermis is where melanocytes sit, so a deeper target" +
+      " would be asking the ranking stage to reward delivery past the cells that matter.",
+    brief: {
+      application: { area: "face", sensitive_skin: false },
+      functions: { primary: "pigmentation", secondary: ["antioxidant"] },
+      peptide: { min_length: 6, max_length: 10 },
+      product: { ph: 5.0 },
+      target_depth: "epidermis",
+    },
+  },
+  {
+    id: "sensitive-eye-area",
+    label: "Sensitive eye-area cream",
+    note:
+      "Sets sensitive_skin, which tightens the irritation gate in stage 8, and keeps the peptide" +
+      " short. The eye area is its own application area in the API's vocabulary.",
+    brief: {
+      application: { area: "eye_area", sensitive_skin: true },
+      functions: { primary: "antioxidant", secondary: [] },
+      peptide: { min_length: 6, max_length: 8 },
+      product: { ph: 5.5 },
+      target_depth: "epidermis",
+    },
+  },
+  {
+    id: "cosmetic-minimal",
+    label: "Minimal cosmetic brief",
+    note:
+      "One function and nothing else chosen. Every other field here is the API's own default," +
+      " written out rather than omitted so the submitted brief says what it asked for.",
+    brief: {
+      application: { area: "face", sensitive_skin: false },
+      functions: { primary: "collagen_ecm", secondary: [] },
+      peptide: { min_length: 6, max_length: 12 },
+      product: { ph: 5.5 },
+      target_depth: null,
+    },
+  },
+];
+
+/** The cosmetic form's starting state: the API's own defaults, spelled out, with no target depth
+ *  chosen. `target_depth` is nullable server-side and a null means "do not weight delivery", which
+ *  is a different request from any of the three depths -- so it starts null rather than guessing. */
+/* Required<>, not CosmeticBrief: the API makes every field optional because every field has
+   a default, but THIS object is the form's starting point and must be complete, so the
+   nested setters in SubmitRun have something whole to spread from. */
+export const EMPTY_COSMETIC_BRIEF: Required<CosmeticBrief> = {
+  application: { area: "face", sensitive_skin: false },
+  functions: { primary: "collagen_ecm", secondary: [] },
+  peptide: { min_length: 6, max_length: 12 },
+  product: { ph: 5.5 },
+  target_depth: null,
 };

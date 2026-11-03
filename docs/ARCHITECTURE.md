@@ -11,9 +11,15 @@ Where things live, what depends on what, and which parts you can leave out.
  │                     │
  ├─ services/accounts/ ┤   Accounts + the authenticating proxy. The ONLY route
  │                     │   to the job API, which has no auth of its own.
- ├─ src/backend/ ──────┤   api_e2e  — submits Vertex jobs, reads artifacts
- │                     │   worker_e2e — runs the pipeline on a GPU machine
- ├─ src/pipeline/ ─────┤   The pipeline itself: 14 stage directories, 8 implemented
+ ├─ src/backend/ ──────┤   api_e2e — submits Vertex jobs, reads artifacts. ONE create
+ │                     │     endpoint for all three pipelines, tagged by `pipeline`
+ │                     │   worker — the run loop, once, for every pipeline
+ │                     │   worker_e2e / worker_metabolic / worker_cosmetic — a dozen
+ │                     │     lines each: the three images' entry points, naming
+ │                     │     their pipeline. Not three workers
+ ├─ src/pipeline/ ─────┤   The pipeline itself: 14 stage directories, 8 implemented,
+ │                     │   plus the metabolic and cosmetic stages that replace their
+ │                     │   wound-healing peers through the registry's opt-in pairs
  │                     │
  ├─ src/common/ ───────┤   storage, logging, model sync, physchem helpers
  │                     │
@@ -24,6 +30,13 @@ Where things live, what depends on what, and which parts you can leave out.
 ```
 
 `main.py` runs the pipeline. `deploy/` builds and runs the three containers. `docs/` is this.
+
+**Three pipelines, one of everything else.** `wound_healing`, `metabolic` and `cosmetic` share the
+stage registry, the job API, the worker run loop, the storage layer and the web app. What differs
+is which stages run and which predictors they call — a pipeline is a set of stages that replace
+their wound-healing peers, declared through the registry's opt-in pairs, not a fork of the
+platform. Each needs its own worker image and its own seed file; see
+[DEVOPS_HANDOVER.md](DEVOPS_HANDOVER.md) for the six settings that implies.
 
 ---
 

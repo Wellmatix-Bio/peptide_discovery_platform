@@ -266,6 +266,41 @@ def create_job(request: CreateJobRequest):
     )
 
 
+def run_state(worker_status: str | None, vertex_state: str | None) -> str:
+    """What the run actually is, from the worker's self-report AND the live Vertex state.
+
+    A NAMED FUNCTION ON PURPOSE. This rule was written inline inside get_job_status(), and
+    web/src/api/peptide.ts carries a second implementation of it whose comment says it "mirrors
+    run_state() in src/backend/api_e2e/api.py exactly" -- naming something that was not there.
+    Two copies of a rule in two languages need at least one of them to be a thing you can point
+    at, test directly, and diff by eye against the other. web/src/test/runstate.test.ts holds the
+    TypeScript copy to the same table.
+
+    THE ORDER IS THE RULE, not an accident of how it was written:
+      - the worker's own verdict wins when it has one, because it is the only thing that knows
+        whether results were written;
+      - then Vertex's terminal states, which are the only thing that knows the machine is gone;
+      - `abandoned` has NO status condition, deliberately. A worker that reported progress and was
+        then killed leaves status at "running" forever, and an earlier version checked
+        `status in (None, "pending")` here, which sent that case to `running` -- the UI showing a
+        finished job as still working, which is the defect this reconciliation exists to end.
+    """
+    terminal = vertex_state in TERMINAL_VERTEX_STATES
+    if worker_status == "success":
+        return "succeeded"
+    if worker_status in ("failed", "fail"):
+        return "failed"
+    if vertex_state == "JOB_STATE_CANCELLED":
+        return "cancelled"
+    if vertex_state in ("JOB_STATE_FAILED", "JOB_STATE_EXPIRED"):
+        return "failed"
+    if terminal:
+        return "abandoned"
+    if worker_status == "running":
+        return "running"
+    return "submitted"
+
+
 @app.get("/api/v1/jobs/{job_id:path}/status", response_model=JobStatusResponse)
 def get_job_status(job_id: str):
     name = job_name(job_id)
@@ -292,29 +327,12 @@ def get_job_status(job_id: str):
 
     worker_status = (results.get("status") if results else None) or None
 
-    run_state = "succeeded"
-    terminal = vertex_state in TERMINAL_VERTEX_STATES
-    if worker_status == "success":
-        run_state = "succeeded"
-    elif worker_status in ("failed", "fail"):
-        run_state = "failed"
-    elif vertex_state == "JOB_STATE_CANCELLED":
-        run_state = "cancelled"
-    elif vertex_state in ("JOB_STATE_FAILED", "JOB_STATE_EXPIRED"):
-        run_state = "failed"
-    elif terminal:
-        run_state = "abandoned"
-    elif worker_status == "running":
-        run_state = "running"
-    else:
-        run_state = "submitted"
-
     return JobStatusResponse(
         job_id=job.name,
         status=worker_status or "pending",
         stage=(results.get("stage") if results else None) or "pending",
         vertex_state=vertex_state,
-        run_state=run_state,
+        run_state=run_state(worker_status, vertex_state),
         error=job.error.message or None,
     )
 
@@ -604,6 +622,17 @@ class CosmeticJobResultsResponse(BaseModel):
     candidates: list[CosmeticCandidateResponse] = []
 
 
+#: The results envelope each pipeline answers with. Keyed by every value Pipeline can take, so
+#: adding a fourth pipeline is a KeyError here rather than a response quietly tagged
+#: "wound_healing" -- which is exactly what the previous `if metabolic else wound` ternary did to
+#: cosmetic.
+RESULTS_RESPONSE_FOR: dict[str, type[BaseModel]] = {
+    "wound_healing": JobResultsResponse,
+    "metabolic": MetabolicJobResultsResponse,
+    "cosmetic": CosmeticJobResultsResponse,
+}
+
+
 def _run_pipeline(run_dir: str, candidates: list[dict]) -> Pipeline:
     """The run's pipeline: from the config the API stored with the job, else from the shape of its candidates."""
     try:
@@ -739,11 +768,13 @@ def get_job_results(job_id: str):
     status = status_payload.get("status", "unknown")
 
     if status != "success":
-        unfinished = (
-            MetabolicJobResultsResponse
-            if _run_pipeline(run_dir, []) == "metabolic"
-            else JobResultsResponse
-        )
+        # ALL THREE PIPELINES, not metabolic versus everything else. This was a ternary that
+        # sent cosmetic down the wound-healing branch, so an unfinished cosmetic run came back
+        # tagged `pipeline: "wound_healing"`. Nothing rendered wrongly, because `candidates` is
+        # empty here -- but the tag was false, and the web app now DISCRIMINATES ON IT to choose
+        # how to render a run, so a wrong tag is a wrong screen as soon as these envelopes carry
+        # anything pipeline-specific of their own.
+        unfinished = RESULTS_RESPONSE_FOR[_run_pipeline(run_dir, [])]
         return unfinished(
             job_id=name,
             run_id=run_id,

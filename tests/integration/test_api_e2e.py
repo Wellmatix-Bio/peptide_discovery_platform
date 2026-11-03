@@ -429,3 +429,39 @@ def test_results_pipeline_is_inferred_when_config_is_missing(service):
     objects[f"{RUN}/candidates_final.json"] = json.dumps(
         [{"id": "m1", "sequence": "HAEG", "predictions": {"ec50_nm": {"GLP1R": 1.0}}}])
     assert client.get(f"/api/v1/jobs/{JOB}/results").json()["pipeline"] == "metabolic"
+
+
+@pytest.mark.parametrize(
+    ("brief_stage", "pipeline"),
+    [
+        ("s01_therapeutic_product_brief", "wound_healing"),
+        ("s01_metabolic_therapeutic_product_brief", "metabolic"),
+        ("s01_cosmetic_therapeutic_product_brief", "cosmetic"),
+    ],
+)
+def test_an_unfinished_run_is_tagged_with_its_own_pipeline(service, brief_stage, pipeline):
+    """A run that has not succeeded still answers, and the answer says which pipeline it is.
+
+    This was an `if metabolic else wound_healing` ternary, so an unfinished COSMETIC run came
+    back tagged "wound_healing". Nothing rendered wrongly, because the candidate list is empty
+    here -- but the web app discriminates on this field to decide how to render a run, so a
+    wrong tag is a wrong screen the moment these envelopes carry anything of their own.
+    """
+    client, sdk, job, objects, *_ = service
+    objects[f"{RUN}/results.json"] = json.dumps({"status": "running", "n_final": None})
+    objects[f"{RUN}/config.json"] = json.dumps({"stages": {brief_stage: {"enabled": True}}})
+    body = client.get(f"/api/v1/jobs/{JOB}/results").json()
+    assert body["pipeline"] == pipeline
+    assert body["status"] == "running"
+    assert body["candidates"] == []
+
+
+def test_every_pipeline_has_an_unfinished_response_shape(service):
+    """The map the ternary became. A fourth pipeline added to Pipeline without a row here is a
+    KeyError on the next unfinished run, not a response quietly tagged wound_healing."""
+    from backend.api_e2e.api import RESULTS_RESPONSE_FOR
+    from typing import get_args
+
+    from backend.api_e2e.api import Pipeline
+
+    assert set(RESULTS_RESPONSE_FOR) == set(get_args(Pipeline))

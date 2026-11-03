@@ -2,6 +2,13 @@ import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { createJob } from "../api/peptide";
 import {
+  COSMETIC_AREAS,
+  COSMETIC_FUNCTIONS,
+  COSMETIC_LENGTH_BOUND,
+  COSMETIC_MAX_LENGTH_BOUND,
+  COSMETIC_PH_BOUND,
+  COSMETIC_SECONDARY_MAX,
+  COSMETIC_TARGET_DEPTHS,
   CYTOTOXICITY_CELL_TYPES,
   DESIRED_FUNCTIONS,
   DOSING_BOUND,
@@ -14,13 +21,22 @@ import {
 } from "../api/schema";
 import type {
   BriefFields,
+  CosmeticBrief,
+  CosmeticCreateJobRequest,
   MetabolicBrief,
   MetabolicCreateJobRequest,
   WoundHealingCreateJobRequest,
 } from "../api/types";
 import { ErrorBox, Hero, Pill } from "../components/ui";
 import { lastRun } from "../workspace";
-import { EMPTY_BRIEF, EMPTY_METABOLIC_BRIEF, EXAMPLES, METABOLIC_EXAMPLES } from "./examples";
+import {
+  COSMETIC_EXAMPLES,
+  EMPTY_BRIEF,
+  EMPTY_COSMETIC_BRIEF,
+  EMPTY_METABOLIC_BRIEF,
+  EXAMPLES,
+  METABOLIC_EXAMPLES,
+} from "./examples";
 
 /* Start a run.
  *
@@ -31,15 +47,19 @@ import { EMPTY_BRIEF, EMPTY_METABOLIC_BRIEF, EXAMPLES, METABOLIC_EXAMPLES } from
  * The examples are this app's own, because none of the repository's 32 briefs is a valid request
  * (docs/BRIEF_VALIDITY.md).
  *
- * TWO PIPELINES, TWO BRIEF SCHEMAS. The API routes wound-healing, metabolic and cosmetic jobs
- * through one endpoint, discriminated by `pipeline`, and each one accepts its OWN stage names: a
- * wound-healing brief sent as `pipeline: "metabolic"` is a 422, not a reinterpretation. So the
- * two briefs are separate state with separate checks, and switching pipeline does not carry one
- * schema's answers into the other. Cosmetic is not offered here yet; its results render, and the
- * JSON tab can submit one. */
+ * THREE PIPELINES, THREE BRIEF SCHEMAS. The API routes wound-healing, metabolic and cosmetic
+ * jobs through one endpoint, discriminated by `pipeline`, and each one accepts its OWN stage
+ * names: a wound-healing brief sent as `pipeline: "metabolic"` is a 422, not a reinterpretation.
+ * So the three briefs are separate state with separate checks, and switching pipeline does not
+ * carry one schema's answers into another.
+ *
+ * They are not three variations on a theme either. The wound-healing brief is flat and requires
+ * six fields; the metabolic one is flat and requires three; the cosmetic one is NESTED and
+ * requires nothing at all, because every field has a server-side default. The form still asks for
+ * the cosmetic fields, because a default is not an answer. */
 
 type Tab = "form" | "json";
-type Pipeline = "wound_healing" | "metabolic";
+type Pipeline = "wound_healing" | "metabolic" | "cosmetic";
 
 interface Advanced {
   seed: number;
@@ -88,6 +108,37 @@ const METABOLIC_STAGES = [
   ["s09_synthesis_cmc", "Synthesis & CMC", "Difficulty, cost band, purity ceiling."],
 ] as const;
 
+/* The cosmetic pipeline's stages. Only stage 7 is shared with wound healing here -- even
+   synthesis has a cosmetic peer, unlike the metabolic pipeline, which reuses s09_synthesis_cmc. */
+const COSMETIC_STAGES = [
+  [
+    "s04_cosmetic_candidate_generation",
+    "Generation",
+    "A genetic algorithm over known cosmetic actives.",
+  ],
+  [
+    "s05_cosmetic_physchem_screening",
+    "Physicochemical screening",
+    "Charge, hydrophobicity, aggregation, motif flags.",
+  ],
+  [
+    "s06_cosmetic_functional_models",
+    "Functional models",
+    "Collagen/ECM, antioxidant and pigmentation activity.",
+  ],
+  ["s07_structure_mechanism", "Structure & mechanism", "ESMFold. The slowest stage by far."],
+  [
+    "s08_cosmetic_safety_developability",
+    "Skin safety & developability",
+    "Irritation, sensitisation, allergenicity, haemolysis, cytotoxicity.",
+  ],
+  [
+    "s09_cosmetic_synthesis_cmc",
+    "Synthesis & CMC",
+    "Synthesis feasibility for a cosmetic formulation.",
+  ],
+] as const;
+
 const ADVANCED_DEFAULTS: Advanced = {
   seed: 42,
   n_peptides: 100,
@@ -95,7 +146,7 @@ const ADVANCED_DEFAULTS: Advanced = {
   cytotoxicity_cell_type: "DRAMP_aggregate",
   // Both pipelines' stage names, so switching pipeline does not read an undefined toggle.
   stages: Object.fromEntries(
-    [...STAGES, ...METABOLIC_STAGES].map(([name]) => [name, true]),
+    [...STAGES, ...METABOLIC_STAGES, ...COSMETIC_STAGES].map(([name]) => [name, true]),
   ),
 };
 
@@ -164,6 +215,51 @@ function metabolicChecks(brief: MetabolicBrief, advanced: Advanced): string[] {
   return problems;
 }
 
+/** The cosmetic brief's rules. The API requires none of these fields, so every check here is
+ *  about a value that IS present being outside what the API accepts -- a 422 the form can catch
+ *  before it costs a round trip, not an invented requirement. */
+function cosmeticChecks(brief: CosmeticBrief, advanced: Advanced): string[] {
+  const problems: string[] = [];
+  const functions = brief.functions;
+  const peptide = brief.peptide;
+  if (functions?.primary && !COSMETIC_FUNCTIONS.includes(functions.primary)) {
+    problems.push(`${functions.primary} is not a function the API accepts.`);
+  }
+  if ((functions?.secondary ?? []).length > COSMETIC_SECONDARY_MAX) {
+    problems.push(
+      `Choose at most ${COSMETIC_SECONDARY_MAX} secondary function${
+        COSMETIC_SECONDARY_MAX === 1 ? "" : "s"
+      } — the API accepts no more.`,
+    );
+  }
+  const min = peptide?.min_length;
+  const max = peptide?.max_length;
+  if (min != null && max != null && min > max) {
+    problems.push("Shortest peptide cannot be longer than the longest.");
+  }
+  if (min != null && (min < COSMETIC_LENGTH_BOUND.min || min > COSMETIC_LENGTH_BOUND.max)) {
+    problems.push(
+      `Shortest peptide must be between ${COSMETIC_LENGTH_BOUND.min} and ${COSMETIC_LENGTH_BOUND.max}.`,
+    );
+  }
+  if (
+    max != null &&
+    (max < COSMETIC_MAX_LENGTH_BOUND.min || max > COSMETIC_MAX_LENGTH_BOUND.max)
+  ) {
+    problems.push(
+      `Longest peptide must be between ${COSMETIC_MAX_LENGTH_BOUND.min} and ${COSMETIC_MAX_LENGTH_BOUND.max}.`,
+    );
+  }
+  const ph = brief.product?.ph;
+  if (ph != null && (ph < COSMETIC_PH_BOUND.min || ph > COSMETIC_PH_BOUND.max)) {
+    problems.push(
+      `Formulation pH must be between ${COSMETIC_PH_BOUND.min} and ${COSMETIC_PH_BOUND.max}.`,
+    );
+  }
+  if (advanced.n_peptides < 1) problems.push("Generate at least 1 candidate.");
+  return problems;
+}
+
 function buildRequest(name: string, brief: BriefFields, advanced: Advanced): WoundHealingCreateJobRequest {
   const enabled = (stage: string) => ({ enabled: advanced.stages[stage] ?? true });
   return {
@@ -211,6 +307,30 @@ function buildMetabolicRequest(
        The casts are the same one buildRequest() makes: each stage schema has many more fields
        than this form sets, and all of them are optional server-side. */
   } as unknown as MetabolicCreateJobRequest;
+}
+
+function buildCosmeticRequest(
+  name: string,
+  brief: CosmeticBrief,
+  advanced: Advanced,
+): CosmeticCreateJobRequest {
+  const enabled = (stage: string) => ({ enabled: advanced.stages[stage] ?? true });
+  return {
+    request_id: name.trim() || "unnamed run",
+    pipeline: "cosmetic",
+    stages: {
+      s01_cosmetic_therapeutic_product_brief: { brief, seed: advanced.seed },
+      s04_cosmetic_candidate_generation: enabled("s04_cosmetic_candidate_generation"),
+      s05_cosmetic_physchem_screening: enabled("s05_cosmetic_physchem_screening"),
+      s06_cosmetic_functional_models: enabled("s06_cosmetic_functional_models"),
+      s07_structure_mechanism: enabled("s07_structure_mechanism"),
+      s08_cosmetic_safety_developability: enabled("s08_cosmetic_safety_developability"),
+      s09_cosmetic_synthesis_cmc: enabled("s09_cosmetic_synthesis_cmc"),
+    },
+    /* n_peptides is NOT set here. The cosmetic generation stage is a genetic algorithm with
+       pop_size / n_generations / top_k instead of a candidate count, so passing the form's
+       "candidates to generate" would be inventing a field. The JSON tab reaches the real ones. */
+  } as unknown as CosmeticCreateJobRequest;
 }
 
 function Chooser({
@@ -351,19 +471,18 @@ export function SubmitRun() {
   const [name, setName] = useState("");
   const [brief, setBrief] = useState<BriefFields>(EMPTY_BRIEF);
   const [metabolicBrief, setMetabolicBrief] = useState<MetabolicBrief>(EMPTY_METABOLIC_BRIEF);
+  const [cosmeticBrief, setCosmeticBrief] = useState<CosmeticBrief>(EMPTY_COSMETIC_BRIEF);
   const [advanced, setAdvanced] = useState<Advanced>(ADVANCED_DEFAULTS);
   const [json, setJson] = useState("");
   const [error, setError] = useState<unknown>(null);
   const [problems, setProblems] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
 
-  const request = useMemo(
-    () =>
-      pipeline === "metabolic"
-        ? buildMetabolicRequest(name, metabolicBrief, advanced)
-        : buildRequest(name, brief, advanced),
-    [pipeline, name, brief, metabolicBrief, advanced],
-  );
+  const request = useMemo(() => {
+    if (pipeline === "metabolic") return buildMetabolicRequest(name, metabolicBrief, advanced);
+    if (pipeline === "cosmetic") return buildCosmeticRequest(name, cosmeticBrief, advanced);
+    return buildRequest(name, brief, advanced);
+  }, [pipeline, name, brief, metabolicBrief, cosmeticBrief, advanced]);
 
   const unreliableChosen = metabolicBrief.target_receptors.filter((receptor) =>
     UNRELIABLE_RECEPTORS.includes(receptor),
@@ -372,12 +491,17 @@ export function SubmitRun() {
   const submit = async (payload: CriticalPayload) => {
     setError(null);
     setProblems([]);
-    let body: WoundHealingCreateJobRequest | MetabolicCreateJobRequest;
+    let body:
+      | WoundHealingCreateJobRequest
+      | MetabolicCreateJobRequest
+      | CosmeticCreateJobRequest;
     if (payload.kind === "form") {
       const found =
         pipeline === "metabolic"
           ? metabolicChecks(metabolicBrief, advanced)
-          : checks(brief, advanced);
+          : pipeline === "cosmetic"
+            ? cosmeticChecks(cosmeticBrief, advanced)
+            : checks(brief, advanced);
       if (found.length > 0) {
         setProblems(found);
         return;
@@ -413,6 +537,18 @@ export function SubmitRun() {
           return;
         }
         body = { ...candidate, pipeline: "metabolic" };
+      } else if (tag === "cosmetic") {
+        const candidate = parsed as CosmeticCreateJobRequest;
+        const candidateBrief = candidate?.stages?.s01_cosmetic_therapeutic_product_brief?.brief;
+        /* Unlike the other two, an ABSENT cosmetic brief is valid: every field has a server-side
+           default, so `{}` is a real request. Only a brief that is present and wrong is refused,
+           and a missing stage object is left for the API to default. */
+        const found = cosmeticChecks((candidateBrief ?? {}) as CosmeticBrief, advanced);
+        if (found.length > 0) {
+          setProblems(found);
+          return;
+        }
+        body = { ...candidate, pipeline: "cosmetic" };
       } else if (tag === "wound_healing") {
         const candidate = parsed as WoundHealingCreateJobRequest;
         const candidateBrief = candidate?.stages?.s01_therapeutic_product_brief?.brief;
@@ -428,9 +564,9 @@ export function SubmitRun() {
         }
         body = { ...candidate, pipeline: "wound_healing" };
       } else {
-        /* Refused rather than forwarded. The cosmetic pipeline is real and the API would accept
-           it, but nothing here can check a cosmetic brief, and submitting an unchecked request
-           starts a GPU job that bills. */
+        /* Refused rather than forwarded. An unknown tag is a request this app has no checks for,
+           and it will not start a billed GPU job it could not check. All three pipelines the API
+           currently routes are handled above, so reaching here means the API grew a fourth. */
         setProblems([
           `This app cannot submit a "${String(tag)}" request: it has no checks for that` +
             " pipeline's brief, and it will not start a billed GPU job it could not check.",
@@ -466,6 +602,31 @@ export function SubmitRun() {
     setProblems([]);
   };
 
+  const loadCosmeticExample = (id: string) => {
+    const example = COSMETIC_EXAMPLES.find((one) => one.id === id);
+    if (!example) return;
+    setCosmeticBrief(example.brief);
+    setName(example.label);
+    setProblems([]);
+  };
+
+  /** Nested-field setters, so the JSX below stays readable. The cosmetic brief is four objects. */
+  const setApplication = (patch: Partial<Required<CosmeticBrief>["application"]>) =>
+    setCosmeticBrief({
+      ...cosmeticBrief,
+      application: { ...(cosmeticBrief.application ?? EMPTY_COSMETIC_BRIEF.application), ...patch },
+    });
+  const setFunctions = (patch: Partial<Required<CosmeticBrief>["functions"]>) =>
+    setCosmeticBrief({
+      ...cosmeticBrief,
+      functions: { ...(cosmeticBrief.functions ?? EMPTY_COSMETIC_BRIEF.functions), ...patch },
+    });
+  const setPeptide = (patch: Partial<Required<CosmeticBrief>["peptide"]>) =>
+    setCosmeticBrief({
+      ...cosmeticBrief,
+      peptide: { ...(cosmeticBrief.peptide ?? EMPTY_COSMETIC_BRIEF.peptide), ...patch },
+    });
+
   return (
     <>
       <Hero
@@ -475,6 +636,12 @@ export function SubmitRun() {
             <>
               Choose the receptors the peptide should agonise. The pipeline generates candidates,
               screens them for potency and safety, and returns a ranked shortlist.
+            </>
+          ) : pipeline === "cosmetic" ? (
+            <>
+              Describe the product and what the peptide should do for the skin. The pipeline
+              generates candidates, screens them for activity and skin safety, and returns a
+              ranked shortlist.
             </>
           ) : (
             <>
@@ -507,12 +674,20 @@ export function SubmitRun() {
           >
             Metabolic
           </button>
+          <button
+            className={`tab${pipeline === "cosmetic" ? " on" : ""}`}
+            onClick={() => {
+              setPipeline("cosmetic");
+              setProblems([]);
+            }}
+          >
+            Cosmetic
+          </button>
         </div>
         <p className="help">
-          Two different briefs, not one brief with extra fields &mdash; each pipeline accepts its
-          own stages, so switching keeps the two sets of answers apart rather than carrying one
-          across. The cosmetic pipeline&rsquo;s results render in this app, but submitting one is
-          only possible through the JSON tab.
+          Three different briefs, not one brief with extra fields &mdash; each pipeline accepts its
+          own stages, so switching keeps the three sets of answers apart rather than carrying one
+          across.
         </p>
       </div>
 
@@ -700,6 +875,229 @@ export function SubmitRun() {
               </p>
               <StageToggles
                 stages={METABOLIC_STAGES}
+                advanced={advanced}
+                setAdvanced={setAdvanced}
+              />
+            </div>
+          </div>
+        </div>
+      ) : pipeline === "cosmetic" ? (
+        <div className="grid">
+          <div>
+            <div className="card">
+              <h2>The product</h2>
+              <NameAndExample
+                name={name}
+                setName={setName}
+                placeholder="e.g. eye cream, attempt 2"
+                examples={COSMETIC_EXAMPLES}
+                onPick={loadCosmeticExample}
+                exampleHelp={
+                  <>
+                    Fills the fields below, which you can then change. Each example says which
+                    function it targets and why it picks that skin depth.
+                  </>
+                }
+              />
+
+              <div className="field">
+                <label htmlFor="c-primary">Primary function</label>
+                <select
+                  id="c-primary"
+                  value={cosmeticBrief.functions?.primary ?? COSMETIC_FUNCTIONS[0]}
+                  onChange={(event) =>
+                    setFunctions({
+                      primary: event.target
+                        .value as NonNullable<CosmeticBrief["functions"]>["primary"],
+                    })
+                  }
+                >
+                  {COSMETIC_FUNCTIONS.map((value) => (
+                    <option key={value} value={value}>
+                      {humanise(value)}
+                    </option>
+                  ))}
+                </select>
+                <p className="help">
+                  What the peptide is mainly for. The ranking stage weights this function above the
+                  secondary ones.
+                </p>
+              </div>
+
+              <Chooser
+                legend="Secondary functions"
+                hint={`At most ${COSMETIC_SECONDARY_MAX}, which is the API's own limit. Scored and ranked below the primary function.`}
+                values={COSMETIC_FUNCTIONS}
+                chosen={cosmeticBrief.functions?.secondary ?? []}
+                onChange={(next) =>
+                  setFunctions({
+                    secondary: next as NonNullable<CosmeticBrief["functions"]>["secondary"],
+                  })
+                }
+              />
+
+              <div className="field">
+                <label htmlFor="c-area">Application area</label>
+                <select
+                  id="c-area"
+                  value={cosmeticBrief.application?.area ?? COSMETIC_AREAS[0]}
+                  onChange={(event) =>
+                    setApplication({
+                      area: event.target
+                        .value as NonNullable<CosmeticBrief["application"]>["area"],
+                    })
+                  }
+                >
+                  {COSMETIC_AREAS.map((value) => (
+                    <option key={value} value={value}>
+                      {humanise(value)}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="toggles">
+                <label
+                  className={`toggle${cosmeticBrief.application?.sensitive_skin ? " on" : " off"}`}
+                >
+                  <input
+                    type="checkbox"
+                    checked={cosmeticBrief.application?.sensitive_skin ?? false}
+                    onChange={(event) =>
+                      setApplication({ sensitive_skin: event.target.checked })
+                    }
+                  />
+                  <span className="switch" aria-hidden="true" />
+                  <span>
+                    <b>Sensitive skin</b>
+                    <small>Tightens the irritation gate in the skin-safety stage.</small>
+                  </span>
+                </label>
+              </div>
+            </div>
+          </div>
+
+          <div>
+            <div className="card">
+              <h2>Delivery &amp; formulation</h2>
+              <div className="field">
+                <label htmlFor="c-depth">Target skin depth</label>
+                <select
+                  id="c-depth"
+                  value={cosmeticBrief.target_depth ?? ""}
+                  onChange={(event) =>
+                    setCosmeticBrief({
+                      ...cosmeticBrief,
+                      /* "" is the API's null, and null is a REQUEST, not a blank: it tells the
+                         ranking stage not to weight delivery depth at all, which is a different
+                         run from any of the three depths. */
+                      target_depth: (event.target.value ||
+                        null) as CosmeticBrief["target_depth"],
+                    })
+                  }
+                >
+                  <option value="">Not weighted</option>
+                  {COSMETIC_TARGET_DEPTHS.map((value) => (
+                    <option key={value} value={value}>
+                      {humanise(value)}
+                    </option>
+                  ))}
+                </select>
+                <p className="help">
+                  Where the peptide has to reach to act. Choosing one makes the ranking stage
+                  penalise candidates too large to get there; leaving it unweighted scores
+                  everything on activity and safety alone.
+                </p>
+              </div>
+
+              <div className="row">
+                <div className="field">
+                  <label htmlFor="c-min-length">Shortest peptide</label>
+                  <input
+                    id="c-min-length"
+                    type="number"
+                    min={COSMETIC_LENGTH_BOUND.min}
+                    max={COSMETIC_LENGTH_BOUND.max}
+                    value={cosmeticBrief.peptide?.min_length ?? COSMETIC_LENGTH_BOUND.min}
+                    onChange={(event) =>
+                      setPeptide({ min_length: Number(event.target.value) })
+                    }
+                  />
+                </div>
+                <div className="field">
+                  <label htmlFor="c-max-length">Longest peptide</label>
+                  <input
+                    id="c-max-length"
+                    type="number"
+                    min={COSMETIC_MAX_LENGTH_BOUND.min}
+                    max={COSMETIC_MAX_LENGTH_BOUND.max}
+                    value={cosmeticBrief.peptide?.max_length ?? COSMETIC_MAX_LENGTH_BOUND.max}
+                    onChange={(event) =>
+                      setPeptide({ max_length: Number(event.target.value) })
+                    }
+                  />
+                </div>
+              </div>
+              <p className="help">
+                Residues. Cosmetic actives are short &mdash; the ceiling is{" "}
+                {COSMETIC_LENGTH_BOUND.max}, well below the other two pipelines&rsquo;, because a
+                larger peptide does not cross the stratum corneum.
+              </p>
+
+              <div className="field">
+                <label htmlFor="c-ph">Formulation pH</label>
+                <input
+                  id="c-ph"
+                  type="number"
+                  step="0.1"
+                  min={COSMETIC_PH_BOUND.min}
+                  max={COSMETIC_PH_BOUND.max}
+                  value={cosmeticBrief.product?.ph ?? COSMETIC_PH_BOUND.min}
+                  onChange={(event) =>
+                    setCosmeticBrief({
+                      ...cosmeticBrief,
+                      product: {
+                        ...(cosmeticBrief.product ?? EMPTY_COSMETIC_BRIEF.product),
+                        ph: Number(event.target.value),
+                      },
+                    })
+                  }
+                />
+                <p className="help">
+                  {COSMETIC_PH_BOUND.min}&ndash;{COSMETIC_PH_BOUND.max}. The pH the peptide has to
+                  be stable and charged correctly at, not the skin&rsquo;s.
+                </p>
+              </div>
+            </div>
+
+            <div className="card">
+              <h2>Generation</h2>
+              <div className="field">
+                <label htmlFor="c-seed">Random seed</label>
+                <input
+                  id="c-seed"
+                  type="number"
+                  value={advanced.seed}
+                  onChange={(event) => setAdvanced({ ...advanced, seed: Number(event.target.value) })}
+                />
+                <p className="help">Same seed and same brief, same candidates.</p>
+              </div>
+              <p className="help">
+                No &ldquo;candidates to generate&rdquo; here: the cosmetic generation stage is a
+                genetic algorithm sized by population, generations and top-k rather than by a
+                candidate count. Those three are on the JSON tab.
+              </p>
+            </div>
+
+            <div className="card">
+              <h2>Stages</h2>
+              <p className="help" style={{ marginTop: 0 }}>
+                All on by default. Turning one off skips its scoring &mdash; and its filtering, so
+                candidates it would have rejected survive. Every stage parameter not shown here
+                takes the API&rsquo;s default.
+              </p>
+              <StageToggles
+                stages={COSMETIC_STAGES}
                 advanced={advanced}
                 setAdvanced={setAdvanced}
               />

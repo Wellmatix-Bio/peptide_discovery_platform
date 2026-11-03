@@ -25,6 +25,12 @@ model_store/__pycache__/
 model_store/*/__pycache__/
 
 # ---------- Data ----------
+# all_sequences_aligned.csv is the metabolic models' TRAINING LABELS and must not be published.
+# It is the file that confirmed the EC50_T1/T2/T3 -> GCGR/GLP1R/GIPR mapping (docs/LIMITATIONS.md),
+# so it is worth keeping a copy of -- but not here. Its home is a private GCS bucket, or
+# data/raw/ below, which is already ignored. Named explicitly because a file dropped at the repo
+# ROOT is matched by none of the data/ rules and would be staged by `git add -A`.
+all_sequences_aligned.csv
 data/raw/
 data/interim/
 data/processed/

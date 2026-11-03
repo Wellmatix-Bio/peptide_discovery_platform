@@ -663,3 +663,95 @@ is the useful part of the number; the number itself is incidental.
 output and printed only the final summary line, so a red CI job said "9 failed" and gave no way
 to learn which nine -- not from the log, and not by re-running, because the difference did not
 reproduce locally.
+
+## Three copies of the worker, and what the third copy had lost
+
+`worker_metabolic/worker.py` and `worker_cosmetic/worker.py` were **byte-identical** to each other
+once you replaced the word "metabolic" with "cosmetic" — `diff` on the normalised files returned
+zero lines, across 188 lines each. Both were `worker_e2e/worker.py` with two changes: the pipeline
+name handed to `validate_job_config`, and `--overwrite` **deleted**.
+
+That second difference was not a decision. `--overwrite` exists because a replayed config once
+destroyed a finished run's results (recorded above); the wound-healing worker gained the flag and
+its two copies did not. So a metabolic or cosmetic run that genuinely needed to replace a run
+directory had no way to say so, and the error message told the operator to delete the directory by
+hand — advice the wound-healing worker had stopped needing to give.
+
+The run loop is now `src/backend/worker/worker.py`, once. The three packages keep their module
+paths, because those paths are what the Dockerfiles, the cloudbuild files and the tests all name,
+and each is about a dozen lines: a `PIPELINE` constant and four forwarding functions. The pipeline
+is a parameter, not a variant — it selects which stage names the config validator expects, and
+nothing else in the loop reads it.
+
+`tests/unit/test_worker_entry_points.py` pins the shape that replaced the copies, including that
+all three now offer `--overwrite` and that the re-exported `storage` and `time` are *identity*-equal
+to the shared module's, so a test monkeypatching `worker.storage` still reaches the code that runs.
+
+## run_state() is a function again
+
+The reconciliation rule lived inline in `get_job_status()`, while
+`web/src/api/peptide.ts` carried a second implementation whose comment said it "mirrors
+`run_state()` in `src/backend/api_e2e/api.py` exactly" — naming something that was not there.
+
+It is a named function now. The useful part is the test:
+`tests/unit/test_run_state_parity.py` **reads the case table out of
+`web/src/test/runstate.test.ts`** and runs the Python implementation against it, so a case added on
+the TypeScript side is picked up here rather than drifting. If the table's format changes enough
+that the cases cannot be parsed, the test fails loudly — a parity test that silently checks
+nothing is worse than no parity test.
+
+One dead line went with it: the function opened `run_state = "succeeded"` before a branch that
+always overwrote it. Nothing reached it, but a reader had to prove that.
+
+## An unfinished cosmetic run called itself wound healing
+
+`GET /results` for a run that has not succeeded chose its envelope with a ternary:
+`MetabolicJobResultsResponse if pipeline == "metabolic" else JobResultsResponse`. Cosmetic took the
+`else`, so an unfinished cosmetic run came back tagged `pipeline: "wound_healing"`.
+
+Nothing rendered wrongly, because the candidate list is empty in that branch. But the tag was
+false, and the web app now **discriminates on exactly that field** to decide how to render a run —
+so it would have become a wrong screen the moment these envelopes carried anything pipeline-specific
+of their own.
+
+It is a dict keyed by every value `Pipeline` can take, and
+`test_every_pipeline_has_an_unfinished_response_shape` holds the two in step: a fourth pipeline
+added to `Pipeline` without a row is a `KeyError` on the next unfinished run, not a response
+quietly tagged wound healing.
+
+### 591 passed / 7 failed
+
+The 44 new tests from the work above: 24 on the worker entry points, 10 holding `run_state()` to
+the TypeScript table, 9 on the receptor column mapping and the source's units, and 4 on the
+unfinished-run pipeline tag. **The failing 7 are unchanged and are still all missing weight files**, which is the property
+that makes this number worth recording — a failure that is not about a weight file is a regression.
+
+## The receptor column order was right, and the file said so in six places
+
+`all_sequences_aligned.csv` was supplied on 2026-11-03. The mapping
+`EC50_T1 = GCGR, EC50_T2 = GLP1R, EC50_T3 = GIPR` had been carried as an unverified assumption in
+two model cards since the metabolic pipeline landed. **It is correct.**
+
+The file contains the natural ligands, and each is most potent in exactly the expected column by
+seven to eight orders of magnitude: glucagon in T1; GLP-1, exendin-4, liraglutide and semaglutide
+all in T2; GIP in T3. Six ligands, unanimous, nothing marginal. Both cards now read `CONFIRMED`
+with the date and the evidence, and the test that used to assert the cards still said "not
+confirmed" now asserts the opposite — a test demanding that the project forget what it learned
+would be worse than no test.
+
+Two things the file settled that nobody had asked about:
+
+- **The `EC50_T*` columns are picomolar.** `EC50_LOG_T*` matches `log10(EC50_T* x 1e-12)` to a mean
+  absolute error of 0.0013 across all 496 paired values; nanomolar is out by exactly 3.0000. No
+  shipped code reads the CSV and `pec50_to_ec50_nm()` is right, so nothing is broken — but the
+  metrics cannot distinguish a model trained on correctly-scaled labels from one trained 3 logs
+  out, because R² and Pearson are shift-invariant while every absolute pEC50 the pipeline reports
+  is not.
+- **Censored values are mixed in with measurements.** Sentinels at pEC50 exactly 4.0, 5.0 and 6.0
+  are plate readings of "nothing", recorded as numbers. GIPR has 4 of 56 labels at 4.0, nearly
+  three standard deviations below its mean of 9.13 — enough, under leave-one-cluster-out on n=56,
+  to be a real part of why its R² is negative. That is a hypothesis; testing it needs the training
+  notebook. If it holds, GIPR is cheaper to improve than "collect more labels" suggested.
+
+The CSV itself is in `.gitignore` by name. It holds the models' training labels, and a file at the
+repository root is matched by none of the `data/` rules, so `git add -A` would have staged it.

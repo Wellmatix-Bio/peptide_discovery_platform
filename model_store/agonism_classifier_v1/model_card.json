@@ -29,9 +29,10 @@
         "missing": 216
       }
     },
-    "receptor_column_assumption": "EC50_T1 = GCGR, EC50_T2 = GLP1R, EC50_T3 = GIPR (assumed order, not confirmed by the source file)",
+    "receptor_column_assumption": "EC50_T1 = GCGR, EC50_T2 = GLP1R, EC50_T3 = GIPR -- CONFIRMED 2026-11-03 against all_sequences_aligned.csv itself, from the natural ligands it contains: glucagon is most potent in T1, GLP-1/exendin-4/liraglutide/semaglutide all in T2, GIP in T3, each by 7-8 orders of magnitude. Was recorded as an assumption; it is not one any more. tests/unit/test_receptor_column_assumption.py holds this line and its twin in step.",
     "cv": "5-fold, folds grouped by CD-HIT clusters at 80% identity, 20% of the training part held out for early stopping",
-    "decision_threshold_in_notebook": 0.5
+    "decision_threshold_in_notebook": 0.5,
+    "ec50_units_in_source": "The EC50_T* columns are PICOMOLAR, not nanomolar: EC50_LOG_T* = log10(EC50_T* x 1e-12), verified to a mean absolute error of 0.0013 over all 496 paired values. Train from EC50_LOG_T* (already log10 molar) or scale by 1e-12; reading the raw column as nM puts every pEC50 out by exactly 3 log units."
   },
   "cv_metrics": "weights/cv_metrics.csv (per fold and receptor: AUC-ROC, AUC-PR, F1, precision, recall, balanced accuracy)"
 }

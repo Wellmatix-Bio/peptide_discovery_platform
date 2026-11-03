@@ -32,6 +32,21 @@ export type MetabolicE2ERequest = components["schemas"]["MetabolicE2ERequest"];
 export type MetabolicBrief = components["schemas"]["MetabolicBrief"];
 /** GLP1R | GIPR | GCGR, from the API's own enum: a receptor it drops is a compile error here. */
 export type TargetReceptor = MetabolicBrief["target_receptors"][number];
+
+/* And the cosmetic pipeline. Its brief is NESTED rather than flat -- application, functions,
+   peptide, product -- and every field has a server-side default, so the smallest valid cosmetic
+   brief is `{}`. The form still asks, because a default is not an answer. */
+export type CosmeticCreateJobRequest = Omit<CreateJobRequest, "stages" | "pipeline"> & {
+  pipeline: "cosmetic";
+  stages: CosmeticE2ERequest;
+};
+export type CosmeticE2ERequest = components["schemas"]["CosmeticE2ERequest"];
+export type CosmeticBrief = components["schemas"]["CosmeticBrief"];
+export type CosmeticFunction = NonNullable<
+  components["schemas"]["CosmeticFunctions"]["primary"]
+>;
+export type CosmeticArea = NonNullable<components["schemas"]["CosmeticApplication"]["area"]>;
+export type CosmeticTargetDepth = NonNullable<CosmeticBrief["target_depth"]>;
 export type CreateJobResponse = components["schemas"]["CreateJobResponse"];
 export type JobStatusResponse = components["schemas"]["JobStatusResponse"];
 export type JobResultsResponse = components["schemas"]["JobResultsResponse"];

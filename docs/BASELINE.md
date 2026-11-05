@@ -755,3 +755,64 @@ Two things the file settled that nobody had asked about:
 
 The CSV itself is in `.gitignore` by name. It holds the models' training labels, and a file at the
 repository root is matched by none of the `data/` rules, so `git add -A` would have staged it.
+
+### 599 passed / 7 failed
+
+Eight more tests, from the three defects found in browser testing (below). The failing seven are
+unchanged and are still all missing weight files.
+
+## Three defects found by retesting, and one test that was pinning the first
+
+### A retry started a second GPU job that read the first run's config out from under it
+
+`create_job` launches every job for a `request_id` with
+`--config <artifacts>/requests/<request_id>/config.json` -- **one path, shared by every attempt**
+-- and the worker waits up to 120 seconds for that file to appear. A second create overwrote it
+with the second run's config, so the first job, if it had not read the file yet, picked up the
+**second** run's `run_id` and wrote its results into the second run's directory. Two paid GPU
+jobs, one run directory, racing writes, and the first run's own directory left empty forever.
+
+A repeated `request_id` is a retry, and now returns the job the first attempt started without
+asking Vertex for a second one.
+
+**`test_repeated_request_id_submits_another_job` asserted the old behaviour** -- that a second
+create happens and returns the new job's name -- so the defect was written down as the
+expectation. It is rewritten, not deleted: a test that pins a bug is worth keeping as the record
+of what was believed, with the belief corrected.
+
+The remaining window is a read-then-write, so two creates racing inside one instant can still
+both pass. Marked `shortcut:` in the code, with the upgrade named (a GCS precondition write).
+
+### The cosmetic form refused requests the API accepts, with no way to fix them
+
+`cosmeticChecks` required `advanced.n_peptides >= 1`. `buildCosmeticRequest` **never sends
+n_peptides** -- the cosmetic generation stage is a genetic algorithm sized by population,
+generations and top-k -- so the check was about a field that is not in the request.
+
+It was also unfixable from the screen it blocked. Clearing the candidate-count input on the
+wound-healing or metabolic form leaves it at `0`, because `Number("") === 0`, and the cosmetic
+form has no candidate-count field at all. Every cosmetic submission then failed with a problem
+the user could neither see nor correct.
+
+### An unfinished run with no readable config was called wound healing
+
+The unfinished branch of `get_job_results()` has no candidates to inspect, so `_run_pipeline`
+fell through to its default however cosmetic the run was. It now reads the **worker's last
+reported stage** as a third source of evidence: `s08_cosmetic_safety_developability` can only be a
+cosmetic run. Stages the pipelines share, such as `s07_structure_mechanism`, deliberately say
+nothing and fall through rather than guess.
+
+### GIPR values reached the browser unflagged on older runs
+
+Stage 6 only began recording `potency_unreliable_receptors` per candidate recently. Every run
+from before that carries GIPR pEC50 and EC50 values and **no flag**, so the numbers rendered with
+nothing marking them as unrankable -- four candidates in a row, in testing.
+
+`_metabolic_candidate_response` now derives the flag from the receptors a candidate actually has
+potency for when the run recorded none, which fixes every client at once and fixes runs that can
+no longer be re-run. The test for `is None` rather than falsiness is the point: a run that
+recorded an **empty** list targeted no unreliable receptor and must stay empty.
+
+api.py keeps its own copies of the receptor tuple and the note, because importing either original
+pulls torch into a process that only submits jobs and reads JSON.
+`tests/unit/test_metabolic_gipr.py` holds the copies to the originals.

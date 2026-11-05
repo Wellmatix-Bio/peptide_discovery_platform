@@ -217,8 +217,9 @@ function metabolicChecks(brief: MetabolicBrief, advanced: Advanced): string[] {
 
 /** The cosmetic brief's rules. The API requires none of these fields, so every check here is
  *  about a value that IS present being outside what the API accepts -- a 422 the form can catch
- *  before it costs a round trip, not an invented requirement. */
-function cosmeticChecks(brief: CosmeticBrief, advanced: Advanced): string[] {
+ *  before it costs a round trip, not an invented requirement. Nothing here may refuse a request
+ *  the API would have taken; a check the user cannot act on from this form is worse still. */
+function cosmeticChecks(brief: CosmeticBrief): string[] {
   const problems: string[] = [];
   const functions = brief.functions;
   const peptide = brief.peptide;
@@ -256,7 +257,12 @@ function cosmeticChecks(brief: CosmeticBrief, advanced: Advanced): string[] {
       `Formulation pH must be between ${COSMETIC_PH_BOUND.min} and ${COSMETIC_PH_BOUND.max}.`,
     );
   }
-  if (advanced.n_peptides < 1) problems.push("Generate at least 1 candidate.");
+  /* NO n_peptides CHECK. buildCosmeticRequest does not send one -- the cosmetic generation stage
+     is a genetic algorithm sized by population and generations -- so demanding a valid candidate
+     count refused requests the API accepts. Worse, it was unfixable from this form: the cosmetic
+     form has no candidate-count field, so a 0 left behind by the wound-healing or metabolic form
+     (clearing a number input gives Number("") === 0) blocked every cosmetic submission with a
+     problem the user could not see or correct. */
   return problems;
 }
 
@@ -500,7 +506,7 @@ export function SubmitRun() {
         pipeline === "metabolic"
           ? metabolicChecks(metabolicBrief, advanced)
           : pipeline === "cosmetic"
-            ? cosmeticChecks(cosmeticBrief, advanced)
+            ? cosmeticChecks(cosmeticBrief)
             : checks(brief, advanced);
       if (found.length > 0) {
         setProblems(found);
@@ -543,7 +549,7 @@ export function SubmitRun() {
         /* Unlike the other two, an ABSENT cosmetic brief is valid: every field has a server-side
            default, so `{}` is a real request. Only a brief that is present and wrong is refused,
            and a missing stage object is left for the API to default. */
-        const found = cosmeticChecks((candidateBrief ?? {}) as CosmeticBrief, advanced);
+        const found = cosmeticChecks((candidateBrief ?? {}) as CosmeticBrief);
         if (found.length > 0) {
           setProblems(found);
           return;

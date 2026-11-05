@@ -298,3 +298,67 @@ describe("the JSON tab takes its pipeline from the text, not from the picker", (
     expect((sent[0] as { pipeline: string }).pipeline).toBe("wound_healing");
   });
 });
+
+describe("the cosmetic path does not refuse what the API accepts", () => {
+  /* The bug: cosmeticChecks demanded advanced.n_peptides >= 1, but buildCosmeticRequest never
+     sends n_peptides -- the cosmetic generation stage is a GA sized by population and
+     generations. Clearing the candidate-count field on the wound-healing or metabolic form
+     leaves it at 0 (Number("") === 0), and the cosmetic form has NO such field, so every
+     cosmetic submission was blocked by a problem the user could neither see nor correct. */
+  const clearCandidateCount = () =>
+    fireEvent.change(screen.getByLabelText(/Candidates to generate/), {
+      target: { value: "" },
+    });
+
+  it("submits from the form after the candidate count was cleared elsewhere", async () => {
+    show();
+    clearCandidateCount();
+    pickPipeline("Cosmetic");
+    submit();
+    await waitFor(() => expect(sent).toHaveLength(1));
+    const body = sent[0] as { pipeline: string; stages: Record<string, unknown> };
+    expect(body.pipeline).toBe("cosmetic");
+    // The request never carried a candidate count, which is why demanding one was wrong.
+    expect(JSON.stringify(body)).not.toContain("n_peptides");
+  });
+
+  it("submits a pasted cosmetic request after the candidate count was cleared", async () => {
+    show();
+    clearCandidateCount();
+    fireEvent.click(screen.getByRole("button", { name: "Advanced: JSON" }));
+    fireEvent.change(screen.getByLabelText("request JSON"), {
+      target: {
+        value: JSON.stringify({
+          request_id: "pasted",
+          pipeline: "cosmetic",
+          stages: { s01_cosmetic_therapeutic_product_brief: { brief: {} } },
+        }),
+      },
+    });
+    submit();
+    await waitFor(() => expect(sent).toHaveLength(1));
+    expect((sent[0] as { pipeline: string }).pipeline).toBe("cosmetic");
+  });
+
+  it("still refuses a cosmetic brief the API really would reject", async () => {
+    show();
+    pickPipeline("Cosmetic");
+    // pH 9 is outside the API's 4.0-7.5 bound, so catching it here saves a 422.
+    fireEvent.change(screen.getByLabelText(/Formulation pH/), { target: { value: "9" } });
+    submit();
+    await waitFor(() =>
+      expect(screen.getByText(/Formulation pH must be between/)).toBeInTheDocument(),
+    );
+    expect(sent).toHaveLength(0);
+  });
+
+  it("keeps the candidate-count check for the pipelines that send one", async () => {
+    show();
+    clearCandidateCount();
+    submit();
+    await waitFor(() =>
+      expect(screen.getByText(/Generate at least 1 candidate/)).toBeInTheDocument(),
+    );
+    expect(sent).toHaveLength(0);
+  });
+});

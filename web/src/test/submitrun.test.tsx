@@ -40,7 +40,7 @@ function show() {
   );
 }
 
-const pickPipeline = (label: "Wound healing" | "Metabolic") =>
+const pickPipeline = (label: "Wound healing" | "Metabolic" | "Cosmetic") =>
   fireEvent.click(screen.getByRole("button", { name: label }));
 
 const submit = () =>
@@ -143,6 +143,62 @@ describe("submitting a metabolic run", () => {
   });
 });
 
+describe("submitting a cosmetic run", () => {
+  it("sends the cosmetic tag, its nested brief and its own stage names", async () => {
+    show();
+    pickPipeline("Cosmetic");
+    submit();
+    await waitFor(() => expect(sent).toHaveLength(1));
+    const body = sent[0] as {
+      pipeline: string;
+      stages: Record<string, { brief?: Record<string, unknown> }>;
+    };
+    expect(body.pipeline).toBe("cosmetic");
+    const brief = body.stages.s01_cosmetic_therapeutic_product_brief!.brief as {
+      application: { area: string };
+      functions: { primary: string };
+      peptide: { min_length: number };
+    };
+    // NESTED, not flat, and spelled out rather than left to the server's defaults.
+    expect(brief.application.area).toBe("face");
+    expect(brief.functions.primary).toBe("collagen_ecm");
+    expect(brief.peptide.min_length).toBe(6);
+    expect(Object.keys(body.stages)).toContain("s08_cosmetic_safety_developability");
+    expect(Object.keys(body.stages)).not.toContain("s08_safety_developability");
+  });
+
+  it("submits with no target depth, because null is a request and not a blank", async () => {
+    show();
+    pickPipeline("Cosmetic");
+    submit();
+    await waitFor(() => expect(sent).toHaveLength(1));
+    const brief = (sent[0] as { stages: Record<string, { brief: { target_depth: unknown } }> })
+      .stages.s01_cosmetic_therapeutic_product_brief!.brief;
+    expect(brief.target_depth).toBeNull();
+  });
+
+  it("refuses more secondary functions than the API accepts", async () => {
+    show();
+    pickPipeline("Cosmetic");
+    const field = screen.getByText(/Secondary functions/).closest(".field") as HTMLElement;
+    for (const value of ["collagen ecm", "antioxidant", "pigmentation"]) {
+      fireEvent.click(within(field).getByText(value));
+    }
+    submit();
+    await waitFor(() =>
+      expect(screen.getByText(/at most 2 secondary functions/i)).toBeInTheDocument(),
+    );
+    expect(sent).toHaveLength(0);
+  });
+
+  it("does not offer a candidate count, which this pipeline has no field for", () => {
+    show();
+    pickPipeline("Cosmetic");
+    expect(screen.queryByLabelText(/Candidates to generate/)).not.toBeInTheDocument();
+    expect(screen.getByText(/genetic algorithm sized by population/)).toBeInTheDocument();
+  });
+});
+
 describe("submitting a wound-healing run still works", () => {
   it("sends the wound-healing tag and its own stage names", async () => {
     show();
@@ -201,11 +257,21 @@ describe("the JSON tab takes its pipeline from the text, not from the picker", (
     expect(sent).toHaveLength(0);
   });
 
-  it("refuses a pipeline it has no checks for instead of starting a billed job", async () => {
+  it("accepts a pasted cosmetic request, whose brief may legitimately be absent", async () => {
     show();
+    // Unlike the other two, every cosmetic field has a server-side default, so `{}` is a real
+    // request and an absent brief is not an error.
     paste(JSON.stringify({ pipeline: "cosmetic", stages: {} }));
     submit();
-    await waitFor(() => expect(screen.getByText(/cannot submit a "cosmetic"/)).toBeInTheDocument());
+    await waitFor(() => expect(sent).toHaveLength(1));
+    expect((sent[0] as { pipeline: string }).pipeline).toBe("cosmetic");
+  });
+
+  it("refuses a pipeline it has no checks for instead of starting a billed job", async () => {
+    show();
+    paste(JSON.stringify({ pipeline: "dermal", stages: {} }));
+    submit();
+    await waitFor(() => expect(screen.getByText(/cannot submit a "dermal"/)).toBeInTheDocument());
     expect(sent).toHaveLength(0);
   });
 
@@ -230,5 +296,69 @@ describe("the JSON tab takes its pipeline from the text, not from the picker", (
     submit();
     await waitFor(() => expect(sent).toHaveLength(1));
     expect((sent[0] as { pipeline: string }).pipeline).toBe("wound_healing");
+  });
+});
+
+describe("the cosmetic path does not refuse what the API accepts", () => {
+  /* The bug: cosmeticChecks demanded advanced.n_peptides >= 1, but buildCosmeticRequest never
+     sends n_peptides -- the cosmetic generation stage is a GA sized by population and
+     generations. Clearing the candidate-count field on the wound-healing or metabolic form
+     leaves it at 0 (Number("") === 0), and the cosmetic form has NO such field, so every
+     cosmetic submission was blocked by a problem the user could neither see nor correct. */
+  const clearCandidateCount = () =>
+    fireEvent.change(screen.getByLabelText(/Candidates to generate/), {
+      target: { value: "" },
+    });
+
+  it("submits from the form after the candidate count was cleared elsewhere", async () => {
+    show();
+    clearCandidateCount();
+    pickPipeline("Cosmetic");
+    submit();
+    await waitFor(() => expect(sent).toHaveLength(1));
+    const body = sent[0] as { pipeline: string; stages: Record<string, unknown> };
+    expect(body.pipeline).toBe("cosmetic");
+    // The request never carried a candidate count, which is why demanding one was wrong.
+    expect(JSON.stringify(body)).not.toContain("n_peptides");
+  });
+
+  it("submits a pasted cosmetic request after the candidate count was cleared", async () => {
+    show();
+    clearCandidateCount();
+    fireEvent.click(screen.getByRole("button", { name: "Advanced: JSON" }));
+    fireEvent.change(screen.getByLabelText("request JSON"), {
+      target: {
+        value: JSON.stringify({
+          request_id: "pasted",
+          pipeline: "cosmetic",
+          stages: { s01_cosmetic_therapeutic_product_brief: { brief: {} } },
+        }),
+      },
+    });
+    submit();
+    await waitFor(() => expect(sent).toHaveLength(1));
+    expect((sent[0] as { pipeline: string }).pipeline).toBe("cosmetic");
+  });
+
+  it("still refuses a cosmetic brief the API really would reject", async () => {
+    show();
+    pickPipeline("Cosmetic");
+    // pH 9 is outside the API's 4.0-7.5 bound, so catching it here saves a 422.
+    fireEvent.change(screen.getByLabelText(/Formulation pH/), { target: { value: "9" } });
+    submit();
+    await waitFor(() =>
+      expect(screen.getByText(/Formulation pH must be between/)).toBeInTheDocument(),
+    );
+    expect(sent).toHaveLength(0);
+  });
+
+  it("keeps the candidate-count check for the pipelines that send one", async () => {
+    show();
+    clearCandidateCount();
+    submit();
+    await waitFor(() =>
+      expect(screen.getByText(/Generate at least 1 candidate/)).toBeInTheDocument(),
+    );
+    expect(sent).toHaveLength(0);
   });
 });

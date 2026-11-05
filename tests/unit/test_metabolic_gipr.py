@@ -59,3 +59,19 @@ def test_the_note_says_the_number_still_counts() -> None:
     Stage 11 still scores them, so the note has to be explicit about that or it misleads."""
     assert "still count" in UNRELIABLE_POTENCY_NOTE
     assert "unscreened" in UNRELIABLE_POTENCY_NOTE
+
+
+def test_the_api_copies_of_the_flag_match_their_owning_definitions():
+    """api.py keeps its own copy of the receptor list and the note.
+
+    It has to: importing either original pulls torch into a process that only submits jobs and
+    reads JSON. So the copies are held here instead, where the heavy imports are already paid
+    for. A receptor added or removed upstream fails in this test rather than drifting silently
+    into a response that flags the wrong thing.
+    """
+    from backend.api_e2e import api
+    from model_store.functional_potency_predictor_v1 import UNRELIABLE_POTENCY_RECEPTORS
+    from pipeline.s06_functional_models.metabolic_stage import UNRELIABLE_POTENCY_NOTE
+
+    assert tuple(api.UNRELIABLE_POTENCY_RECEPTORS) == tuple(UNRELIABLE_POTENCY_RECEPTORS)
+    assert api.UNRELIABLE_POTENCY_NOTE == UNRELIABLE_POTENCY_NOTE

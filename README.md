@@ -38,7 +38,10 @@ That executes the whole pipeline against local paths. It is slower on CPU, and t
 model weights (see [Model weights](#model-weights)), but nothing about it is a reduced version of
 the cloud path — it is the same code.
 
-Running the web app and the full service stack is in [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
+Running and testing **the web app** on its own is in
+[docs/FRONTEND_DEV.md](docs/FRONTEND_DEV.md) — the fast route is `npm test`, which renders the real
+pages against captured API responses and needs no server. The full service stack is in
+[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
 
 ---
 
@@ -46,11 +49,13 @@ Running the web app and the full service stack is in [docs/DEPLOYMENT.md](docs/D
 
 | | |
 |---|---|
-| **Pipeline** | 14 stage directories under `src/pipeline/`, 8 implemented |
-| **Models** | 16 predictors in `model_store/` — ESM-2 embeddings with XGBoost/sklearn heads, a BiLSTM+CNN MIC ensemble, ESMFold for structure, ProtGPT2+LoRA for de novo generation |
-| **Job API** | `src/backend/api_e2e/` — submits Vertex AI Custom Jobs, reads their artifacts |
+| **Pipelines** | **Three**, sharing one stage registry and one endpoint: wound healing, metabolic (GLP1R / GCGR / GIPR agonists) and cosmetic (skin beauty). A pipeline is a set of stages that replace their wound-healing peers, not a fork |
+| **Stages** | 14 stage directories under `src/pipeline/`, 8 implemented, plus the metabolic and cosmetic peers |
+| **Models** | 27 predictor packages in `model_store/` — ESM-2 embeddings with XGBoost/sklearn heads, a BiLSTM+CNN MIC ensemble, ESMFold for structure, ProtGPT2+LoRA for de novo generation |
+| **Job API** | `src/backend/api_e2e/` — submits Vertex AI Custom Jobs, reads their artifacts. One `create` endpoint for all three pipelines, discriminated by a `pipeline` field |
+| **Worker** | `src/backend/worker/` — one run loop. `worker_e2e`, `worker_metabolic` and `worker_cosmetic` are a dozen lines each that name their pipeline and are what the three images run |
 | **Accounts** | `services/accounts/` — email/password accounts and the authenticating proxy |
-| **Web app** | `web/` — React, TypeScript, one origin, no CORS |
+| **Web app** | `web/` — React, TypeScript, one origin, no CORS. Submits wound-healing, metabolic and cosmetic runs; renders all three |
 | **Deployment** | `deploy/` — three containers, only the web one publishes a port |
 
 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) explains how they fit together and what you can leave
@@ -118,6 +123,22 @@ Open and documented rather than discovered later:
 - Stage 7's pathway model reports **P(activator)**, not P(involved), and at the shipped threshold
   of 0.5 the activated and inhibited bands meet — so every pathway gets a direction and a 0.501
   coin flip reads as a definite call — [docs/BASELINE.md](docs/BASELINE.md)
+- **GIPR potency is returned but is not usable for ranking.** Leave-one-cluster-out R² is
+  −0.108 — worse than always predicting the training mean — on 55 labels against 271 for GLP1R.
+  The values are flagged (`potency_unreliable_receptors`, shown in the app before a run is
+  submitted) and they **still count toward the gates and the ranking score** —
+  [docs/LIMITATIONS.md](docs/LIMITATIONS.md)
+- **Censored labels are mixed into the metabolic training data.** `EC50_T*` carries sentinel
+  "no measurable activity" values at pEC50 exactly 4.0, 5.0 and 6.0 — 7% of GIPR's 56 labels sit
+  at 4.0, nearly three standard deviations below its mean. This may be part of why GIPR's R² is
+  negative, which would make it cheaper to fix than it looks —
+  [docs/LIMITATIONS.md](docs/LIMITATIONS.md)
+- The `EC50_T*` columns in the source CSV are **picomolar**, not nanomolar. No shipped code reads
+  them, but anyone retraining from the raw column rather than `EC50_LOG_T*` would be out by
+  exactly 1000× — [docs/LIMITATIONS.md](docs/LIMITATIONS.md)
+- **No worker image is built in CI.** The `images` job builds the API, accounts and web images;
+  the three `src/backend/worker_*/Dockerfile` are built and pushed by hand, so a broken one
+  surfaces when a Vertex job fails — [docs/DEVOPS_HANDOVER.md](docs/DEVOPS_HANDOVER.md)
 - The unimplemented stage directories (s10, s12–s14) have no tests. Every implemented stage —
   s01 through s09 and s11 — now does
 
@@ -134,6 +155,9 @@ Open and documented rather than discovered later:
 | [API_SPECIFICATION.md](API_SPECIFICATION.md) | The job API's endpoints |
 | [BASELINE.md](docs/BASELINE.md) | Measured test baseline and the defects behind it |
 | [WEB_WALKTHROUGH.md](docs/WEB_WALKTHROUGH.md) | Every page, with screenshots |
+| [FRONTEND_DEV.md](docs/FRONTEND_DEV.md) | Running and testing the web app locally, and the generated-types workflow |
+| [DEVOPS_HANDOVER.md](docs/DEVOPS_HANDOVER.md) | What a platform team asks for, and where each item actually stands |
+| [LIMITATIONS.md](docs/LIMITATIONS.md) | What the models cannot tell you, and the open questions for their owner |
 | [REVIEW_LOG.md](docs/REVIEW_LOG.md) | Queries raised in review, what was found, why it was missed |
 | [PATHWAY_THRESHOLD.md](docs/PATHWAY_THRESHOLD.md) | For the model owner: the one open modelling decision |
 | [HISTORY_SCAN.md](docs/HISTORY_SCAN.md) | Pre-publication scan of the git history, and what it found |

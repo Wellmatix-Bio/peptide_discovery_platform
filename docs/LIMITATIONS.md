@@ -70,3 +70,116 @@ Share of the candidates that reached each stage and were rejected by that check.
 - **Cleavage stability, half-life and the migration gate** removed decoys more often than winners, as intended.
 - In `GLP1R`, Stage 8 rejected 152 of 162 candidates (hemolysis 131, cytotoxicity 93, half-life 93), so no known peptide reached the ranking.
 - `TC-30`, `GIPR` and `GCGR` are not included because they had not finished.
+
+---
+
+## The metabolic models: one question answered, two still open
+
+All of these are about `functional_potency_predictor_v1` and `agonism_classifier_v1`, which share
+one training file: `all_sequences_aligned.csv`. That file is **not in this repository and must not
+be** — it is the models' training labels, and `.gitignore` names it explicitly. A copy was
+supplied on 2026-11-03 and read; what follows is what it settled and what it did not.
+
+### 1. GIPR potency is reported but cannot rank
+
+From `model_store/functional_potency_predictor_v1/model_card.json`, leave-one-cluster-out
+(CD-HIT 90% identity):
+
+| Receptor | n | R² | Pearson | Spearman |
+|---|---|---|---|---|
+| GLP1R | 271 | 0.511 | 0.722 | 0.584 |
+| GCGR | 199 | 0.470 | 0.688 | 0.678 |
+| **GIPR** | **55** | **−0.108** | **0.094** | **0.144** |
+
+A negative R² means the model does worse than always predicting the training mean, so **its
+ordering of two candidates carries no information**. 55 labels against 271.
+
+What the platform does with that, today: the value is still returned, and it is **flagged** at
+every layer — `UNRELIABLE_POTENCY_RECEPTORS` on the predictor, `potency_unreliable_receptors` plus
+a note on each candidate in the API response, a warning in the submit form *before* a GPU job is
+paid for, and a pill on the results page. The flag reads the way `not_screened` does elsewhere: a
+thing that did not work reports itself rather than passing quietly.
+
+**What is still a product decision, and is deliberately left open:** the GIPR value *still counts
+toward the stage-6 gates and the stage-11 ranking score*. Nothing excludes it. Whether a run that
+targets GIPR should rank on a signal with R² = −0.108 is not a question the code should answer by
+itself, and the note says so outright rather than letting the flag read as "this was excluded".
+
+The honest options are: exclude GIPR from the ranking weights; keep it and accept that the order
+is partly noise; or get more GIPR labels. The third is the only one that fixes it.
+
+### 2. The receptor column order — ANSWERED, and it was right
+
+Both cards recorded `EC50_T1 = GCGR, EC50_T2 = GLP1R, EC50_T3 = GIPR` as an assumption nobody had
+checked. It has now been checked against the file itself, and it holds.
+
+The CSV contains the natural ligands, whose receptor selectivity is not in question. Each is most
+potent in exactly the expected column, by seven to eight orders of magnitude — this is not a
+judgement call:
+
+| ligand | T1 (pM) | T2 (pM) | T3 (pM) | most potent |
+|---|---|---|---|---|
+| glucagon | **0.5** | 43.9 | 1e8 | T1 → **GCGR** |
+| GLP-1 | 1e8 | **0.9** | 1e8 | T2 → **GLP1R** |
+| exendin-4 | 1e8 | **0.4** | 2e5 | T2 → **GLP1R** |
+| liraglutide | 1e8 | **6.4** | 1e8 | T2 → **GLP1R** |
+| semaglutide | 1e8 | **6.2** | 1e8 | T2 → **GLP1R** |
+| GIP | 1e8 | 2e5 | **0.4** | T3 → **GIPR** |
+
+Six ligands, unanimous. Both model cards now say `CONFIRMED` with the date and the evidence, and
+`tests/unit/test_receptor_column_assumption.py` keeps them from drifting apart or losing the
+confirmation. **Nothing needs re-training on this account**, which was the risk worth checking:
+had the order been wrong, every pEC50 and every agonism probability would have been attached to
+the wrong receptor with no symptom at all.
+
+### 3. The source column is PICOMOLAR, and neither card said so
+
+`EC50_LOG_T*` is log10 of the EC50 **in molar**; the bare `EC50_T*` column is in **picomolar**.
+Checked across all 496 paired values: assuming picomolar matches `EC50_LOG_T*` to a mean absolute
+error of **0.0013**, and assuming nanomolar is out by exactly **3.0000** — three log units, a
+1000× error in potency.
+
+Nothing in this repository reads the CSV, and `pec50_to_ec50_nm()` in
+`src/pipeline/s06_functional_models/metabolic_stage.py` is correct (`10 ** (9 - pEC50)`), so no
+shipped code is affected. **The risk is to the next person who retrains.** Train from
+`EC50_LOG_T*`, which is already log10 molar, or scale the raw column by `1e-12`. Both cards now
+record this.
+
+**For the model owner:** it would be worth confirming that the published metrics were produced
+from `EC50_LOG_T*` and not from the raw column, because a uniform 3-log shift in the labels would
+not change R² or Pearson at all — those are shift-invariant — but it *would* make every absolute
+pEC50 the pipeline reports, and therefore every EC50 gate in stages 6 and 11, wrong by 1000×.
+The metrics cannot tell you which happened.
+
+### 4. Censored values are mixed in with measurements
+
+The columns carry sentinel "no measurable activity" values — `1e8`, `1e7` and `1e6` pM, which land
+on suspiciously round pEC50 values of exactly 4.0, 5.0 and 6.0:
+
+| receptor | labels | censored (pEC50 ≤ 6) | at |
+|---|---|---|---|
+| GCGR | 206 | 10 (5%) | 4.0, 5.0, 5.24 |
+| GLP1R | 234 | 10 (4%) | 6.0 |
+| **GIPR** | **56** | **4 (7%)** | **4.0** |
+
+These are **ceilings, not measurements**: a plate that showed nothing, recorded as a number. A
+regression trained on them treats "we could not measure this" as "the value is exactly 4.0".
+
+This is worth putting to the model owner alongside question 1, because the two may be the same
+problem. GIPR's labels have mean pEC50 9.13 and standard deviation 1.86, and **4 of its 56 points
+sit at 4.0 — nearly three standard deviations below the mean**. Under leave-one-cluster-out, a
+fold holding some of those four would be asked to predict a value no feature can explain, and a
+handful of such points is enough to drive R² negative on n=56. That would make GIPR's −0.108 partly
+an artefact of how non-binders were encoded, not only a shortage of data — and censored regression,
+or dropping the sentinels, would be a cheaper experiment than collecting more GIPR labels.
+
+**It is a hypothesis, not a finding.** Confirming it means re-running the leave-one-cluster-out CV
+with those points excluded and comparing, which needs the training notebook.
+
+### Label counts, for reference
+
+The CSV holds 234 rows. Per-column label counts are GCGR 206, GLP1R 234, GIPR 56, against the
+cards' recorded `n_train` of 199, 271 and 55. GLP1R being *higher* in the cards is expected — they
+name a ChEMBL GLP-1R extract as a second source. The small shortfalls for GCGR and GIPR are
+consistent with the stated 5–50 length filter and with replicate merging, but they have not been
+reconciled row by row.

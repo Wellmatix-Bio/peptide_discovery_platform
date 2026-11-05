@@ -663,3 +663,156 @@ is the useful part of the number; the number itself is incidental.
 output and printed only the final summary line, so a red CI job said "9 failed" and gave no way
 to learn which nine -- not from the log, and not by re-running, because the difference did not
 reproduce locally.
+
+## Three copies of the worker, and what the third copy had lost
+
+`worker_metabolic/worker.py` and `worker_cosmetic/worker.py` were **byte-identical** to each other
+once you replaced the word "metabolic" with "cosmetic" — `diff` on the normalised files returned
+zero lines, across 188 lines each. Both were `worker_e2e/worker.py` with two changes: the pipeline
+name handed to `validate_job_config`, and `--overwrite` **deleted**.
+
+That second difference was not a decision. `--overwrite` exists because a replayed config once
+destroyed a finished run's results (recorded above); the wound-healing worker gained the flag and
+its two copies did not. So a metabolic or cosmetic run that genuinely needed to replace a run
+directory had no way to say so, and the error message told the operator to delete the directory by
+hand — advice the wound-healing worker had stopped needing to give.
+
+The run loop is now `src/backend/worker/worker.py`, once. The three packages keep their module
+paths, because those paths are what the Dockerfiles, the cloudbuild files and the tests all name,
+and each is about a dozen lines: a `PIPELINE` constant and four forwarding functions. The pipeline
+is a parameter, not a variant — it selects which stage names the config validator expects, and
+nothing else in the loop reads it.
+
+`tests/unit/test_worker_entry_points.py` pins the shape that replaced the copies, including that
+all three now offer `--overwrite` and that the re-exported `storage` and `time` are *identity*-equal
+to the shared module's, so a test monkeypatching `worker.storage` still reaches the code that runs.
+
+## run_state() is a function again
+
+The reconciliation rule lived inline in `get_job_status()`, while
+`web/src/api/peptide.ts` carried a second implementation whose comment said it "mirrors
+`run_state()` in `src/backend/api_e2e/api.py` exactly" — naming something that was not there.
+
+It is a named function now. The useful part is the test:
+`tests/unit/test_run_state_parity.py` **reads the case table out of
+`web/src/test/runstate.test.ts`** and runs the Python implementation against it, so a case added on
+the TypeScript side is picked up here rather than drifting. If the table's format changes enough
+that the cases cannot be parsed, the test fails loudly — a parity test that silently checks
+nothing is worse than no parity test.
+
+One dead line went with it: the function opened `run_state = "succeeded"` before a branch that
+always overwrote it. Nothing reached it, but a reader had to prove that.
+
+## An unfinished cosmetic run called itself wound healing
+
+`GET /results` for a run that has not succeeded chose its envelope with a ternary:
+`MetabolicJobResultsResponse if pipeline == "metabolic" else JobResultsResponse`. Cosmetic took the
+`else`, so an unfinished cosmetic run came back tagged `pipeline: "wound_healing"`.
+
+Nothing rendered wrongly, because the candidate list is empty in that branch. But the tag was
+false, and the web app now **discriminates on exactly that field** to decide how to render a run —
+so it would have become a wrong screen the moment these envelopes carried anything pipeline-specific
+of their own.
+
+It is a dict keyed by every value `Pipeline` can take, and
+`test_every_pipeline_has_an_unfinished_response_shape` holds the two in step: a fourth pipeline
+added to `Pipeline` without a row is a `KeyError` on the next unfinished run, not a response
+quietly tagged wound healing.
+
+### 591 passed / 7 failed
+
+The 44 new tests from the work above: 24 on the worker entry points, 10 holding `run_state()` to
+the TypeScript table, 9 on the receptor column mapping and the source's units, and 4 on the
+unfinished-run pipeline tag. **The failing 7 are unchanged and are still all missing weight files**, which is the property
+that makes this number worth recording — a failure that is not about a weight file is a regression.
+
+## The receptor column order was right, and the file said so in six places
+
+`all_sequences_aligned.csv` was supplied on 2026-11-03. The mapping
+`EC50_T1 = GCGR, EC50_T2 = GLP1R, EC50_T3 = GIPR` had been carried as an unverified assumption in
+two model cards since the metabolic pipeline landed. **It is correct.**
+
+The file contains the natural ligands, and each is most potent in exactly the expected column by
+seven to eight orders of magnitude: glucagon in T1; GLP-1, exendin-4, liraglutide and semaglutide
+all in T2; GIP in T3. Six ligands, unanimous, nothing marginal. Both cards now read `CONFIRMED`
+with the date and the evidence, and the test that used to assert the cards still said "not
+confirmed" now asserts the opposite — a test demanding that the project forget what it learned
+would be worse than no test.
+
+Two things the file settled that nobody had asked about:
+
+- **The `EC50_T*` columns are picomolar.** `EC50_LOG_T*` matches `log10(EC50_T* x 1e-12)` to a mean
+  absolute error of 0.0013 across all 496 paired values; nanomolar is out by exactly 3.0000. No
+  shipped code reads the CSV and `pec50_to_ec50_nm()` is right, so nothing is broken — but the
+  metrics cannot distinguish a model trained on correctly-scaled labels from one trained 3 logs
+  out, because R² and Pearson are shift-invariant while every absolute pEC50 the pipeline reports
+  is not.
+- **Censored values are mixed in with measurements.** Sentinels at pEC50 exactly 4.0, 5.0 and 6.0
+  are plate readings of "nothing", recorded as numbers. GIPR has 4 of 56 labels at 4.0, nearly
+  three standard deviations below its mean of 9.13 — enough, under leave-one-cluster-out on n=56,
+  to be a real part of why its R² is negative. That is a hypothesis; testing it needs the training
+  notebook. If it holds, GIPR is cheaper to improve than "collect more labels" suggested.
+
+The CSV itself is in `.gitignore` by name. It holds the models' training labels, and a file at the
+repository root is matched by none of the `data/` rules, so `git add -A` would have staged it.
+
+### 599 passed / 7 failed
+
+Eight more tests, from the three defects found in browser testing (below). The failing seven are
+unchanged and are still all missing weight files.
+
+## Three defects found by retesting, and one test that was pinning the first
+
+### A retry started a second GPU job that read the first run's config out from under it
+
+`create_job` launches every job for a `request_id` with
+`--config <artifacts>/requests/<request_id>/config.json` -- **one path, shared by every attempt**
+-- and the worker waits up to 120 seconds for that file to appear. A second create overwrote it
+with the second run's config, so the first job, if it had not read the file yet, picked up the
+**second** run's `run_id` and wrote its results into the second run's directory. Two paid GPU
+jobs, one run directory, racing writes, and the first run's own directory left empty forever.
+
+A repeated `request_id` is a retry, and now returns the job the first attempt started without
+asking Vertex for a second one.
+
+**`test_repeated_request_id_submits_another_job` asserted the old behaviour** -- that a second
+create happens and returns the new job's name -- so the defect was written down as the
+expectation. It is rewritten, not deleted: a test that pins a bug is worth keeping as the record
+of what was believed, with the belief corrected.
+
+The remaining window is a read-then-write, so two creates racing inside one instant can still
+both pass. Marked `shortcut:` in the code, with the upgrade named (a GCS precondition write).
+
+### The cosmetic form refused requests the API accepts, with no way to fix them
+
+`cosmeticChecks` required `advanced.n_peptides >= 1`. `buildCosmeticRequest` **never sends
+n_peptides** -- the cosmetic generation stage is a genetic algorithm sized by population,
+generations and top-k -- so the check was about a field that is not in the request.
+
+It was also unfixable from the screen it blocked. Clearing the candidate-count input on the
+wound-healing or metabolic form leaves it at `0`, because `Number("") === 0`, and the cosmetic
+form has no candidate-count field at all. Every cosmetic submission then failed with a problem
+the user could neither see nor correct.
+
+### An unfinished run with no readable config was called wound healing
+
+The unfinished branch of `get_job_results()` has no candidates to inspect, so `_run_pipeline`
+fell through to its default however cosmetic the run was. It now reads the **worker's last
+reported stage** as a third source of evidence: `s08_cosmetic_safety_developability` can only be a
+cosmetic run. Stages the pipelines share, such as `s07_structure_mechanism`, deliberately say
+nothing and fall through rather than guess.
+
+### GIPR values reached the browser unflagged on older runs
+
+Stage 6 only began recording `potency_unreliable_receptors` per candidate recently. Every run
+from before that carries GIPR pEC50 and EC50 values and **no flag**, so the numbers rendered with
+nothing marking them as unrankable -- four candidates in a row, in testing.
+
+`_metabolic_candidate_response` now derives the flag from the receptors a candidate actually has
+potency for when the run recorded none, which fixes every client at once and fixes runs that can
+no longer be re-run. The test for `is None` rather than falsiness is the point: a run that
+recorded an **empty** list targeted no unreliable receptor and must stay empty.
+
+api.py keeps its own copies of the receptor tuple and the note, because importing either original
+pulls torch into a process that only submits jobs and reads JSON.
+`tests/unit/test_metabolic_gipr.py` holds the copies to the originals.

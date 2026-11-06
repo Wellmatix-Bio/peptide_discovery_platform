@@ -12,6 +12,7 @@ type Property = {
   enum?: string[];
   minimum?: number;
   maximum?: number;
+  maxItems?: number;
   default?: unknown;
   anyOf?: Property[];
 };
@@ -64,6 +65,34 @@ export const GENERATION_TAGS = options("Stage4Request", "tags");
 
 export const LENGTH_BOUND = bound("BriefFields", "min_length");
 export const DOSING_BOUND = bound("BriefFields", "dosing_interval_hours");
+
+/* The metabolic brief is a different schema, not the wound-healing one with extra fields: its
+   only enum is the receptor list, and it has no dosing interval at all. Read from MetabolicBrief
+   for the same reason as everything above -- so the form cannot offer a receptor the API dropped. */
+export const TARGET_RECEPTORS = options("MetabolicBrief", "target_receptors");
+export const METABOLIC_LENGTH_BOUND = bound("MetabolicBrief", "min_length");
+
+/* The cosmetic brief is NESTED -- application, functions, peptide, product -- and every field has
+   a default, so the schema requires nothing at all. Each vocabulary is read from the object that
+   owns it rather than from one flat brief, because that is where api.py declares it. */
+export const COSMETIC_AREAS = options("CosmeticApplication", "area");
+export const COSMETIC_FUNCTIONS = options("CosmeticFunctions", "primary");
+export const COSMETIC_TARGET_DEPTHS = options("CosmeticBrief", "target_depth");
+export const COSMETIC_LENGTH_BOUND = bound("CosmeticPeptide", "min_length");
+export const COSMETIC_MAX_LENGTH_BOUND = bound("CosmeticPeptide", "max_length");
+export const COSMETIC_PH_BOUND = bound("CosmeticProduct", "ph");
+
+/** How many secondary functions the API allows. Read, not assumed: the form must not let someone
+ *  pick a third and learn about the limit from a 422. */
+export function maxItems(schema: string, field: string): number {
+  const value = property(schema, field).maxItems;
+  if (value === undefined) {
+    throw new Error(`${schema}.${field} has no maxItems in the OpenAPI snapshot`);
+  }
+  return value;
+}
+
+export const COSMETIC_SECONDARY_MAX = maxItems("CosmeticFunctions", "secondary");
 
 /** "high_glucose" -> "high glucose". Underscores are the API's spelling, not a person's. */
 export const humanise = (value: string): string => value.replace(/_/g, " ");

@@ -5,10 +5,84 @@
 import type { components } from "./peptide.gen";
 
 export type CreateJobRequest = components["schemas"]["CreateJobRequest"];
+
+/* `stages` on the generated CreateJobRequest is a union of all three pipelines' request shapes,
+   because the API now routes wound-healing, metabolic and cosmetic jobs through one endpoint.
+   THIS APP SUBMITS WOUND-HEALING RUNS ONLY, so it names that member rather than narrowing the
+   union at every use. `pipeline` is sent explicitly rather than left to the API's default: the
+   default is a compatibility affordance for requests written before there was more than one
+   pipeline, and nothing new should lean on it.
+
+   When the app learns to submit the other two, this alias is the thing to remove -- and the
+   compile errors that follow are the list of places that assume one pipeline. */
+export type WoundHealingCreateJobRequest = Omit<CreateJobRequest, "stages" | "pipeline"> & {
+  pipeline: "wound_healing";
+  stages: E2ERequest;
+};
+
+/* The same narrowing for the metabolic pipeline. Its stage names are NOT the wound-healing ones
+   -- the API rejects `s01_therapeutic_product_brief` under `pipeline: "metabolic"` with a 422 --
+   so the two request shapes cannot be mixed, and a request built for one cannot be sent as the
+   other by changing the tag. */
+export type MetabolicCreateJobRequest = Omit<CreateJobRequest, "stages" | "pipeline"> & {
+  pipeline: "metabolic";
+  stages: MetabolicE2ERequest;
+};
+export type MetabolicE2ERequest = components["schemas"]["MetabolicE2ERequest"];
+export type MetabolicBrief = components["schemas"]["MetabolicBrief"];
+/** GLP1R | GIPR | GCGR, from the API's own enum: a receptor it drops is a compile error here. */
+export type TargetReceptor = MetabolicBrief["target_receptors"][number];
+
+/* And the cosmetic pipeline. Its brief is NESTED rather than flat -- application, functions,
+   peptide, product -- and every field has a server-side default, so the smallest valid cosmetic
+   brief is `{}`. The form still asks, because a default is not an answer. */
+export type CosmeticCreateJobRequest = Omit<CreateJobRequest, "stages" | "pipeline"> & {
+  pipeline: "cosmetic";
+  stages: CosmeticE2ERequest;
+};
+export type CosmeticE2ERequest = components["schemas"]["CosmeticE2ERequest"];
+export type CosmeticBrief = components["schemas"]["CosmeticBrief"];
+export type CosmeticFunction = NonNullable<
+  components["schemas"]["CosmeticFunctions"]["primary"]
+>;
+export type CosmeticArea = NonNullable<components["schemas"]["CosmeticApplication"]["area"]>;
+export type CosmeticTargetDepth = NonNullable<CosmeticBrief["target_depth"]>;
 export type CreateJobResponse = components["schemas"]["CreateJobResponse"];
 export type JobStatusResponse = components["schemas"]["JobStatusResponse"];
 export type JobResultsResponse = components["schemas"]["JobResultsResponse"];
 export type CandidateResponse = components["schemas"]["CandidateResponse"];
+export type MetabolicJobResultsResponse = components["schemas"]["MetabolicJobResultsResponse"];
+export type MetabolicCandidateResponse = components["schemas"]["MetabolicCandidateResponse"];
+export type CosmeticJobResultsResponse = components["schemas"]["CosmeticJobResultsResponse"];
+export type CosmeticCandidateResponse = components["schemas"]["CosmeticCandidateResponse"];
+
+/* WHAT GET /jobs/{id}/results ACTUALLY RETURNS: one of three shapes, tagged by `pipeline`.
+   This app read it as JobResultsResponse alone, which typechecks and is wrong -- a metabolic
+   run then rendered a page of "no value" while its real fields sat unread in the payload. No
+   compile error and no runtime error, because the type was asserted at the fetch rather than
+   discriminated. Read this union and switch on the tag.
+
+   The three envelopes differ ONLY in `candidates`; job_id, run_id, status, the three counts and
+   component_stats are identical across all of them, so envelope-level code needs no branch. */
+export type AnyJobResultsResponse =
+  | JobResultsResponse
+  | MetabolicJobResultsResponse
+  | CosmeticJobResultsResponse;
+
+export type AnyCandidateResponse =
+  | CandidateResponse
+  | MetabolicCandidateResponse
+  | CosmeticCandidateResponse;
+
+/** The `pipeline` tag, defaulting to wound healing when ABSENT -- which is not hypothetical: every
+ *  captured response in src/test/fixtures/ predates the field, so a deployed API really does
+ *  answer without it. api.py's default for that field is "wound_healing", so this agrees with the
+ *  server rather than guessing. */
+export function resultsPipeline(
+  results: Pick<AnyJobResultsResponse, "pipeline"> | null | undefined,
+): "wound_healing" | "metabolic" | "cosmetic" {
+  return results?.pipeline ?? "wound_healing";
+}
 export type ComponentStats = components["schemas"]["ComponentStats"];
 export type BriefFields = components["schemas"]["BriefFields"];
 export type E2ERequest = components["schemas"]["E2ERequest"];

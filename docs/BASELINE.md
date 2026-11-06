@@ -536,3 +536,283 @@ an API that predates the field.
 
 Baseline 304 → 310 — the API tests replaced one that documented the defect with six
 that pin the fix. Web 109 → 145.
+
+# Two more pipelines
+
+`20f5d8d` (PR #51) added the metabolic pipeline and `71eac9e` (PR #56) the cosmetic one, each a
+set of stages slotted in beside their wound-healing peers by `registry.py`'s opt-in pairs, each
+with its own worker image. Between them they brought 11 new predictors and their tests.
+
+**Baseline 310 → 538 passed, 3 → 4 failed, 0 errors**, under `DEV_MODE=true`, with no model
+weights present, and `--ignore=services --ignore=web` -- which is what `check_baseline.py`
+measures. 533 of the passes are the two pipelines' own; the last 5 are
+`tests/unit/test_metabolic_gipr.py`, below.
+
+Three things move this number and none of them is a code change, so check all three before
+concluding anything: a bare `pytest` adds the 127 accounts tests the baseline ignores (665), a
+checkout WITH `model_store/model_weights` turns the 4 failures into passes (and
+`check_baseline.py` refuses to run rather than record it), and an unset `DEV_MODE` fails 3
+`tests/integration/test_worker_e2e.py` tests on top. Each of those was walked into while
+recording this entry.
+
+The failing 4 are still the weight-dependent group, but it is not the same 4 it was. The cosmetic
+pipeline's three `test_allergenicity_predictor` tests joined it, and `test_s04_generation.py::
+TestRouteA::test_run_returns_candidate_per_population_member` is the fourth. **Measure this on a
+checkout with no `model_store/model_weights`**: with weights present the count is 664 / 0, and
+`check_baseline.py` refuses to run rather than record that richer number -- a guard that was
+needed in practice while writing this entry.
+
+The 3 `tests/integration/test_worker_e2e.py` failures seen on a developer machine are a third
+thing again: they need `DEV_MODE=true`, which CI sets and an interactive shell usually does not.
+
+`tests/unit/test_cosmetic_worker.py::test_other_pipelines_do_not_build_cosmetic_stages` arrived
+broken: it reads `src/backend/worker_e2e/example_run.json`, which had never been added --
+`worker_e2e` was the only worker without the example its two siblings carry. The file is now
+there, derived from `api_e2e/example_request.json` plus the three path fields a run config needs
+that a request does not, and the test passes.
+
+## GIPR is returned, and now says it cannot be trusted
+
+`functional_potency_predictor_v1` scores leave-one-cluster-out **R2 -0.108, Pearson 0.094 on
+n=55** for GIPR -- a negative R2 means it does worse than predicting the training mean, so its
+ordering of two candidates carries no information. GLP1R is 0.511 on n=271.
+
+The codebase already knew. `routeA_metabolic.py` kept GIPR out of the GA's default fitness and
+carried a constant recording why -- which **nothing read**: the exclusion was separately written
+out by hand in `DEFAULT_TARGET_RECEPTORS` beside it. Nothing else knew at all. Stage 6 gated on
+GIPR, Stage 11 ranked on it, and the API returned its pEC50 and EC50 in the same shape and with
+the same apparent authority as GLP1R's.
+
+The number is still returned -- withholding it would change the response shape and an unreliable
+number a caller knows about beats a missing one they must guess at. What changed is that every
+layer now says so, the way a screen that did not run reports `not_screened` instead of passing
+quietly: one owning definition on the predictor, a list on each candidate scoped to the receptors
+that run actually targeted, and `potency_unreliable_receptors` plus a note on the API response.
+
+**The gates and the ranking score still use it.** That is a product decision left open, and the
+note says it outright rather than letting the flag read as "this was excluded".
+
+`tests/unit/test_metabolic_gipr.py` holds `DEFAULT_TARGET_RECEPTORS` and the owning constant in
+step, which is what the dead constant failed to do.
+
+### A circular import, found by the first test to import the package first
+
+`model_store.functional_potency_predictor_v1` could not be imported before `pipeline`: its
+`__init__` imports `predictor`, which imported `pipeline.feature_extractor`, which runs
+`pipeline/__init__.py`, which eagerly imports every stage -- one of which imports this package
+back, still half-initialised. Pre-existing on `main` and reproducible there; no test had happened
+to import in that order. `FeatureExtractor` was only ever a type annotation here and the module
+already has `from __future__ import annotations`, so it moved under `TYPE_CHECKING`.
+
+### The ignored-example bug, a second time
+
+`src/backend/worker_e2e/example_run.json` was not merely absent -- it was listed in `.gitignore`,
+so creating it was not enough and a clean checkout could never have it. `test_cosmetic_worker.py`
+reads it, so that test could not pass anywhere.
+
+This is the same defect as `example_request.json`, whose fix is recorded two lines below the
+offending entry in `.gitignore`: ignored, required by tests, therefore missing from a fresh
+clone, therefore tracked instead. The note left there did not stop it happening again, so it now
+names both files and says plainly that adding an example means tracking it.
+
+## 547 passed / 7 failed, and why the number moved twice in one day
+
+The recorded baseline became 538/4 and CI answered **545/9**. Both numbers were measured
+honestly; neither described the other's environment. Two separate causes, found by building a
+venv exactly the way `.github/workflows/ci.yml` builds one and running the suite in it.
+
+### rdkit: one skip hiding twelve tests
+
+`rdkit` is in `requirements.txt`, so CI has it. The venv the baseline was measured in did not.
+`tests/unit/test_skin_sensitization_predictor.py` imports it at module level, so without it
+pytest reports **`1 skipped`** -- one line, for a module holding **12 tests**. The recorded count
+was therefore 12 lower than CI's, and CI reported a move of +7 passed / +5 failed that read
+exactly like a regression.
+
+This is the third time the guard's environment premise has been wrong rather than the code (see
+the slim-install episode above), so `rdkit` is now in `ASSUMED_IMPORTS`: a venv without it is
+told so, instead of being shown a phantom regression.
+
+### Two metabolic tests that only passed when a developer had a .env
+
+`src/common/env.py` loads `.env` at import and `setdefault`s every key into the process
+environment. A developer's `.env` carries `SEED_CANDIDATES_FILE_METABOLIC`; CI has no `.env` at
+all. The `service` fixture in `tests/integration/test_api_e2e.py` never set it.
+
+`create_job` reads the seed file through `required()` **before** the image, so with the metabolic
+seed file absent:
+
+- `test_metabolic_pipeline_routes_to_metabolic_image_and_stages` expected 202 and got a 503 about
+  the seed file.
+- `test_metabolic_pipeline_needs_its_own_image_setting` asserted the 503 names
+  `WORKER_METABOLIC_IMAGE_URI`; it named the seed file instead.
+
+Neither test is about seeds. This is the trap the deployment comments warn about -- set half a
+per-pipeline pair and the 503 names the other half, reading like a different fault -- reaching
+into the test suite, where it was invisible to anyone whose `.env` happened to be populated. The
+fixture now sets `SEED_CANDIDATES_FILE_METABOLIC`.
+
+### What the new baseline is worth
+
+**All seven remaining failures are missing weight files**, so the recorded count reproduces
+identically with and without a `.env`, verified both ways in the CI-identical venv. A failure
+that is not about a weight file is now a regression, not an environment difference. That property
+is the useful part of the number; the number itself is incidental.
+
+`check_baseline.py` also prints **which** tests failed when the count moves. It captured pytest's
+output and printed only the final summary line, so a red CI job said "9 failed" and gave no way
+to learn which nine -- not from the log, and not by re-running, because the difference did not
+reproduce locally.
+
+## Three copies of the worker, and what the third copy had lost
+
+`worker_metabolic/worker.py` and `worker_cosmetic/worker.py` were **byte-identical** to each other
+once you replaced the word "metabolic" with "cosmetic" — `diff` on the normalised files returned
+zero lines, across 188 lines each. Both were `worker_e2e/worker.py` with two changes: the pipeline
+name handed to `validate_job_config`, and `--overwrite` **deleted**.
+
+That second difference was not a decision. `--overwrite` exists because a replayed config once
+destroyed a finished run's results (recorded above); the wound-healing worker gained the flag and
+its two copies did not. So a metabolic or cosmetic run that genuinely needed to replace a run
+directory had no way to say so, and the error message told the operator to delete the directory by
+hand — advice the wound-healing worker had stopped needing to give.
+
+The run loop is now `src/backend/worker/worker.py`, once. The three packages keep their module
+paths, because those paths are what the Dockerfiles, the cloudbuild files and the tests all name,
+and each is about a dozen lines: a `PIPELINE` constant and four forwarding functions. The pipeline
+is a parameter, not a variant — it selects which stage names the config validator expects, and
+nothing else in the loop reads it.
+
+`tests/unit/test_worker_entry_points.py` pins the shape that replaced the copies, including that
+all three now offer `--overwrite` and that the re-exported `storage` and `time` are *identity*-equal
+to the shared module's, so a test monkeypatching `worker.storage` still reaches the code that runs.
+
+## run_state() is a function again
+
+The reconciliation rule lived inline in `get_job_status()`, while
+`web/src/api/peptide.ts` carried a second implementation whose comment said it "mirrors
+`run_state()` in `src/backend/api_e2e/api.py` exactly" — naming something that was not there.
+
+It is a named function now. The useful part is the test:
+`tests/unit/test_run_state_parity.py` **reads the case table out of
+`web/src/test/runstate.test.ts`** and runs the Python implementation against it, so a case added on
+the TypeScript side is picked up here rather than drifting. If the table's format changes enough
+that the cases cannot be parsed, the test fails loudly — a parity test that silently checks
+nothing is worse than no parity test.
+
+One dead line went with it: the function opened `run_state = "succeeded"` before a branch that
+always overwrote it. Nothing reached it, but a reader had to prove that.
+
+## An unfinished cosmetic run called itself wound healing
+
+`GET /results` for a run that has not succeeded chose its envelope with a ternary:
+`MetabolicJobResultsResponse if pipeline == "metabolic" else JobResultsResponse`. Cosmetic took the
+`else`, so an unfinished cosmetic run came back tagged `pipeline: "wound_healing"`.
+
+Nothing rendered wrongly, because the candidate list is empty in that branch. But the tag was
+false, and the web app now **discriminates on exactly that field** to decide how to render a run —
+so it would have become a wrong screen the moment these envelopes carried anything pipeline-specific
+of their own.
+
+It is a dict keyed by every value `Pipeline` can take, and
+`test_every_pipeline_has_an_unfinished_response_shape` holds the two in step: a fourth pipeline
+added to `Pipeline` without a row is a `KeyError` on the next unfinished run, not a response
+quietly tagged wound healing.
+
+### 591 passed / 7 failed
+
+The 44 new tests from the work above: 24 on the worker entry points, 10 holding `run_state()` to
+the TypeScript table, 9 on the receptor column mapping and the source's units, and 4 on the
+unfinished-run pipeline tag. **The failing 7 are unchanged and are still all missing weight files**, which is the property
+that makes this number worth recording — a failure that is not about a weight file is a regression.
+
+## The receptor column order was right, and the file said so in six places
+
+`all_sequences_aligned.csv` was supplied on 2026-11-03. The mapping
+`EC50_T1 = GCGR, EC50_T2 = GLP1R, EC50_T3 = GIPR` had been carried as an unverified assumption in
+two model cards since the metabolic pipeline landed. **It is correct.**
+
+The file contains the natural ligands, and each is most potent in exactly the expected column by
+seven to eight orders of magnitude: glucagon in T1; GLP-1, exendin-4, liraglutide and semaglutide
+all in T2; GIP in T3. Six ligands, unanimous, nothing marginal. Both cards now read `CONFIRMED`
+with the date and the evidence, and the test that used to assert the cards still said "not
+confirmed" now asserts the opposite — a test demanding that the project forget what it learned
+would be worse than no test.
+
+Two things the file settled that nobody had asked about:
+
+- **The `EC50_T*` columns are picomolar.** `EC50_LOG_T*` matches `log10(EC50_T* x 1e-12)` to a mean
+  absolute error of 0.0013 across all 496 paired values; nanomolar is out by exactly 3.0000. No
+  shipped code reads the CSV and `pec50_to_ec50_nm()` is right, so nothing is broken — but the
+  metrics cannot distinguish a model trained on correctly-scaled labels from one trained 3 logs
+  out, because R² and Pearson are shift-invariant while every absolute pEC50 the pipeline reports
+  is not.
+- **Censored values are mixed in with measurements.** Sentinels at pEC50 exactly 4.0, 5.0 and 6.0
+  are plate readings of "nothing", recorded as numbers. GIPR has 4 of 56 labels at 4.0, nearly
+  three standard deviations below its mean of 9.13 — enough, under leave-one-cluster-out on n=56,
+  to be a real part of why its R² is negative. That is a hypothesis; testing it needs the training
+  notebook. If it holds, GIPR is cheaper to improve than "collect more labels" suggested.
+
+The CSV itself is in `.gitignore` by name. It holds the models' training labels, and a file at the
+repository root is matched by none of the `data/` rules, so `git add -A` would have staged it.
+
+### 599 passed / 7 failed
+
+Eight more tests, from the three defects found in browser testing (below). The failing seven are
+unchanged and are still all missing weight files.
+
+## Three defects found by retesting, and one test that was pinning the first
+
+### A retry started a second GPU job that read the first run's config out from under it
+
+`create_job` launches every job for a `request_id` with
+`--config <artifacts>/requests/<request_id>/config.json` -- **one path, shared by every attempt**
+-- and the worker waits up to 120 seconds for that file to appear. A second create overwrote it
+with the second run's config, so the first job, if it had not read the file yet, picked up the
+**second** run's `run_id` and wrote its results into the second run's directory. Two paid GPU
+jobs, one run directory, racing writes, and the first run's own directory left empty forever.
+
+A repeated `request_id` is a retry, and now returns the job the first attempt started without
+asking Vertex for a second one.
+
+**`test_repeated_request_id_submits_another_job` asserted the old behaviour** -- that a second
+create happens and returns the new job's name -- so the defect was written down as the
+expectation. It is rewritten, not deleted: a test that pins a bug is worth keeping as the record
+of what was believed, with the belief corrected.
+
+The remaining window is a read-then-write, so two creates racing inside one instant can still
+both pass. Marked `shortcut:` in the code, with the upgrade named (a GCS precondition write).
+
+### The cosmetic form refused requests the API accepts, with no way to fix them
+
+`cosmeticChecks` required `advanced.n_peptides >= 1`. `buildCosmeticRequest` **never sends
+n_peptides** -- the cosmetic generation stage is a genetic algorithm sized by population,
+generations and top-k -- so the check was about a field that is not in the request.
+
+It was also unfixable from the screen it blocked. Clearing the candidate-count input on the
+wound-healing or metabolic form leaves it at `0`, because `Number("") === 0`, and the cosmetic
+form has no candidate-count field at all. Every cosmetic submission then failed with a problem
+the user could neither see nor correct.
+
+### An unfinished run with no readable config was called wound healing
+
+The unfinished branch of `get_job_results()` has no candidates to inspect, so `_run_pipeline`
+fell through to its default however cosmetic the run was. It now reads the **worker's last
+reported stage** as a third source of evidence: `s08_cosmetic_safety_developability` can only be a
+cosmetic run. Stages the pipelines share, such as `s07_structure_mechanism`, deliberately say
+nothing and fall through rather than guess.
+
+### GIPR values reached the browser unflagged on older runs
+
+Stage 6 only began recording `potency_unreliable_receptors` per candidate recently. Every run
+from before that carries GIPR pEC50 and EC50 values and **no flag**, so the numbers rendered with
+nothing marking them as unrankable -- four candidates in a row, in testing.
+
+`_metabolic_candidate_response` now derives the flag from the receptors a candidate actually has
+potency for when the run recorded none, which fixes every client at once and fixes runs that can
+no longer be re-run. The test for `is None` rather than falsiness is the point: a run that
+recorded an **empty** list targeted no unreliable receptor and must stay empty.
+
+api.py keeps its own copies of the receptor tuple and the note, because importing either original
+pulls torch into a process that only submits jobs and reads JSON.
+`tests/unit/test_metabolic_gipr.py` holds the copies to the originals.

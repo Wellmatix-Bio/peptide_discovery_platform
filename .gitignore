@@ -25,6 +25,12 @@ model_store/__pycache__/
 model_store/*/__pycache__/
 
 # ---------- Data ----------
+# all_sequences_aligned.csv is the metabolic models' TRAINING LABELS and must not be published.
+# It is the file that confirmed the EC50_T1/T2/T3 -> GCGR/GLP1R/GIPR mapping (docs/LIMITATIONS.md),
+# so it is worth keeping a copy of -- but not here. Its home is a private GCS bucket, or
+# data/raw/ below, which is already ignored. Named explicitly because a file dropped at the repo
+# ROOT is matched by none of the data/ rules and would be staged by `git add -A`.
+all_sequences_aligned.csv
 data/raw/
 data/interim/
 data/processed/
@@ -156,12 +162,16 @@ src/backend/api_stage/Dockerfile
 
 
 # --------- Miscellaneous ----------
-src/backend/worker_e2e/example_run.json
 pipeline_compare_out/
 # example_request.json was listed here, and that is why it was missing from a fresh clone.
 # It is now TRACKED instead: three test modules, README.md and API_SPECIFICATION.md all require
 # it, so ignoring it meant the test suite could not pass on a clean checkout. See docs/BASELINE.md.
 # (.venv/ is already covered at the top of this file.)
+#
+# src/backend/worker_e2e/example_run.json was listed here too, and went the same way for the
+# same reason: tests/unit/test_cosmetic_worker.py reads it, so ignoring it meant that test could
+# never pass on a clean checkout -- and it did not. It is TRACKED now, like the example_run.json
+# its two sibling workers already ship. Adding an example here means tracking it.
 
 # ---------- Web app (node) ----------
 node_modules/

@@ -128,6 +128,27 @@ class JobStatusResponse(BaseModel):
     error: str | None = None
 
 
+#: Receptors whose potency the ensemble reports but CANNOT RANK. The owning definition is
+#: UNRELIABLE_POTENCY_RECEPTORS in model_store/functional_potency_predictor_v1, and the note is
+#: UNRELIABLE_POTENCY_NOTE in src/pipeline/s06_functional_models/metabolic_stage.py. Both are
+#: repeated here rather than imported because importing either pulls torch into the API process,
+#: which only submits jobs and reads JSON. tests/unit/test_metabolic_gipr.py holds the copies to
+#: the originals, so a receptor added or removed there fails there rather than drifting here.
+#:
+#: The API needs them because stage 6 only started recording the flag per candidate recently.
+#: Runs from before that have GIPR pEC50 and EC50 values and no flag at all, so every client --
+#: the web app included -- showed the numbers with nothing saying they cannot be ranked.
+UNRELIABLE_POTENCY_RECEPTORS = ("GIPR",)
+
+UNRELIABLE_POTENCY_NOTE = (
+    "The potency model cannot rank these receptors: its leave-one-cluster-out R2 is below zero"
+    " for them, meaning it does worse than predicting the training mean, so the pEC50 and EC50"
+    " returned for them order candidates no better than chance. They are reported rather than"
+    " withheld, and they still count toward the gates and the ranking score. Treat them as"
+    " unscreened, not as evidence. See the model card for functional_potency_predictor_v1."
+)
+
+
 def _label_value(value: str) -> str:
     label = re.sub(r"[^a-z0-9_-]+", "-", str(value).lower()).strip("-_")
     return (label or "request")[:63]
@@ -175,6 +196,36 @@ def create_job(request: CreateJobRequest):
     # request_key = hashlib.sha256(request.request_id.encode()).hexdigest()
     staging_dir = storage.join(artifacts, "requests", request.request_id)
     staging_config_path = storage.join(staging_dir, "config.json")
+
+    # A RETRY RETURNS THE JOB THE FIRST ATTEMPT STARTED. It must not start a second one.
+    #
+    # Every job for a request_id is launched with `--config <staging_config_path>` -- one path,
+    # shared by every attempt -- and the worker waits up to 120s for that file to appear. So a
+    # second create overwrote it with the second run's config, and the first job, if it had not
+    # read the file yet, then picked up the SECOND run's config: two paid GPU jobs writing their
+    # results into one run directory, with the first run's own directory left empty forever.
+    #
+    # shortcut: this is read-then-write, so two creates racing inside the same instant can both
+    # still pass. Upgrade to a GCS precondition write (ifGenerationMatch=0) on the staging config
+    # if that is ever observed; the window here is the width of one GCS write.
+    if storage.exists(staging_config_path):
+        try:
+            previous = json.loads(storage.read_text(staging_config_path))
+            run_id = previous["run_id"]
+        except Exception:
+            # Unreadable or half-written: there is no job name to return, so fall through and
+            # create one. Logged because it is the only path that can still double-submit.
+            logging.exception(
+                "Staging config %s exists but could not be read; treating %s as a new request",
+                staging_config_path,
+                request.request_id,
+            )
+        else:
+            return CreateJobResponse(
+                request_id=request.request_id,
+                job_id=f"{parent}/customJobs/{run_id}",
+                result_path=storage.join(artifacts, "runs", run_id),
+            )
     try:
         brief_stage = {
             "metabolic": "s01_metabolic_therapeutic_product_brief",
@@ -266,6 +317,41 @@ def create_job(request: CreateJobRequest):
     )
 
 
+def run_state(worker_status: str | None, vertex_state: str | None) -> str:
+    """What the run actually is, from the worker's self-report AND the live Vertex state.
+
+    A NAMED FUNCTION ON PURPOSE. This rule was written inline inside get_job_status(), and
+    web/src/api/peptide.ts carries a second implementation of it whose comment says it "mirrors
+    run_state() in src/backend/api_e2e/api.py exactly" -- naming something that was not there.
+    Two copies of a rule in two languages need at least one of them to be a thing you can point
+    at, test directly, and diff by eye against the other. web/src/test/runstate.test.ts holds the
+    TypeScript copy to the same table.
+
+    THE ORDER IS THE RULE, not an accident of how it was written:
+      - the worker's own verdict wins when it has one, because it is the only thing that knows
+        whether results were written;
+      - then Vertex's terminal states, which are the only thing that knows the machine is gone;
+      - `abandoned` has NO status condition, deliberately. A worker that reported progress and was
+        then killed leaves status at "running" forever, and an earlier version checked
+        `status in (None, "pending")` here, which sent that case to `running` -- the UI showing a
+        finished job as still working, which is the defect this reconciliation exists to end.
+    """
+    terminal = vertex_state in TERMINAL_VERTEX_STATES
+    if worker_status == "success":
+        return "succeeded"
+    if worker_status in ("failed", "fail"):
+        return "failed"
+    if vertex_state == "JOB_STATE_CANCELLED":
+        return "cancelled"
+    if vertex_state in ("JOB_STATE_FAILED", "JOB_STATE_EXPIRED"):
+        return "failed"
+    if terminal:
+        return "abandoned"
+    if worker_status == "running":
+        return "running"
+    return "submitted"
+
+
 @app.get("/api/v1/jobs/{job_id:path}/status", response_model=JobStatusResponse)
 def get_job_status(job_id: str):
     name = job_name(job_id)
@@ -292,29 +378,12 @@ def get_job_status(job_id: str):
 
     worker_status = (results.get("status") if results else None) or None
 
-    run_state = "succeeded"
-    terminal = vertex_state in TERMINAL_VERTEX_STATES
-    if worker_status == "success":
-        run_state = "succeeded"
-    elif worker_status in ("failed", "fail"):
-        run_state = "failed"
-    elif vertex_state == "JOB_STATE_CANCELLED":
-        run_state = "cancelled"
-    elif vertex_state in ("JOB_STATE_FAILED", "JOB_STATE_EXPIRED"):
-        run_state = "failed"
-    elif terminal:
-        run_state = "abandoned"
-    elif worker_status == "running":
-        run_state = "running"
-    else:
-        run_state = "submitted"
-
     return JobStatusResponse(
         job_id=job.name,
         status=worker_status or "pending",
         stage=(results.get("stage") if results else None) or "pending",
         vertex_state=vertex_state,
-        run_state=run_state,
+        run_state=run_state(worker_status, vertex_state),
         error=job.error.message or None,
     )
 
@@ -421,6 +490,12 @@ class MetabolicCandidateResponse(BaseModel):
     binding_pkd: dict[Receptor, float | None] = Field(default_factory=dict)  # predicted binding, 9 - log10(Kd [nM])
     agonism_probability: dict[Receptor, float | None] = Field(default_factory=dict)  # P(EC50 < 1 nM)
     pec50_pkd_gap: float | None = None  # disagreement of the pEC50 and pKd models; Route A candidates only
+    #: Receptors among this run's targets whose pec50/ec50_nm are returned but carry no ranking
+    #: information (the potency model's leave-one-cluster-out R2 is below zero for them). Empty
+    #: unless the run targeted one. Read it the way you would read `not_screened`: the number is
+    #: present, the evidence is not.
+    potency_unreliable_receptors: list[str] = Field(default_factory=list)
+    potency_unreliable_note: str | None = None
     metabolic_activity_score: float | None = None  # Stage 6 combined potency score
     anti_inflammatory_probability: float | None = None
     half_life_minutes: float | None = None  # 'plasma_half_life.minutes' key in predictions
@@ -511,6 +586,25 @@ def _metabolic_candidate_response(candidate: dict) -> MetabolicCandidateResponse
     def nested(key: str, field: str):
         return (preds.get(key) or {}).get(field)
 
+    # THE FLAG IS DERIVED WHEN THE RUN DID NOT RECORD IT. Stage 6 only began writing
+    # potency_unreliable_receptors recently; every run from before that has GIPR pEC50 and EC50
+    # values and no flag, so the numbers reached the web app with nothing marking them as
+    # unrankable. Reading the stored list when it is there and computing it from the receptors
+    # this candidate actually has potency for when it is not fixes every client at once, and
+    # fixes OLD runs, which re-running stage 6 could not.
+    #
+    # `is None`, not falsy: a run that recorded an EMPTY list targeted no unreliable receptor and
+    # must stay empty, while a run that recorded nothing at all has to be worked out here.
+    unreliable = preds.get("potency_unreliable_receptors")
+    if unreliable is None:
+        scored = {
+            receptor
+            for key in ("pec50", "ec50_nm", "binding_pkd", "agonism_probability")
+            for receptor, value in (preds.get(key) or {}).items()
+            if value is not None
+        }
+        unreliable = [r for r in UNRELIABLE_POTENCY_RECEPTORS if r in scored]
+
     return MetabolicCandidateResponse(
         id=candidate.get("id", "?"),
         sequence=candidate.get("sequence"),
@@ -524,6 +618,13 @@ def _metabolic_candidate_response(candidate: dict) -> MetabolicCandidateResponse
         binding_pkd=preds.get("binding_pkd") or {},
         agonism_probability=preds.get("agonism_probability") or {},
         pec50_pkd_gap=preds.get("pec50_pkd_gap"),
+        potency_unreliable_receptors=unreliable,
+        # The note is what tells a reader the values still count toward the gates and the score,
+        # so a flagged receptor without it is a worse half-truth than no flag at all.
+        potency_unreliable_note=(
+            preds.get("potency_unreliable_note")
+            or (UNRELIABLE_POTENCY_NOTE if unreliable else None)
+        ),
         metabolic_activity_score=preds.get("metabolic_activity_score"),
         anti_inflammatory_probability=preds.get("anti_inflammatory_probability"),
         half_life_minutes=nested("plasma_half_life", "minutes"),
@@ -596,8 +697,34 @@ class CosmeticJobResultsResponse(BaseModel):
     candidates: list[CosmeticCandidateResponse] = []
 
 
-def _run_pipeline(run_dir: str, candidates: list[dict]) -> Pipeline:
-    """The run's pipeline: from the config the API stored with the job, else from the shape of its candidates."""
+#: The results envelope each pipeline answers with. Keyed by every value Pipeline can take, so
+#: adding a fourth pipeline is a KeyError here rather than a response quietly tagged
+#: "wound_healing" -- which is exactly what the previous `if metabolic else wound` ternary did to
+#: cosmetic.
+RESULTS_RESPONSE_FOR: dict[str, type[BaseModel]] = {
+    "wound_healing": JobResultsResponse,
+    "metabolic": MetabolicJobResultsResponse,
+    "cosmetic": CosmeticJobResultsResponse,
+}
+
+
+def _run_pipeline(
+    run_dir: str, candidates: list[dict], stage: str | None = None
+) -> Pipeline:
+    """The run's pipeline, from the best evidence available.
+
+    Three sources, in order of how much they prove:
+
+    1. the config the API stored with the job, which names the brief stage outright;
+    2. the stage the WORKER last reported, for an unfinished run whose config cannot be read --
+       `s08_cosmetic_safety_developability` can only be a cosmetic run;
+    3. the shape of the candidates, for a finished older run.
+
+    Source 2 exists because the unfinished branch of get_job_results() has no candidates to
+    inspect, so without it an unfinished run with no readable config fell through to
+    "wound_healing" however cosmetic it actually was -- and the web app now chooses how to render
+    a run from this field.
+    """
     try:
         config = json.loads(storage.read_text(storage.join(run_dir, "config.json")))
         stages = config.get("stages") or {}
@@ -608,7 +735,12 @@ def _run_pipeline(run_dir: str, candidates: list[dict]) -> Pipeline:
             if (stages.get(brief_stage) or {}).get("enabled"):
                 return pipeline
         return "wound_healing"
-    except Exception:  # noqa: BLE001 - an older run or an unreadable config: infer from the candidates
+    except Exception:  # noqa: BLE001 - an older run or an unreadable config: infer from what is left
+        for pipeline in ("cosmetic", "metabolic"):
+            # The pipelines' own stages are named for them; the stages they share are not, so a
+            # run sitting in s07_structure_mechanism says nothing here and falls through.
+            if stage and f"_{pipeline}_" in stage:
+                return pipeline
         if any("ec50_nm" in (c.get("predictions") or {}) for c in candidates):
             return "metabolic"
         if any("components" in ((c.get("predictions") or {}).get("ranking") or {}) for c in candidates):
@@ -731,11 +863,17 @@ def get_job_results(job_id: str):
     status = status_payload.get("status", "unknown")
 
     if status != "success":
-        unfinished = (
-            MetabolicJobResultsResponse
-            if _run_pipeline(run_dir, []) == "metabolic"
-            else JobResultsResponse
-        )
+        # ALL THREE PIPELINES, not metabolic versus everything else. This was a ternary that
+        # sent cosmetic down the wound-healing branch, so an unfinished cosmetic run came back
+        # tagged `pipeline: "wound_healing"`. Nothing rendered wrongly, because `candidates` is
+        # empty here -- but the tag was false, and the web app now DISCRIMINATES ON IT to choose
+        # how to render a run, so a wrong tag is a wrong screen as soon as these envelopes carry
+        # anything pipeline-specific of their own.
+        # The worker's last reported stage is the only pipeline evidence an unfinished run has
+        # besides its config, and it is often there when the config is not yet readable.
+        unfinished = RESULTS_RESPONSE_FOR[
+            _run_pipeline(run_dir, [], stage=status_payload.get("stage"))
+        ]
         return unfinished(
             job_id=name,
             run_id=run_id,
@@ -845,37 +983,66 @@ class ModelManifest(BaseModel):
     caveat: str
 
 
+#: Read through required() for EVERY create, whatever the pipeline.
+SHARED_SETTINGS = (
+    "VERTEX_CLOUD_PROJECT",
+    "VERTEX_LOCATION",
+    "VERTEX_ARTIFACTS_DIR",
+    "VERTEX_MODEL_STORE",
+    "WORKER_SERVICE_ACCOUNT",
+    "MACHINE_TYPE",
+    "ACCELERATOR_TYPE",
+    "ACCELERATOR_COUNT",
+)
+
+#: The image and seed FASTA each pipeline reads, in step with create_job's two lookups above.
+#: A pipeline whose pair is absent answers 503 and the other pipelines are unaffected, so these
+#: are NOT in settings_missing -- a wound-healing-only deployment is correctly configured, and
+#: reporting it as missing four settings would say otherwise.
+PIPELINE_SETTINGS: dict[str, tuple[str, str]] = {
+    "wound_healing": ("WORKER_IMAGE_URI", "SEED_CANDIDATES_FILE"),
+    "metabolic": ("WORKER_METABOLIC_IMAGE_URI", "SEED_CANDIDATES_FILE_METABOLIC"),
+    "cosmetic": ("WORKER_COSMETIC_IMAGE_URI", "SEED_CANDIDATES_FILE_COSMETIC"),
+}
+
+
 @app.get("/healthz")
 def healthz():
     """Liveness only. It deliberately does NOT check Vertex or GCS: a readiness probe that
     calls out to Google turns a Google incident into an unhealthy container, and this process
     is perfectly able to answer 503s explaining itself. Whether the settings are present is
-    reported here as a fact rather than as health."""
-    missing = [
-        name
-        for name in (
-            "VERTEX_CLOUD_PROJECT",
-            "VERTEX_LOCATION",
-            "VERTEX_ARTIFACTS_DIR",
-            "VERTEX_MODEL_STORE",
-            "SEED_CANDIDATES_FILE",
-            "WORKER_IMAGE_URI",
-            "WORKER_SERVICE_ACCOUNT",
-            "MACHINE_TYPE",
-            "ACCELERATOR_TYPE",
-            "ACCELERATOR_COUNT",
-        )
-        if not os.environ.get(name)
-    ]
+    reported here as a fact rather than as health.
+
+    `settings_missing` covers only what EVERY pipeline needs, so it stays comparable with what
+    it has always meant. Each pipeline's own image and seed file are reported per pipeline:
+    they are required for requests naming that pipeline and irrelevant to the others, and a
+    deployment that runs one pipeline is not misconfigured for lacking another's settings.
+    """
+    missing = [name for name in SHARED_SETTINGS if not os.environ.get(name)]
+    pipelines = {
+        name: {
+            "ready": not (absent := [s for s in settings if not os.environ.get(s)])
+            and not missing,
+            "settings_missing": absent,
+        }
+        for name, settings in PIPELINE_SETTINGS.items()
+    }
+    unavailable = sorted(n for n, p in pipelines.items() if not p["ready"])
     return {
         "ok": True,
         "settings_missing": missing,
+        "pipelines": pipelines,
         "note": (
             "ok reports only that this process is answering. Job creation returns 503 while"
             " settings_missing is non-empty."
             if missing
             else "ok reports only that this process is answering; Vertex and Cloud Storage are"
             " not contacted by this endpoint."
+        )
+        + (
+            f" Pipelines that would answer 503: {', '.join(unavailable)}."
+            if unavailable
+            else ""
         ),
     }
 

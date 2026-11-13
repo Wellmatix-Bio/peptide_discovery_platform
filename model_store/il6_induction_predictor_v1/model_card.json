@@ -1,0 +1,29 @@
+{
+  "model_name": "il6_induction_predictor_v1",
+  "version": "v1",
+  "status": "first version",
+  "task": "binary classification: P(peptide induces IL-6), in the training assays' context. Not secretion amount, dose-response or clinical effect.",
+  "cytokine": "IL-6",
+  "threshold": 0.5,
+  "cv_metrics_5fold_mean": {
+    "MCC": 0.409,
+    "AUROC": 0.752,
+    "AUPRC": 0.471,
+    "BalAcc": 0.636,
+    "Sensitivity": 0.288,
+    "Specificity": 0.984
+  },
+  "cv_design": "5 label-stratified folds, no CD-HIT 0.9-identity cluster crossing folds; metrics at threshold 0.5",
+  "training": {
+    "n": 3356,
+    "positive_rate": 0.109,
+    "length_min": 8,
+    "length_max": 25
+  },
+  "limits": [
+    "Trained only on 8-25 residue peptides.",
+    "Sensitivity is low at the 0.5 threshold; the training set is 11% positive.",
+    "Applicability: predict_batch returns an `applicability` assessment per peptide (in_domain, limited_evidence or out_of_domain, with reasons) from the trained length range 8-25 and the positive/negative training counts at that exact length (info.json `domain`); sequence similarity and embedding-distribution checks are not run yet. `in_length_range` is kept.",
+    "Probabilities are not comparable across cytokines or calibrated; label is simply probability >= 0.5."
+  ]
+}

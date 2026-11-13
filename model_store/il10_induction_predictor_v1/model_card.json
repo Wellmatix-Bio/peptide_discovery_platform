@@ -1,0 +1,28 @@
+{
+  "model_name": "il10_induction_predictor_v1",
+  "version": "v1",
+  "status": "first version",
+  "task": "binary classification: P(peptide induces IL-10), in the training assays' context. Not secretion amount, dose-response or clinical effect.",
+  "cytokine": "IL-10",
+  "threshold": 0.5,
+  "cv_metrics_5fold_mean": {
+    "MCC": 0.332,
+    "AUROC": 0.76,
+    "AUPRC": 0.445,
+    "BalAcc": 0.682,
+    "Sensitivity": 0.502,
+    "Specificity": 0.862
+  },
+  "cv_design": "5 label-stratified folds, no CD-HIT 0.9-identity cluster crossing folds; metrics at threshold 0.5",
+  "training": {
+    "n": 4981,
+    "positive_rate": 0.155,
+    "length_min": 8,
+    "length_max": 46
+  },
+  "limits": [
+    "Sensitivity is about 0.50 against specificity 0.86; the training set is 16% positive.",
+    "Applicability: predict_batch returns an `applicability` assessment per peptide (in_domain, limited_evidence or out_of_domain, with reasons) from the trained length range 8-46 and the positive/negative training counts at that exact length (info.json `domain`); sequence similarity and embedding-distribution checks are not run yet. `in_length_range` is kept.",
+    "Probabilities are not comparable across cytokines or calibrated; label is simply probability >= 0.5."
+  ]
+}

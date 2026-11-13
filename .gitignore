@@ -23,6 +23,19 @@ logs/
 model_store/model_weights/
 model_store/__pycache__/
 model_store/*/__pycache__/
+# Cytokine-induction models are confidential: only the README is tracked.
+model_store/ifn_gamma_induction_predictor_v1/*
+!model_store/ifn_gamma_induction_predictor_v1/README.md
+model_store/il10_induction_predictor_v1/*
+!model_store/il10_induction_predictor_v1/README.md
+model_store/il13_induction_predictor_v1/*
+!model_store/il13_induction_predictor_v1/README.md
+model_store/il4_induction_predictor_v1/*
+!model_store/il4_induction_predictor_v1/README.md
+model_store/il6_induction_predictor_v1/*
+!model_store/il6_induction_predictor_v1/README.md
+model_store/tnf_alpha_induction_predictor_v1/*
+!model_store/tnf_alpha_induction_predictor_v1/README.md
 
 # ---------- Data ----------
 # all_sequences_aligned.csv is the metabolic models' TRAINING LABELS and must not be published.

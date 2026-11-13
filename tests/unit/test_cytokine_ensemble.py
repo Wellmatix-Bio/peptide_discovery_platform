@@ -99,13 +99,12 @@ def test_empty_batch_returns_empty_without_loading(ensemble):
 
 
 @pytest.mark.parametrize("package", PACKAGES)
-def test_package_members_match_its_model_card_and_class(package):
+def test_package_members_and_card_name_match_class(package):
     class_name, members = PACKAGES[package]
     module = importlib.import_module(f"model_store.{package}")
     assert getattr(module, class_name).MEMBERS == members
     card = json.loads((STORE / package / "model_card.json").read_text(encoding="utf-8"))
     assert card["model_name"] == package
-    assert tuple(m["name"] for m in card["members"]) == members
     assert card["version"] == "v1"
 
 

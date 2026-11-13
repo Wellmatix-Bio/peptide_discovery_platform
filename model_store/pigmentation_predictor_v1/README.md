@@ -5,7 +5,7 @@ Scores whether a peptide is a TIP (most likely tyrosinase inhibitory peptide; th
 - **Model:** equal-weight soft vote of Random Forest, XGBoost, calibrated RBF SVC and shrinkage LDA on frozen ESM2 embeddings. The output is P(TIP); the trained decision threshold is 0.5.
 - **Embedding:** `facebook/esm2_t30_150M_UR50D` from the shared `FeatureExtractor`, mean over residues with BOS/EOS excluded.
 - **Weights:** `model_store/model_weights/pigmentation_predictor_v1/` (`ensemble.joblib`, `run_metadata.json`). Trained on the 80% split only; the test set was never refit.
-- **Input:** 20 uppercase standard amino acids, length 2-22 (the trained range). Anything else is rejected.
+- **Input:** 20 uppercase standard amino acids; other residues are rejected. Trained on lengths 2-22: longer or shorter peptides are still scored but emit a warning (`predict_batch` returns `in_length_range` per sequence), and the score is extrapolation.
 - **Environment:** the joblib was written with scikit-learn 1.9.0 and xgboost 3.2.0; load it with matching versions.
 
 ```python

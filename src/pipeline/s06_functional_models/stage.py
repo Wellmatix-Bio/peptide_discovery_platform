@@ -30,7 +30,7 @@ from model_store.proliferation_migration_predictor_v1 import (
 from model_store.angiogenic_activity_predictor_v1 import (
     AngiogenicActivityPredictor,
 )  # noqa: E402
-from model_store.anti_inflammatory_predictor_v1 import (
+from model_store.anti_inflammatory_predictor_v2 import (
     AntiInflammatoryPredictor,
 )  # noqa: E402
 
@@ -294,7 +294,7 @@ class Stage6(CandidateStage):
                         sequence, feature_extractor
                     ),
                     "anti_inflammatory_probability": self.compute_anti_inflammatory_probability(
-                        sequence
+                        sequence, feature_extractor
                     ),
                 }
             )
@@ -323,7 +323,7 @@ class Stage6(CandidateStage):
             ModelRef(name="mbic_predictor", version="v1"),
             ModelRef(name="proliferation_migration_predictor", version="v1"),
             ModelRef(name="angiogenic_activity_predictor", version="v1"),
-            ModelRef(name="anti_inflammatory_predictor", version="v1"),
+            ModelRef(name="anti_inflammatory_predictor", version="v2"),
         ]
 
     # Individual model computations, one method each.
@@ -371,7 +371,7 @@ class Stage6(CandidateStage):
         model = _get_angiogenic_model()
         return model.predict(sequence, feature_extractor)
 
-    def compute_anti_inflammatory_probability(self, sequence: str) -> float:
-        """P(anti-inflammatory peptide) from anti_inflammatory_predictor_v1; supports the immunomodulation function."""
+    def compute_anti_inflammatory_probability(self, sequence: str, feature_extractor) -> float:
+        """P(anti-inflammatory peptide) from anti_inflammatory_predictor_v2; supports the immunomodulation function."""
         model = _get_anti_inflammatory_model()
-        return model.predict_proba(sequence)
+        return model.predict_proba(sequence, feature_extractor)

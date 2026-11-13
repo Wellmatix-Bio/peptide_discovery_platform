@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import warnings
 from pathlib import Path
 
 import joblib
@@ -15,7 +16,7 @@ MODEL_DIR = weights_dir_for(CODE_DIR)
 
 AMINO_ACID_SET = set("ACDEFGHIKLMNPQRSTVWY")
 
-# Observed training length range (2-22 aa).
+# Observed training length range (2-22 aa); outside it the score is extrapolation, flagged but not rejected.
 MIN_LENGTH, MAX_LENGTH = 2, 22
 
 
@@ -27,10 +28,10 @@ def _validate_sequence(sequence: str) -> None:
         raise ValueError(
             f"sequence contains residues outside the 20 uppercase standard amino acids: {bad}"
         )
-    if not MIN_LENGTH <= len(sequence) <= MAX_LENGTH:
-        raise ValueError(
-            f"sequence length {len(sequence)} outside the trained range {MIN_LENGTH}-{MAX_LENGTH}."
-        )
+
+
+def in_trained_length_range(sequence: str) -> bool:
+    return MIN_LENGTH <= len(sequence) <= MAX_LENGTH
 
 
 def esm_mean_embeddings(
@@ -71,6 +72,13 @@ class PigmentationPredictor:
                 _validate_sequence(sequence)
             except ValueError as exc:
                 raise ValueError(f"sequence at index {i} invalid: {exc}") from exc
+        out_of_range = [i for i, s in enumerate(sequences) if not in_trained_length_range(s)]
+        if out_of_range:
+            warnings.warn(
+                f"{len(out_of_range)} sequence(s) outside the trained length range {MIN_LENGTH}-{MAX_LENGTH} "
+                f"(indices {out_of_range[:10]}); scores are extrapolation.",
+                stacklevel=2,
+            )
         self._load()
         X = esm_mean_embeddings(sequences, feature_extractor)
         if X.shape[1] != self.embedding_dim:
@@ -79,6 +87,13 @@ class PigmentationPredictor:
             )
         proba = self.ensemble.predict_proba(X)[:, self.positive_index]
         return [float(v) for v in proba]
+
+    def predict_batch(self, sequences: list[str], feature_extractor: FeatureExtractor) -> list[dict]:
+        """P(TIP) per sequence with `in_length_range`, so callers can carry the extrapolation flag."""
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            probas = self.predict_proba_batch(sequences, feature_extractor)
+        return [{"probability": p, "in_length_range": in_trained_length_range(s)} for p, s in zip(probas, sequences)]
 
     def predict_proba(self, sequence: str, feature_extractor: FeatureExtractor) -> float:
         return self.predict_proba_batch([sequence], feature_extractor)[0]

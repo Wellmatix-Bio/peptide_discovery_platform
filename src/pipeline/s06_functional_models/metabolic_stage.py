@@ -21,7 +21,7 @@ MODEL_STORE_DIR = Path(__file__).resolve().parents[3] / "model_store"
 if str(MODEL_STORE_DIR) not in sys.path:
     sys.path.insert(0, str(MODEL_STORE_DIR))
 
-from model_store.anti_inflammatory_predictor_v1 import AntiInflammatoryPredictor  # noqa: E402
+from model_store.anti_inflammatory_predictor_v2 import AntiInflammatoryPredictor  # noqa: E402
 from model_store.binding_affinity_predictor_v1 import BindingAffinityPredictor  # noqa: E402
 from model_store.functional_potency_predictor_v1 import (  # noqa: E402
     UNRELIABLE_POTENCY_RECEPTORS,
@@ -222,8 +222,9 @@ class Stage6Metabolic(CandidateStage):
         probs = classifier.predict_proba_batch(sequences, fe) if classifier else None
         # Predicted anti-inflammatory tendency; gated below at anti_inflammatory_probability_min and also scored by Stage 11.
         anti_inflammatory = [None] * n
-        for i in scorable:
-            anti_inflammatory[i] = float(_get_anti_inflammatory_model().predict_proba(sequences[i]))
+        if scorable_sequences:
+            for i, p in zip(scorable, _get_anti_inflammatory_model().predict_proba_batch(scorable_sequences, fe)):
+                anti_inflammatory[i] = float(p)
 
         survivors = []
         for i, candidate in enumerate(tqdm(candidates, desc="Stage 6 (metabolic)")):
@@ -277,7 +278,7 @@ class Stage6Metabolic(CandidateStage):
         used = [
             ModelRef(name="functional_potency_predictor", version="v1"),
             ModelRef(name="binding_affinity_predictor", version="v1"),
-            ModelRef(name="anti_inflammatory_predictor", version="v1"),
+            ModelRef(name="anti_inflammatory_predictor", version="v2"),
         ]
         if _get_agonism_classifier() is not None:
             used.append(ModelRef(name="agonism_classifier", version="v1"))

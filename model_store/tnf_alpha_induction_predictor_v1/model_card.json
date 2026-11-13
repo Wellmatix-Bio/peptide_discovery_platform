@@ -1,0 +1,77 @@
+{
+  "model_name": "tnf_alpha_induction_predictor_v1",
+  "version": "v1",
+  "status": "first version",
+  "task": "binary classification: P(peptide induces TNF-alpha), in the training assays' context. Not secretion amount, dose-response or clinical effect.",
+  "cytokine": "TNF-alpha",
+  "features": "mean-pooled last-layer ESM2-150M (facebook/esm2_t30_150M_UR50D) over residue positions, BOS/EOS excluded, 640-d",
+  "members": [
+    {
+      "name": "MLP_posw",
+      "kind": "MLP",
+      "imbalance_scheme": "positive-class weight (negatives 1, positives n_neg/n_pos)",
+      "cv_metrics_5fold_mean": {
+        "MCC": 0.233,
+        "AUROC": 0.664,
+        "AUPRC": 0.66,
+        "BalAcc": 0.617,
+        "Sensitivity": 0.589,
+        "Specificity": 0.644
+      }
+    },
+    {
+      "name": "SVM_RBF_smote",
+      "kind": "SVM_RBF",
+      "imbalance_scheme": "SMOTE oversampling of the training rows",
+      "cv_metrics_5fold_mean": {
+        "MCC": 0.237,
+        "AUROC": 0.674,
+        "AUPRC": 0.681,
+        "BalAcc": 0.619,
+        "Sensitivity": 0.616,
+        "Specificity": 0.621
+      }
+    },
+    {
+      "name": "XGBoost_posw",
+      "kind": "XGBoost",
+      "imbalance_scheme": "positive-class weight (negatives 1, positives n_neg/n_pos)",
+      "cv_metrics_5fold_mean": {
+        "MCC": 0.238,
+        "AUROC": 0.672,
+        "AUPRC": 0.672,
+        "BalAcc": 0.619,
+        "Sensitivity": 0.611,
+        "Specificity": 0.627
+      }
+    }
+  ],
+  "aggregation": "mean of member P(y=1)",
+  "threshold": 0.5,
+  "cv_metrics_5fold_mean": {
+    "MCC": 0.259,
+    "AUROC": 0.682,
+    "AUPRC": 0.681,
+    "BalAcc": 0.629,
+    "Sensitivity": 0.616,
+    "Specificity": 0.642
+  },
+  "cv_metrics_note": "recomputed on the notebook's folds with these members (out-of-fold mean of member probabilities)",
+  "cv_design": "5 label-stratified folds, no CD-HIT 0.9-identity cluster crossing folds; metrics at threshold 0.5",
+  "training": {
+    "n": 3208,
+    "positive_rate": 0.498,
+    "length_min": 7,
+    "length_max": 50,
+    "source": "TNF-alpha-release.csv",
+    "final_fit": "each member refit on all rows with its imbalance scheme"
+  },
+  "limits": [
+    "The training notebook does not evaluate this ensemble; its cross-validated metrics here were computed on the notebook's own folds with the same members.",
+    "Applicability: predict_batch returns an `applicability` assessment per peptide (in_domain, limited_evidence or out_of_domain, with reasons) from the trained length range 7-50 and the positive/negative training counts at that exact length (info.json `domain`); sequence similarity and embedding-distribution checks are not run yet. `in_length_range` is kept.",
+    "Probabilities are not comparable across cytokines or calibrated; label is simply probability >= 0.5.",
+    "Embeddings in the training project were computed in fp16 on GPU and here in fp32; member probabilities differ by up to about 0.02 on a 40-sequence check per model.",
+    "Weights were pickled with an earlier scikit-learn than the one installed here; loading emits a version warning."
+  ],
+  "provenance": "Exported by scripts/export_cytokine_models.py from Models/Cytokine Activation/Weighted_5models (notebook TNF-alpha.ipynb); member source files and SHA-256 are in model_weights/tnf_alpha_induction_predictor_v1/info.json."
+}

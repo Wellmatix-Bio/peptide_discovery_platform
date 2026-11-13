@@ -1,0 +1,79 @@
+{
+  "model_name": "il6_induction_predictor_v1",
+  "version": "v1",
+  "status": "first version",
+  "task": "binary classification: P(peptide induces IL-6), in the training assays' context. Not secretion amount, dose-response or clinical effect.",
+  "cytokine": "IL-6",
+  "features": "mean-pooled last-layer ESM2-150M (facebook/esm2_t30_150M_UR50D) over residue positions, BOS/EOS excluded, 640-d",
+  "members": [
+    {
+      "name": "XGBoost_lenbin",
+      "kind": "XGBoost",
+      "imbalance_scheme": "length-bin x class sample weights",
+      "cv_metrics_5fold_mean": {
+        "MCC": 0.378,
+        "AUROC": 0.739,
+        "AUPRC": 0.439,
+        "BalAcc": 0.617,
+        "Sensitivity": 0.247,
+        "Specificity": 0.987
+      }
+    },
+    {
+      "name": "MLP_adasyn",
+      "kind": "MLP",
+      "imbalance_scheme": "ADASYN oversampling of the training rows",
+      "cv_metrics_5fold_mean": {
+        "MCC": 0.348,
+        "AUROC": 0.733,
+        "AUPRC": 0.407,
+        "BalAcc": 0.647,
+        "Sensitivity": 0.337,
+        "Specificity": 0.957
+      }
+    },
+    {
+      "name": "SVM_RBF_posw",
+      "kind": "SVM_RBF",
+      "imbalance_scheme": "positive-class weight (negatives 1, positives n_neg/n_pos)",
+      "cv_metrics_5fold_mean": {
+        "MCC": 0.356,
+        "AUROC": 0.746,
+        "AUPRC": 0.431,
+        "BalAcc": 0.59,
+        "Sensitivity": 0.186,
+        "Specificity": 0.994
+      }
+    }
+  ],
+  "aggregation": "mean of member P(y=1)",
+  "threshold": 0.5,
+  "cv_metrics_5fold_mean": {
+    "MCC": 0.409,
+    "AUROC": 0.752,
+    "AUPRC": 0.471,
+    "BalAcc": 0.636,
+    "Sensitivity": 0.288,
+    "Specificity": 0.984
+  },
+  "cv_metrics_note": "recomputed on the notebook's folds with these members (out-of-fold mean of member probabilities)",
+  "cv_design": "5 label-stratified folds, no CD-HIT 0.9-identity cluster crossing folds; metrics at threshold 0.5",
+  "training": {
+    "n": 3356,
+    "positive_rate": 0.109,
+    "length_min": 8,
+    "length_max": 25,
+    "source": "FASTA files merged, duplicates and label conflicts removed",
+    "final_fit": "each member refit on all rows with its imbalance scheme"
+  },
+  "limits": [
+    "The notebook's own IL-6 ensemble uses MLP_posw; this version uses MLP_adasyn as requested. Its cross-validated metrics here were computed on the notebook's folds with these members.",
+    "Trained only on 8-25 residue peptides.",
+    "Sensitivity is low at the 0.5 threshold; the training set is 11% positive.",
+    "Applicability: predict_batch returns an `applicability` assessment per peptide (in_domain, limited_evidence or out_of_domain, with reasons) from the trained length range 8-25 and the positive/negative training counts at that exact length (info.json `domain`); sequence similarity and embedding-distribution checks are not run yet. `in_length_range` is kept.",
+    "Probabilities are not comparable across cytokines or calibrated; label is simply probability >= 0.5.",
+    "Embeddings in the training project were computed in fp16 on GPU and here in fp32; member probabilities differ by up to about 0.02 on a 40-sequence check per model.",
+    "Weights were pickled with an earlier scikit-learn than the one installed here; loading emits a version warning."
+  ],
+  "provenance": "Exported by scripts/export_cytokine_models.py from Models/Cytokine Activation/Weighted_5models (notebook IL-6.ipynb); member source files and SHA-256 are in model_weights/il6_induction_predictor_v1/info.json."
+}

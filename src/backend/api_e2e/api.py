@@ -6,6 +6,9 @@ import os
 import re
 import statistics
 import logging
+import subprocess
+import sys
+import time
 from functools import lru_cache
 from pathlib import Path
 from typing import Annotated, Literal, Union
@@ -24,11 +27,24 @@ from common import storage
 
 # Imported for its side effect: common/env.py loads .env into os.environ; do not remove as unused.
 from common import env  # noqa: F401
+from common.env import DEV_MODE
+from common.model_registry import ModelRegistry
+from common.model_sync import weights_dir_for
+from common.applicability import NOT_CHECKED, ReferenceProfile
+from common.sequence_utils import parse_sequence_items
 from schemas.brief import Brief, CosmeticBrief, MetabolicBrief
 from schemas.e2e_config import validate_job_config
+from schemas.immuno_config import CYTOKINE_MODELS, DEFAULT_BATCH_SIZE, IMMUNO_MAX_PEPTIDES, REQUIRED_WEIGHT_FILES, ImmunoRunConfig
 from schemas.stage_configs import CosmeticE2ERequest, E2ERequest, MetabolicE2ERequest
 
 app = FastAPI(title="End-to-end Pipeline Job API")
+
+if DEV_MODE:
+    # Local development only: a page opened from a file or another port (the standalone studio) is cross-origin to this API.
+    # No credentials are involved, so any origin is allowed; production (DEV_MODE off) adds no CORS and stays same-origin.
+    from fastapi.middleware.cors import CORSMiddleware
+
+    app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
 
 def required(name):
@@ -315,6 +331,389 @@ def create_job(request: CreateJobRequest):
         job_id=job.name,
         result_path=result_path,
     )
+
+
+def _immuno_batch_size() -> int:
+    """Peptides the worker's models process at a time: IMMUNO_BATCH_SIZE, else the schema default."""
+    try:
+        return max(1, int(os.environ.get("IMMUNO_BATCH_SIZE", DEFAULT_BATCH_SIZE)))
+    except ValueError:
+        return DEFAULT_BATCH_SIZE
+
+
+class ImmunoCreateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    request_id: str = Field(min_length=1, description="Caller's name for the run. A repeat of the same request_id returns the first job instead of starting another.")
+    peptides: list[str] = Field(
+        min_length=1,
+        max_length=IMMUNO_MAX_PEPTIDES,
+        description="Sequences or FASTA entries. Each is checked for the 20 standard residues, length 6-50 and duplicates; the worker then scores them in batches.",
+    )
+
+
+class ImmunoRejection(BaseModel):
+    id: str
+    sequence: str
+    reason: str
+    detail: str = ""
+
+
+class ImmunoCreateResponse(CreateJobResponse):
+    accepted: int = Field(description="Peptides submitted to the job, after QC and de-duplication.")
+    rejected: list[ImmunoRejection] = Field(default_factory=list, description="What QC removed, and why.")
+
+
+#: DEV_MODE: immunomodulation jobs run as local subprocesses and get ids shaped like a Vertex resource name, so the status,
+#: results and cancel routes, the accounts proxy's ownership check and the web page treat them like any other job. The handles
+#: live in this process: after an API restart a running job cannot be cancelled, and its status falls back to its results.json.
+LOCAL_JOB_PREFIX = "projects/local/locations/local/customJobs/"
+_REPO = Path(__file__).resolve().parents[3]
+_local_processes: dict[str, subprocess.Popen] = {}
+
+
+def _local_artifacts() -> str:
+    """VERTEX_ARTIFACTS_DIR when it is a local path, else <repo>/artifacts."""
+    configured = os.environ.get("VERTEX_ARTIFACTS_DIR", "")
+    return configured if configured and not configured.startswith("gs://") else str(_REPO / "artifacts")
+
+
+def _create_local_immunomodulation_job(request: ImmunoCreateRequest, peptides: list[str], rejected: list[ImmunoRejection]):
+    """DEV_MODE: run the worker as a subprocess with local weights; its output goes to <run dir>/worker.log."""
+    artifacts = _local_artifacts()
+    run_id = str(time.time_ns() // 1_000_000)
+    run_dir = storage.join(artifacts, "runs", run_id)
+    config_path = storage.join(run_dir, "config.json")
+    config = ImmunoRunConfig(run_id=run_id, artifacts_dir=artifacts, model_store="model_store", peptides=peptides, batch_size=_immuno_batch_size())
+    storage.write_text(config_path, config.model_dump_json(indent=2))
+    env = {**os.environ, "DEV_MODE": "true", "PYTHONPATH": os.pathsep.join([str(_REPO / "src"), str(_REPO), os.environ.get("PYTHONPATH", "")])}
+    with open(Path(run_dir) / "worker.log", "ab") as log:
+        _local_processes[run_id] = subprocess.Popen(
+            [sys.executable, "-m", "backend.worker_immuno.worker", "--config", config_path],
+            cwd=str(_REPO),
+            env=env,
+            stdout=log,
+            stderr=subprocess.STDOUT,
+        )
+    return ImmunoCreateResponse(
+        request_id=request.request_id,
+        job_id=LOCAL_JOB_PREFIX + run_id,
+        result_path=run_dir,
+        accepted=len(peptides),
+        rejected=rejected,
+    )
+
+
+@app.post("/api/v1/jobs/immunomodulation/create", response_model=ImmunoCreateResponse, status_code=202)
+def create_immunomodulation_job(request: ImmunoCreateRequest):
+    """Start a job that scores peptides on six cytokine-induction models. The worker processes them in batches of IMMUNO_BATCH_SIZE (default 100); progress is reported in the status route's `stage`. With DEV_MODE the job runs as a local process on local weights."""
+    parsed = parse_sequence_items(request.peptides)
+    rejected = [ImmunoRejection(id=r.id, sequence=r.sequence, reason=r.reason, detail=r.detail) for r in parsed.rejected]
+    if not parsed.accepted:
+        raise HTTPException(422, {"message": "No valid peptides in the request", "rejected": [r.model_dump() for r in rejected]})
+    peptides = parsed.sequences
+    if DEV_MODE:
+        return _create_local_immunomodulation_job(request, peptides, rejected)
+
+    parent = f"projects/{required('VERTEX_CLOUD_PROJECT')}/locations/{required('VERTEX_LOCATION')}"
+    artifacts = required("VERTEX_ARTIFACTS_DIR")
+    models = required("VERTEX_MODEL_STORE")
+    image = required("WORKER_IMMUNO_IMAGE_URI")
+    service_account = required("WORKER_SERVICE_ACCOUNT")
+    machine_type = required("MACHINE_TYPE")
+    accelerator_type = required("ACCELERATOR_TYPE")
+    accelerator_count = int(required("ACCELERATOR_COUNT"))
+    if not all(storage.is_gcs_path(p) for p in (artifacts, models)):
+        raise HTTPException(503, "Artifacts and model store must use gs:// paths")
+    # The worker runs with DEV_MODE=false (set in the job below), so it downloads every model from this bucket.
+    # Refuse now if the bucket is the placeholder or lacks a model, rather than failing the GPU job minutes in.
+    if "TODO-bucket" in models:
+        raise HTTPException(503, "VERTEX_MODEL_STORE is still the placeholder; set it to the bucket that holds the model weights")
+    missing = [f for f in REQUIRED_WEIGHT_FILES if not storage.exists(storage.join(models, f))]
+    if missing:
+        raise HTTPException(503, f"Model weights missing from {models}: {', '.join(missing)}")
+
+    # Its own staging folder, so a request_id shared with another pipeline cannot return that pipeline's job.
+    staging_config_path = storage.join(artifacts, "requests", "immunomodulation", request.request_id, "config.json")
+
+    # A retry returns the job the first attempt started rather than submitting a second one; see create_job for why.
+    if storage.exists(staging_config_path):
+        try:
+            run_id = json.loads(storage.read_text(staging_config_path))["run_id"]
+        except Exception:
+            logging.exception("Staging config %s exists but could not be read; treating %s as new", staging_config_path, request.request_id)
+        else:
+            return ImmunoCreateResponse(
+                request_id=request.request_id,
+                job_id=f"{parent}/customJobs/{run_id}",
+                result_path=storage.join(artifacts, "runs", run_id),
+                accepted=len(peptides),
+                rejected=rejected,
+            )
+
+    custom_job = {
+        "display_name": f"ai-peptide-discovery-immuno-{request.request_id[:12]}",
+        "labels": {"service": "battery-ai", "pipeline": "immunomodulation", "request-id": _label_value(request.request_id)},
+        "job_spec": {
+            "service_account": service_account,
+            "worker_pool_specs": [
+                {
+                    "replica_count": 1,
+                    "machine_spec": {
+                        "machine_type": machine_type,
+                        "accelerator_type": accelerator_type,
+                        "accelerator_count": accelerator_count,
+                    },
+                    "disk_spec": {"boot_disk_type": "pd-ssd", "boot_disk_size_gb": 200},
+                    "container_spec": {
+                        "image_uri": image,
+                        "args": ["--config", staging_config_path, "--wait-for-config", "120"],
+                        "env": [
+                            {"name": "DEV_MODE", "value": "false"},
+                            {"name": "VERTEX_MODEL_STORE", "value": models},
+                        ],
+                    },
+                }
+            ],
+        },
+    }
+    try:
+        client = job_client()
+        job = client.create_custom_job(parent=parent, custom_job=custom_job)
+        job_id = job.name.rsplit("/", 1)[-1]
+        result_path = storage.join(artifacts, "runs", job_id)
+        config = ImmunoRunConfig(run_id=job_id, artifacts_dir=artifacts, model_store=models, peptides=peptides, batch_size=_immuno_batch_size())
+        try:
+            body = config.model_dump_json(indent=2)
+            storage.write_text(storage.join(result_path, "config.json"), body)
+            storage.write_text(staging_config_path, body)
+        except Exception as exc:
+            try:
+                client.cancel_custom_job(name=job.name, timeout=30)
+            except Exception:
+                logging.exception("Could not cancel job %s after config upload failed", job.name)
+            raise HTTPException(502, f"Config upload failed for {job.name}; cancellation requested") from exc
+    except GoogleAuthError as exc:
+        raise HTTPException(503, "Google credentials are unavailable") from exc
+    except GoogleAPICallError as exc:
+        raise HTTPException(502, str(exc)) from exc
+    return ImmunoCreateResponse(
+        request_id=request.request_id, job_id=job.name, result_path=result_path, accepted=len(peptides), rejected=rejected
+    )
+
+
+#: Model-card fields that describe how a cytokine model is built (which classifiers, how they are combined, how they were
+#: trained) and so are never returned to clients. The cards in model_store/ keep them for the team.
+CONFIDENTIAL_CARD_KEYS = ("members", "aggregation", "cv_metrics_note", "limits", "provenance")
+
+
+def _public_card(package: str, card: dict | None) -> dict | None:
+    """The card as clients may see it: for the immunomodulation models, without the build details above."""
+    if card is None or package not in {p for p, _ in CYTOKINE_MODELS.values()}:
+        return card
+    public = {k: v for k, v in card.items() if k not in CONFIDENTIAL_CARD_KEYS}
+    public["training"] = {k: v for k, v in (card.get("training") or {}).items() if k != "final_fit"}
+    return public
+
+
+class ImmunoModelInfo(BaseModel):
+    cytokine: str
+    package: str
+    name: str
+    version: str
+    registered: bool  # found in common.model_registry.ModelRegistry (needs a readable model_card.json)
+    checksum: str | None = None
+    card_status: str | None = None  # e.g. "first version"
+    task: str | None = None
+    threshold: float | None = None
+    cv_metrics: dict = Field(default_factory=dict)  # of the model as served
+    training: dict = Field(default_factory=dict)  # n, positive_rate, length_min, length_max, source
+    #: None when the weights' info.json cannot be read here (the API image carries no weights and the bucket is unset or unreachable).
+    domain: dict | None = None
+
+
+class ImmunoModelsResponse(BaseModel):
+    models: list[ImmunoModelInfo]
+    caveat: str
+
+
+def _immuno_weights_info(package: str) -> dict | None:
+    """The weights' info.json: the local weights folder first, else the model store bucket; None if neither is readable."""
+    local = weights_dir_for(MODEL_STORE_DIR / package) / "info.json"
+    try:
+        if local.is_file():
+            return json.loads(local.read_text(encoding="utf-8"))
+        store = os.environ.get("VERTEX_MODEL_STORE", "")
+        if not DEV_MODE and storage.is_gcs_path(store) and "TODO-bucket" not in store:
+            return json.loads(storage.read_text(storage.join(store, package, "info.json")))
+    except Exception:
+        logging.warning("Could not read info.json for %s", package, exc_info=True)
+    return None
+
+
+def _immuno_domain(info: dict | None) -> dict | None:
+    if not info:
+        return None
+    try:
+        profile = ReferenceProfile.from_info(info)
+    except (KeyError, TypeError, ValueError):
+        return None
+    domain = info.get("domain") or {}
+    return {
+        "min_examples_per_class": profile.min_per_class,
+        "per_length_counts_recorded": profile.counts is not None,
+        "status_ranges": profile.status_ranges(),  # lengths 6-50 -> in_domain / limited_evidence / out_of_domain
+        "not_checked": [c for c in NOT_CHECKED if not (c == "sequence_similarity" and info.get("similarity"))],
+        "similarity": {k: v for k, v in (info.get("similarity") or {}).items() if k in ("method", "similar_at", "distant_below")} or None,
+        "source": domain.get("source"),
+    }
+
+
+@app.get("/api/v1/immunomodulation/models", response_model=ImmunoModelsResponse)
+def immunomodulation_models():
+    """What the studio's six cytokine models are: version and checksum from the model registry, performance and limits from each model card, and the per-length applicability ranges from the weights' info.json."""
+    registry = ModelRegistry(MODEL_STORE_DIR)
+    entries = []
+    for cytokine, (package, _cls) in CYTOKINE_MODELS.items():
+        name, version = package.rsplit("_", 1)
+        ref = registry.get(name, version)
+        card: dict = {}
+        card_path = MODEL_STORE_DIR / package / "model_card.json"
+        try:
+            card = json.loads(card_path.read_text(encoding="utf-8")) if card_path.is_file() else {}
+        except ValueError:
+            logging.warning("Unreadable model card %s", card_path)
+        card = _public_card(package, card) or {}
+        entries.append(
+            ImmunoModelInfo(
+                cytokine=cytokine,
+                package=package,
+                name=name,
+                version=version,
+                registered=ref is not None,
+                checksum=ref.checksum if ref else None,
+                card_status=card.get("status"),
+                task=card.get("task"),
+                threshold=card.get("threshold"),
+                cv_metrics=card.get("cv_metrics_5fold_mean", {}),
+                training=card.get("training", {}),
+                domain=_immuno_domain(_immuno_weights_info(package)),
+            )
+        )
+    return ImmunoModelsResponse(
+        models=entries,
+        caveat=(
+            "Cross-validation figures estimate performance on peptides like the training data, at threshold 0.5. The domain ranges"
+            " reflect peptide length, per-length training counts and, where shown, similarity to the training peptides; the embedding distribution is not checked."
+        ),
+    )
+
+
+# Declared before the generic /{job_id:path}/... routes below: those would otherwise take "immunomodulation/<job>" as the job id and 422.
+@app.get("/api/v1/jobs/immunomodulation/{job_id:path}/status", response_model=JobStatusResponse)
+def get_immunomodulation_job_status(job_id: str):
+    """Same envelope as the pipeline status route. While running, `stage` reads like `batch 3 of 12 (300/1200 peptides)`."""
+    if DEV_MODE and job_id.startswith(LOCAL_JOB_PREFIX):
+        return _local_immunomodulation_status(job_name(job_id))
+    return get_job_status(job_id)
+
+
+def _local_immunomodulation_status(name: str) -> JobStatusResponse:
+    run_id = _run_id_from_job_id(name)
+    status_path = storage.join(_local_artifacts(), "runs", run_id, "results.json")
+    results = json.loads(storage.read_text(status_path)) if storage.exists(status_path) else None
+    worker_status = (results.get("status") if results else None) or None
+    process = _local_processes.get(run_id)
+    if process is not None:
+        code = process.poll()
+        vertex_state = "JOB_STATE_RUNNING" if code is None else "JOB_STATE_SUCCEEDED" if code == 0 else "JOB_STATE_FAILED"
+    elif worker_status == "success":
+        vertex_state = "JOB_STATE_SUCCEEDED"
+    elif worker_status in ("failed", "fail"):
+        vertex_state = "JOB_STATE_FAILED"
+    else:
+        vertex_state = "JOB_STATE_RUNNING"  # unknown: no process handle and no verdict from the worker
+    return JobStatusResponse(
+        job_id=name,
+        status=worker_status or "pending",
+        stage=(results.get("stage") if results else None) or "pending",
+        vertex_state=vertex_state,
+        run_state=run_state(worker_status, vertex_state),
+        error=(results.get("error") if results else None),
+    )
+
+
+class CancelJobResponse(BaseModel):
+    job_id: str
+    status: Literal["cancelling", "cancelled", "failed"]
+
+
+class ImmunoPeptideResult(BaseModel):
+    sequence: str | None = None
+    predictions: dict = Field(
+        default_factory=dict,
+        description=(
+            "Keyed by cytokine (TNF-alpha, IL-6, IL-10, IL-4, IL-13, IFN-gamma). Each holds probability, label (probability >= 0.5),"
+            " in_length_range, model (the package that produced it) and applicability {status, reasons, checks, reference, similarity, not_checked}."
+        ),
+    )
+
+
+class ImmunoJobResultsResponse(BaseModel):
+    pipeline: Literal["immunomodulation"] = "immunomodulation"
+    job_id: str
+    run_id: str
+    status: str
+    n_final: int | None = None
+    results: list[ImmunoPeptideResult] = Field(default_factory=list)
+
+
+@app.get("/api/v1/jobs/immunomodulation/{job_id:path}/results", response_model=ImmunoJobResultsResponse)
+def get_immunomodulation_job_results(job_id: str):
+    """Per-peptide predictions, in input order. Empty until the job has succeeded. Read each result's `applicability` before its probability."""
+    name = job_name(job_id)
+    run_id = _run_id_from_job_id(name)
+    artifacts = _local_artifacts() if DEV_MODE and name.startswith(LOCAL_JOB_PREFIX) else required("VERTEX_ARTIFACTS_DIR")
+    run_dir = storage.join(artifacts, "runs", run_id)
+    status_path = storage.join(run_dir, "results.json")
+    if not storage.exists(status_path):
+        raise HTTPException(404, "Job results not found")
+    status_payload = json.loads(storage.read_text(status_path))
+    status = status_payload.get("status", "unknown")
+    n_final = status_payload.get("n_final")
+    results: list[dict] = []
+    if status == "success":
+        results_path = storage.join(run_dir, "immuno_results.json")
+        if not storage.exists(results_path):
+            raise HTTPException(404, "Job reported success but immuno_results.json is missing")
+        results = json.loads(storage.read_text(results_path))
+    return ImmunoJobResultsResponse(
+        job_id=name,
+        run_id=run_id,
+        status=status,
+        n_final=n_final,
+        results=[
+            ImmunoPeptideResult(
+                sequence=r.get("sequence"),
+                predictions={
+                    cytokine: {k: v for k, v in prediction.items() if k != "members"}
+                    for cytokine, prediction in (r.get("predictions") or {}).items()
+                },
+            )
+            for r in results
+        ],
+    )
+
+
+@app.post("/api/v1/jobs/immunomodulation/{job_id:path}/cancel", response_model=CancelJobResponse)
+def cancel_immunomodulation_job(job_id: str):
+    if DEV_MODE and job_id.startswith(LOCAL_JOB_PREFIX):
+        name = job_name(job_id)
+        process = _local_processes.get(_run_id_from_job_id(name))
+        if process is None or process.poll() is not None:
+            return {"job_id": name, "status": "failed"}  # not started by this API process, or already over
+        process.terminate()
+        return {"job_id": name, "status": "cancelling"}
+    return cancel_job(job_id)
 
 
 def run_state(worker_status: str | None, vertex_state: str | None) -> str:
@@ -925,11 +1324,6 @@ def get_job_results(job_id: str):
     )
 
 
-class CancelJobResponse(BaseModel):
-    job_id: str
-    status: Literal["cancelling", "cancelled", "failed"]
-
-
 @app.post("/api/v1/jobs/{job_id:path}/cancel", response_model=CancelJobResponse)
 def cancel_job(job_id: str):
     name = job_name(job_id)
@@ -999,10 +1393,11 @@ SHARED_SETTINGS = (
 #: A pipeline whose pair is absent answers 503 and the other pipelines are unaffected, so these
 #: are NOT in settings_missing -- a wound-healing-only deployment is correctly configured, and
 #: reporting it as missing four settings would say otherwise.
-PIPELINE_SETTINGS: dict[str, tuple[str, str]] = {
+PIPELINE_SETTINGS: dict[str, tuple[str, ...]] = {
     "wound_healing": ("WORKER_IMAGE_URI", "SEED_CANDIDATES_FILE"),
     "metabolic": ("WORKER_METABOLIC_IMAGE_URI", "SEED_CANDIDATES_FILE_METABOLIC"),
     "cosmetic": ("WORKER_COSMETIC_IMAGE_URI", "SEED_CANDIDATES_FILE_COSMETIC"),
+    "immunomodulation": ("WORKER_IMMUNO_IMAGE_URI",),  # takes peptides in the request, so no seed file
 }
 
 
@@ -1076,6 +1471,7 @@ def model_manifest():
                 card = json.loads(card_path.read_text(encoding="utf-8"))
             except ValueError:
                 card = None
+        card = _public_card(name, card)
         entries.append(
             ModelEntry(
                 name=name,

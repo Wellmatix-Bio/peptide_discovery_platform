@@ -1,0 +1,46 @@
+{
+  "model_name": "anti_inflammatory_predictor_v2",
+  "task": "binary classification: anti-inflammatory peptide probability, sigmoid(logit)",
+  "architecture": "three branches fused by interaction features. Global: frozen ESM2-150M residue embeddings pooled by BOS + mean + max + attention, then an MLP. Local: N-terminal and C-terminal windows (10 and 20 residues) plus up to 6 cleavage-centred windows (radius 5), each embedded by ESM2, passed through a CNN (k=3, 5) with attention pooling, a window-type embedding and a 2-layer Transformer. Handcrafted: 626 sequence descriptors reduced to 80 by variance, correlation, mutual-information and random-forest selection. Fusion: [g, l, h, g*l, g*h, l*h, |g-l|, |g-h|, |l-h|] into a 3-layer classifier.",
+  "esm_model_name": "facebook/esm2_t30_150M_UR50D",
+  "esm_embedding_dim": 640,
+  "weights_dir": "model_store/model_weights/anti_inflammatory_predictor_v2",
+  "weights_layout": "weights.pt: state_dict, feature_index (80 selected descriptor columns), feature_mean, feature_scale",
+  "differences_from_v1": [
+    "uses frozen ESM2-150M embeddings and 626 handcrafted descriptors instead of a one-hot encoding, so a call needs the shared FeatureExtractor",
+    "no fixed 25-residue input: longer sequences are scored in full and flagged as outside the trained range, not truncated",
+    "predict_batch returns in_length_range per sequence"
+  ],
+  "training": {
+    "training_set": {"n": 3790, "positive": 1451, "length_range": [11, 30]},
+    "variant": "extended: every training peptide also contributes a random crop (at least 8 residues), its reverse and a copy with about 10% of positions substituted, duplicates dropped, then the minority class is oversampled to 1:1 (18040 training examples)",
+    "loss": "focal (alpha 0.5, gamma 2)",
+    "epochs": 50,
+    "seed": 42,
+    "checkpoint_selection": "the epoch with the best sqrt(MCC x AUC) on the training set itself (epoch 50 of 50); there was no validation split"
+  },
+  "independent_test_metrics_threshold_0_5": {
+    "independent_set_1_n1049": {"ACC": 0.7474, "Sn": 0.6619, "Sp": 0.8045, "AUC": 0.8090, "MCC": 0.4702},
+    "independent_set_2_n425": {"ACC": 0.8494, "Sn": 0.8786, "Sp": 0.8294, "AUC": 0.8992, "MCC": 0.6980}
+  },
+  "independent_test_metrics_without_training_neighbours": {
+    "note": "independent peptides with no training peptide at or above the stated sequence identity",
+    "independent_set_1": {
+      "identity_below_0_8": {"n": 732, "AUC": 0.7003, "MCC": 0.2748, "ACC": 0.6667},
+      "identity_below_0_6": {"n": 343, "AUC": 0.5509, "MCC": 0.0512, "ACC": 0.5248}
+    },
+    "independent_set_2": {
+      "identity_below_0_8": {"n": 128, "AUC": 0.7861, "MCC": 0.4207, "ACC": 0.7188},
+      "identity_below_0_6": {"n": 58, "AUC": 0.6414, "MCC": 0.1805, "ACC": 0.6207}
+    }
+  },
+  "verification": "model_store loader (platform ESM2 extractor, fp32) reproduces the training-code scores: AUC 0.8089 / 0.8993, MCC 0.4702 / 0.7022, ACC 0.7474 / 0.8518 on independent sets 1 / 2; largest per-peptide probability difference over 120 peptides is 0.011, no peptide changes side of 0.5. Repeated calls are identical.",
+  "limits": [
+    "The independent sets overlap the training set heavily: 29% of set 1 and 54% of set 2 are exact sequence matches, and 30% and 70% have a training neighbour at 0.8 identity or more. The headline AUCs (0.81, 0.90) are therefore optimistic; the 0.70 and 0.79 figures at identity below 0.8 are the cautious ones, and at identity below 0.6 the model is close to chance on set 1 (AUC 0.55, n=343).",
+    "The extended variant was chosen over the base variant because it scored higher on these same independent sets (AUC 0.809 / 0.899 against 0.790 / 0.861), so the choice itself used the test data and adds a small optimistic bias.",
+    "Checkpoint selection used the training set, and accuracy on its own (augmented) training set is 0.999 and AUC 0.9999: the model overfits.",
+    "Trained on peptides of 11 to 30 residues (augmented crops down to 8). Outside 8 to 30 residues the score is extrapolation: it is returned with a warning, and predict_batch sets in_length_range to false. The platform accepts up to 50.",
+    "Sensitivity and specificity are balanced at 0.5 on the independent sets but the decision threshold was not tuned.",
+    "One seed only; no estimate of seed-to-seed variation."
+  ]
+}

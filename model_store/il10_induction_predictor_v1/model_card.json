@@ -1,0 +1,52 @@
+{
+  "model_name": "il10_induction_predictor_v1",
+  "version": "v1",
+  "status": "first version",
+  "task": "binary classification: P(peptide induces IL-10), in the training assays' context. Not secretion amount, dose-response or clinical effect.",
+  "cytokine": "IL-10",
+  "features": "mean-pooled last-layer ESM2-150M (facebook/esm2_t30_150M_UR50D) over residue positions, BOS/EOS excluded, 640-d",
+  "members": [
+    {
+      "name": "MLP_posw",
+      "kind": "MLP",
+      "imbalance_scheme": "positive-class weight (negatives 1, positives n_neg/n_pos)",
+      "cv_metrics_5fold_mean": {
+        "MCC": 0.332,
+        "AUROC": 0.76,
+        "AUPRC": 0.445,
+        "BalAcc": 0.682,
+        "Sensitivity": 0.502,
+        "Specificity": 0.862
+      }
+    }
+  ],
+  "aggregation": "single member",
+  "threshold": 0.5,
+  "cv_metrics_5fold_mean": {
+    "MCC": 0.332,
+    "AUROC": 0.76,
+    "AUPRC": 0.445,
+    "BalAcc": 0.682,
+    "Sensitivity": 0.502,
+    "Specificity": 0.862
+  },
+  "cv_metrics_note": "single model",
+  "cv_design": "5 label-stratified folds, no CD-HIT 0.9-identity cluster crossing folds; metrics at threshold 0.5",
+  "training": {
+    "n": 4981,
+    "positive_rate": 0.155,
+    "length_min": 8,
+    "length_max": 46,
+    "source": "IL-10-release.csv",
+    "final_fit": "each member refit on all rows with its imbalance scheme"
+  },
+  "limits": [
+    "A single MLP_posw member, the strongest single model in the notebook's IL-10 ensemble table (MCC 0.332, AUROC 0.760); the notebook's three-model ensemble scored lower (MCC 0.317, AUROC 0.754).",
+    "Sensitivity is about 0.50 against specificity 0.86; the training set is 16% positive.",
+    "Applicability: predict_batch returns an `applicability` assessment per peptide (in_domain, limited_evidence or out_of_domain, with reasons) from the trained length range 8-46 and the positive/negative training counts at that exact length (info.json `domain`); sequence similarity and embedding-distribution checks are not run yet. `in_length_range` is kept.",
+    "Probabilities are not comparable across cytokines or calibrated; label is simply probability >= 0.5.",
+    "Embeddings in the training project were computed in fp16 on GPU and here in fp32; member probabilities differ by up to about 0.02 on a 40-sequence check per model.",
+    "Weights were pickled with an earlier scikit-learn than the one installed here; loading emits a version warning."
+  ],
+  "provenance": "Exported by scripts/export_cytokine_models.py from Models/Cytokine Activation/Weighted_5models (notebook IL-10.ipynb); member source files and SHA-256 are in model_weights/il10_induction_predictor_v1/info.json."
+}

@@ -1,0 +1,65 @@
+{
+  "model_name": "il13_induction_predictor_v1",
+  "version": "v1",
+  "status": "first version",
+  "task": "binary classification: P(peptide induces IL-13), in the training assays' context. Not secretion amount, dose-response or clinical effect.",
+  "cytokine": "IL-13",
+  "features": "mean-pooled last-layer ESM2-150M (facebook/esm2_t30_150M_UR50D) over residue positions, BOS/EOS excluded, 640-d",
+  "members": [
+    {
+      "name": "MLP_posw",
+      "kind": "MLP",
+      "imbalance_scheme": "positive-class weight (negatives 1, positives n_neg/n_pos)",
+      "cv_metrics_5fold_mean": {
+        "MCC": 0.261,
+        "AUROC": 0.744,
+        "AUPRC": 0.355,
+        "BalAcc": 0.644,
+        "Sensitivity": 0.383,
+        "Specificity": 0.905
+      }
+    },
+    {
+      "name": "XGBoost_lenbin",
+      "kind": "XGBoost",
+      "imbalance_scheme": "length-bin x class sample weights",
+      "cv_metrics_5fold_mean": {
+        "MCC": 0.306,
+        "AUROC": 0.716,
+        "AUPRC": 0.333,
+        "BalAcc": 0.575,
+        "Sensitivity": 0.156,
+        "Specificity": 0.993
+      }
+    }
+  ],
+  "aggregation": "mean of member P(y=1)",
+  "threshold": 0.5,
+  "cv_metrics_5fold_mean": {
+    "MCC": 0.282,
+    "AUROC": 0.751,
+    "AUPRC": 0.37,
+    "BalAcc": 0.611,
+    "Sensitivity": 0.259,
+    "Specificity": 0.964
+  },
+  "cv_metrics_note": "ensemble_summary.csv of the training notebook",
+  "cv_design": "5 label-stratified folds, no CD-HIT 0.9-identity cluster crossing folds; metrics at threshold 0.5",
+  "training": {
+    "n": 3221,
+    "positive_rate": 0.097,
+    "length_min": 8,
+    "length_max": 35,
+    "source": "FASTA files merged, duplicates and label conflicts removed",
+    "final_fit": "each member refit on all rows with its imbalance scheme"
+  },
+  "limits": [
+    "Matches the notebook's own IL-13 ensemble (MLP_posw + XGBoost_lenbin).",
+    "Very low sensitivity (0.26) at the 0.5 threshold: most true inducers are missed. The training set is 10% positive.",
+    "Applicability: predict_batch returns an `applicability` assessment per peptide (in_domain, limited_evidence or out_of_domain, with reasons) from the trained length range 8-35 and the positive/negative training counts at that exact length (info.json `domain`); sequence similarity and embedding-distribution checks are not run yet. `in_length_range` is kept.",
+    "Probabilities are not comparable across cytokines or calibrated; label is simply probability >= 0.5.",
+    "Embeddings in the training project were computed in fp16 on GPU and here in fp32; member probabilities differ by up to about 0.02 on a 40-sequence check per model.",
+    "Weights were pickled with an earlier scikit-learn than the one installed here; loading emits a version warning."
+  ],
+  "provenance": "Exported by scripts/export_cytokine_models.py from Models/Cytokine Activation/Weighted_5models (notebook IL-13.ipynb); member source files and SHA-256 are in model_weights/il13_induction_predictor_v1/info.json."
+}

@@ -30,7 +30,7 @@ from model_store.proliferation_migration_predictor_v1 import (
 from model_store.angiogenic_activity_predictor_v1 import (
     AngiogenicActivityPredictor,
 )  # noqa: E402
-from model_store.anti_inflammatory_predictor_v1 import (
+from model_store.anti_inflammatory_predictor_v2 import (
     AntiInflammatoryPredictor,
 )  # noqa: E402
 
@@ -113,6 +113,12 @@ STAGE6_THRESHOLDS = {
 
 # Threshold keys holding per-pathogen dicts; overrides merge per pathogen instead of replacing the dict.
 STAGE6_NESTED_THRESHOLD_KEYS = {"max_mic", "max_mbic"}
+
+
+def _selected(pathogens: list[str], supported) -> list[str]:
+    """The brief's pathogens that `supported` covers, in model spelling (the brief uses underscores, the models spaces)."""
+    by_key = {name.replace(" ", "_"): name for name in supported}
+    return [by_key[p.replace(" ", "_")] for p in dict.fromkeys(pathogens) if p.replace(" ", "_") in by_key]
 
 
 def check_pathogen_vocabulary(pathogens: list[str]) -> dict[str, list[str]]:
@@ -294,7 +300,7 @@ class Stage6(CandidateStage):
                         sequence, feature_extractor
                     ),
                     "anti_inflammatory_probability": self.compute_anti_inflammatory_probability(
-                        sequence
+                        sequence, feature_extractor
                     ),
                 }
             )
@@ -312,6 +318,7 @@ class Stage6(CandidateStage):
             if result["passed"]:
                 survivors.append(candidate)
             else:
+                self.note_rejection(*result["failed_requirements"])
                 logger.info("s06.filter", extra=candidate.predictions["stage6_filter"])
 
         return survivors
@@ -323,7 +330,7 @@ class Stage6(CandidateStage):
             ModelRef(name="mbic_predictor", version="v1"),
             ModelRef(name="proliferation_migration_predictor", version="v1"),
             ModelRef(name="angiogenic_activity_predictor", version="v1"),
-            ModelRef(name="anti_inflammatory_predictor", version="v1"),
+            ModelRef(name="anti_inflammatory_predictor", version="v2"),
         ]
 
     # Individual model computations, one method each.
@@ -336,28 +343,22 @@ class Stage6(CandidateStage):
     def compute_mic(
         self, sequence: str, pathogens: list[str], feature_extractor
     ) -> dict:
-        """log10(MIC, uM) per pathogen from mic_predictor_v1; unsupported pathogens are skipped, and if none match all 3 supported organisms are scored."""
+        """log10(MIC, uM) for the brief's pathogens only; unsupported ones are skipped, and none selected means none scored."""
         model = _get_mic_model()
-        organisms = [
-            p for p in pathogens if p in MIC_SUPPORTED_ORGANISMS
-        ] or MIC_SUPPORTED_ORGANISMS
         per_organism = {
             organism: model.predict_log_mic(sequence, organism, feature_extractor)
-            for organism in organisms
+            for organism in _selected(pathogens, MIC_SUPPORTED_ORGANISMS)
         }
         return {"log_mic_um": per_organism, "status": "ok"}
 
     def compute_mbic(
         self, sequence: str, pathogens: list[str], feature_extractor
     ) -> dict:
-        """pMBIC (biofilm-inhibition potency) per pathogen from mbic_predictor_v1; same vocabulary fallback as compute_mic."""
+        """pMBIC (biofilm-inhibition potency, 6 - log10 uM) for the brief's pathogens only; same selection rule as compute_mic."""
         model = _get_mbic_model()
-        species_list = [p for p in pathogens if p in MBIC_SUPPORTED_SPECIES] or sorted(
-            MBIC_SUPPORTED_SPECIES
-        )
         per_species = {
             species: model.predict_pmbic(sequence, species, feature_extractor)
-            for species in species_list
+            for species in _selected(pathogens, MBIC_SUPPORTED_SPECIES)
         }
         return {"pmbic": per_species, "status": "ok"}
 
@@ -371,7 +372,7 @@ class Stage6(CandidateStage):
         model = _get_angiogenic_model()
         return model.predict(sequence, feature_extractor)
 
-    def compute_anti_inflammatory_probability(self, sequence: str) -> float:
-        """P(anti-inflammatory peptide) from anti_inflammatory_predictor_v1; supports the immunomodulation function."""
+    def compute_anti_inflammatory_probability(self, sequence: str, feature_extractor) -> float:
+        """P(anti-inflammatory peptide) from anti_inflammatory_predictor_v2; supports the immunomodulation function."""
         model = _get_anti_inflammatory_model()
-        return model.predict_proba(sequence)
+        return model.predict_proba(sequence, feature_extractor)

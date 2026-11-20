@@ -81,6 +81,7 @@ const cosmetic: CosmeticJobResultsResponse = {
       final_score_rank: 1,
       final_score: 0.61,
       primary_function: "collagen_synthesis",
+      secondary_functions: [],
       component_scores: {
         collagen_synthesis: { score: 0.73, screened: true },
         antioxidant: { score: null, screened: false },
@@ -165,9 +166,15 @@ describe("a metabolic run", () => {
     show();
     await expand("HSQGTFTSDYSKYLD");
     expect(screen.getByText("Receptor potency")).toBeInTheDocument();
-    expect(screen.getByText("pEC50 9.40")).toBeInTheDocument();
-    expect(screen.getByText("0.40 nM")).toBeInTheDocument();
-    expect(screen.getByText("143.5")).toBeInTheDocument();
+    expect(screen.getAllByText("pEC50 (potency)").length).toBe(3);
+    expect(screen.getByText("9.40")).toBeInTheDocument();
+    // pKd is its own row with its own unit, not a footnote to pEC50.
+    expect(screen.getAllByText("pKd (binding)").length).toBe(3);
+    expect(screen.getByText("8.90")).toBeInTheDocument();
+    expect(screen.getByText("0.40")).toBeInTheDocument();
+    expect(screen.getByText("nM")).toBeInTheDocument();
+    expect(screen.getByText("3.94")).toBeInTheDocument();
+    expect(screen.getByText("log10 s")).toBeInTheDocument();
   });
 
   it("shows every receptor the API mentioned, not only the ones in one of its maps", async () => {
@@ -191,7 +198,7 @@ describe("a metabolic run", () => {
     // Flagged in the header, before anything is expanded: a reader who never opens the panel
     // still sees it. And the number is still reported -- the contract is "flagged", not "withheld".
     await expand("HSQGTFTSDYSKYLD");
-    expect(screen.getByText("pEC50 7.25")).toBeInTheDocument();
+    expect(screen.getByText("7.25")).toBeInTheDocument();
     expect(screen.getByText(UNRELIABLE_NOTE)).toBeInTheDocument();
   });
 
@@ -219,6 +226,57 @@ describe("a cosmetic run", () => {
   });
 });
 
+describe("a cosmetic run's function components", () => {
+  it("names the primary and secondary functions in brackets", async () => {
+    serve({
+      ...cosmetic,
+      candidates: [
+        {
+          ...cosmetic.candidates![0],
+          primary_function: "collagen_ecm",
+          secondary_functions: ["antioxidant", "pigmentation"],
+          component_scores: {
+            primary_function: { score: 0.8, screened: true },
+            secondary_functions: { score: 0.5, screened: true },
+          },
+        },
+      ],
+    });
+    show();
+    await expand("KTTKS");
+    expect(screen.getByText("primary function (collagen ecm)")).toBeInTheDocument();
+    expect(screen.getByText("secondary functions (antioxidant, pigmentation)")).toBeInTheDocument();
+  });
+
+  it("shows no bracket when the API names no secondary function", async () => {
+    serve({
+      ...cosmetic,
+      candidates: [
+        {
+          ...cosmetic.candidates![0],
+          primary_function: "collagen_ecm",
+          component_scores: { secondary_functions: { score: null, screened: false } },
+        },
+      ],
+    });
+    show();
+    await expand("KTTKS");
+    expect(screen.getByText("secondary functions")).toBeInTheDocument();
+  });
+
+  it("says the peptides are not shown to reach the dermis, on cosmetic runs only", async () => {
+    serve(cosmetic);
+    const { unmount } = show();
+    await waitFor(() => expect(screen.getByText("KTTKS")).toBeInTheDocument());
+    expect(screen.getByText(/not shown to penetrate the outer skin barrier and reach the dermis/)).toBeInTheDocument();
+    unmount();
+    serve(metabolic);
+    show();
+    await waitFor(() => expect(screen.getByText("HSQGTFTSDYSKYLD")).toBeInTheDocument());
+    expect(screen.queryByText(/outer skin barrier/)).not.toBeInTheDocument();
+  });
+});
+
 describe("a response with no pipeline field", () => {
   it("is read as wound healing, which is what the API's own default says it is", async () => {
     serve(untagged);
@@ -226,5 +284,31 @@ describe("a response with no pipeline field", () => {
     await expand("GLFDIVKKVVGALGSL");
     expect(screen.getByText("MIC by pathogen (log10 µM)")).toBeInTheDocument();
     expect(screen.queryByText("Receptor potency")).not.toBeInTheDocument();
+  });
+});
+
+describe("rejection reasons", () => {
+  it("states the direction and the run's cutoff for each reason", async () => {
+    serve({
+      ...metabolic,
+      rejections: {
+        n_removed: 3,
+        reasons: { hemolysis: 2, plasma_half_life: 1 },
+        cutoffs: { hemolysis: "P(hemolytic) above 0.5", plasma_half_life: "below 60 min" },
+      },
+    });
+    show();
+    await waitFor(() =>
+      expect(screen.getByText("Hemolysis too high — cutoff: P(hemolytic) above 0.5")).toBeInTheDocument(),
+    );
+    expect(screen.getByText("Plasma half-life too short — cutoff: below 60 min")).toBeInTheDocument();
+  });
+
+  it("falls back to the direction alone when the API gives no cutoff", async () => {
+    serve({ ...metabolic, rejections: { n_removed: 1, reasons: { hemolysis: 1 } } });
+    show();
+    await waitFor(() =>
+      expect(screen.getByText(/^Hemolysis too high \(predicted hemolytic activity above the cutoff\)/)).toBeInTheDocument(),
+    );
   });
 });

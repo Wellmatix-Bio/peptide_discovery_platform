@@ -59,6 +59,7 @@ class CosmeticStage9(CandidateStage):
                 "flags": flags,
             }
             if probability < params.synthesis_feasibility_min:
+                self.note_rejection("synthesis_feasibility_below_min")
                 logger.info(
                     "s09_cosmetic.reject",
                     extra={"candidate_id": candidate.id, "probability": probability},

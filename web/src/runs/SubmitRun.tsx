@@ -74,7 +74,7 @@ const STAGES = [
   ["s05_physchem_screening", "Physicochemical screening", "Charge, hydrophobicity, stability."],
   ["s06_functional_models", "Functional models", "Antimicrobial, migration, angiogenesis."],
   ["s07_structure_mechanism", "Structure & mechanism", "ESMFold. The slowest stage by far."],
-  ["s08_safety_developability", "Safety & developability", "Haemolysis, cytotoxicity, aggregation."],
+  ["s08_safety_developability", "Safety & developability", "Hemolysis, cytotoxicity, aggregation."],
   ["s09_synthesis_cmc", "Synthesis & CMC", "Difficulty, cost band, purity ceiling."],
 ] as const;
 
@@ -103,7 +103,7 @@ const METABOLIC_STAGES = [
   [
     "s08_metabolic_safety_developability",
     "Safety & developability",
-    "Haemolysis, cytotoxicity, aggregation, cleavage.",
+    "Hemolysis, cytotoxicity, aggregation, cleavage.",
   ],
   ["s09_synthesis_cmc", "Synthesis & CMC", "Difficulty, cost band, purity ceiling."],
 ] as const;
@@ -130,7 +130,7 @@ const COSMETIC_STAGES = [
   [
     "s08_cosmetic_safety_developability",
     "Skin safety & developability",
-    "Irritation, sensitisation, allergenicity, haemolysis, cytotoxicity.",
+    "Irritation, sensitisation, allergenicity, hemolysis, cytotoxicity.",
   ],
   [
     "s09_cosmetic_synthesis_cmc",
@@ -845,6 +845,10 @@ export function SubmitRun() {
 
             <div className="card">
               <h2>Generation</h2>
+              <p className="help" style={{ marginTop: 0 }}>
+                These settings control how the generation stage runs. They do not guarantee the number
+                of candidates it produces: the final count can be lower, and later stages filter further.
+              </p>
               <div className="row">
                 <div className="field">
                   <label htmlFor="m-n-peptides">Candidates to generate</label>
@@ -1078,6 +1082,10 @@ export function SubmitRun() {
 
             <div className="card">
               <h2>Generation</h2>
+              <p className="help" style={{ marginTop: 0 }}>
+                These settings control how the generation stage runs. They do not guarantee the number
+                of candidates it produces: the final count can be lower, and later stages filter further.
+              </p>
               <div className="field">
                 <label htmlFor="c-seed">Random seed</label>
                 <input
@@ -1214,6 +1222,10 @@ export function SubmitRun() {
 
             <div className="card">
               <h2>Generation</h2>
+              <p className="help" style={{ marginTop: 0 }}>
+                These settings control how the generation stage runs. They do not guarantee the number
+                of candidates it produces: the final count can be lower, and later stages filter further.
+              </p>
               <div className="row">
                 <div className="field">
                   <label htmlFor="n-peptides">Candidates to generate</label>

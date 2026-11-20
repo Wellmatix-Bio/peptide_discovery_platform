@@ -6,6 +6,7 @@
     "Staphylococcus aureus",
     "Pseudomonas aeruginosa"
   ],
+  "prediction_resolution": "Species level. The model takes a species, not a strain, as input (a species-keyed genome-composition vector, one per species), so strain-specific prediction is not available. Training rows are limited to the three reference strains in organism_source_strains, so predictions are most representative of those strains.",
   "organism_source_strains": {
     "Escherichia coli": "ATCC 25922",
     "Staphylococcus aureus": "ATCC 25923",

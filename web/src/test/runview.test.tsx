@@ -320,7 +320,7 @@ describe("ranking evidence", () => {
      labels elsewhere in the panel, so a bare getByText matches the wrong node and a test that
      passes on the wrong element is not evidence. */
   function missingModulesRow(): HTMLElement {
-    return screen.getByText("Modules with no score").closest(".kv") as HTMLElement;
+    return screen.getByText("Modules with no score").closest(".stat") as HTMLElement;
   }
 
   it("names the modules that produced no score", async () => {

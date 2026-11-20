@@ -783,6 +783,14 @@
             "title": "Safety Flags",
             "type": "array"
           },
+          "secondary_functions": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Secondary Functions",
+            "type": "array"
+          },
           "sequence": {
             "anyOf": [
               {
@@ -946,7 +954,7 @@
           "s08_cosmetic_safety_developability": {
             "$ref": "#/components/schemas/Stage8CosmeticRequest",
             "default": {
-              "allergenicity_min_length": 50,
+              "allergenicity_min_length": 3,
               "allergenicity_reject_min": 0.5,
               "cleavage_decay_rate": 0.5,
               "cleavage_stability_reject_min": 0.3,
@@ -1110,6 +1118,16 @@
               }
             ],
             "title": "Ranked Candidates"
+          },
+          "rejections": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RejectionSummary"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "run_id": {
             "title": "Run Id",
@@ -1275,6 +1293,288 @@
         "title": "HTTPValidationError",
         "type": "object"
       },
+      "ImmunoCreateRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "peptides": {
+            "description": "Sequences or FASTA entries. Each is checked for the 20 standard residues, length 6-50 and duplicates; the worker then scores them in batches.",
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 10000,
+            "minItems": 1,
+            "title": "Peptides",
+            "type": "array"
+          },
+          "request_id": {
+            "description": "Caller's name for the run. A repeat of the same request_id returns the first job instead of starting another.",
+            "minLength": 1,
+            "title": "Request Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "request_id",
+          "peptides"
+        ],
+        "title": "ImmunoCreateRequest",
+        "type": "object"
+      },
+      "ImmunoCreateResponse": {
+        "properties": {
+          "accepted": {
+            "description": "Peptides submitted to the job, after QC and de-duplication.",
+            "title": "Accepted",
+            "type": "integer"
+          },
+          "job_id": {
+            "title": "Job Id",
+            "type": "string"
+          },
+          "rejected": {
+            "description": "What QC removed, and why.",
+            "items": {
+              "$ref": "#/components/schemas/ImmunoRejection"
+            },
+            "title": "Rejected",
+            "type": "array"
+          },
+          "request_id": {
+            "title": "Request Id",
+            "type": "string"
+          },
+          "result_path": {
+            "title": "Result Path",
+            "type": "string"
+          }
+        },
+        "required": [
+          "request_id",
+          "job_id",
+          "result_path",
+          "accepted"
+        ],
+        "title": "ImmunoCreateResponse",
+        "type": "object"
+      },
+      "ImmunoJobResultsResponse": {
+        "properties": {
+          "job_id": {
+            "title": "Job Id",
+            "type": "string"
+          },
+          "n_final": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "N Final"
+          },
+          "pipeline": {
+            "const": "immunomodulation",
+            "default": "immunomodulation",
+            "title": "Pipeline",
+            "type": "string"
+          },
+          "results": {
+            "items": {
+              "$ref": "#/components/schemas/ImmunoPeptideResult"
+            },
+            "title": "Results",
+            "type": "array"
+          },
+          "run_id": {
+            "title": "Run Id",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "job_id",
+          "run_id",
+          "status"
+        ],
+        "title": "ImmunoJobResultsResponse",
+        "type": "object"
+      },
+      "ImmunoModelInfo": {
+        "properties": {
+          "card_status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Card Status"
+          },
+          "checksum": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Checksum"
+          },
+          "cv_metrics": {
+            "additionalProperties": true,
+            "title": "Cv Metrics",
+            "type": "object"
+          },
+          "cytokine": {
+            "title": "Cytokine",
+            "type": "string"
+          },
+          "domain": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Domain"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "package": {
+            "title": "Package",
+            "type": "string"
+          },
+          "registered": {
+            "title": "Registered",
+            "type": "boolean"
+          },
+          "task": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Task"
+          },
+          "threshold": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Threshold"
+          },
+          "training": {
+            "additionalProperties": true,
+            "title": "Training",
+            "type": "object"
+          },
+          "version": {
+            "title": "Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "cytokine",
+          "package",
+          "name",
+          "version",
+          "registered"
+        ],
+        "title": "ImmunoModelInfo",
+        "type": "object"
+      },
+      "ImmunoModelsResponse": {
+        "properties": {
+          "caveat": {
+            "title": "Caveat",
+            "type": "string"
+          },
+          "models": {
+            "items": {
+              "$ref": "#/components/schemas/ImmunoModelInfo"
+            },
+            "title": "Models",
+            "type": "array"
+          }
+        },
+        "required": [
+          "models",
+          "caveat"
+        ],
+        "title": "ImmunoModelsResponse",
+        "type": "object"
+      },
+      "ImmunoPeptideResult": {
+        "properties": {
+          "predictions": {
+            "additionalProperties": true,
+            "description": "Keyed by cytokine (TNF-alpha, IL-6, IL-10, IL-4, IL-13, IFN-gamma). Each holds probability, label (probability >= 0.5), in_length_range, model (the package that produced it) and applicability {status, reasons, checks, reference, similarity, not_checked}.",
+            "title": "Predictions",
+            "type": "object"
+          },
+          "sequence": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sequence"
+          }
+        },
+        "title": "ImmunoPeptideResult",
+        "type": "object"
+      },
+      "ImmunoRejection": {
+        "properties": {
+          "detail": {
+            "default": "",
+            "title": "Detail",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          },
+          "sequence": {
+            "title": "Sequence",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "sequence",
+          "reason"
+        ],
+        "title": "ImmunoRejection",
+        "type": "object"
+      },
       "JobResultsResponse": {
         "properties": {
           "candidates": {
@@ -1334,6 +1634,16 @@
               }
             ],
             "title": "Ranked Candidates"
+          },
+          "rejections": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RejectionSummary"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "run_id": {
             "title": "Run Id",
@@ -2058,6 +2368,16 @@
             ],
             "title": "Ranked Candidates"
           },
+          "rejections": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RejectionSummary"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "run_id": {
             "title": "Run Id",
             "type": "string"
@@ -2162,6 +2482,36 @@
           "caveat"
         ],
         "title": "ModelManifest",
+        "type": "object"
+      },
+      "RejectionSummary": {
+        "description": "Candidates removed from stage 5 on. Only runs made after this was added carry it.",
+        "properties": {
+          "cutoffs": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "description": "The cutoff each reason was judged against, from the run's own stage settings, e.g. 'P(hemolytic) above 0.5'. A reason with no entry has no single cutoff to state.",
+            "title": "Cutoffs",
+            "type": "object"
+          },
+          "n_removed": {
+            "title": "N Removed",
+            "type": "integer"
+          },
+          "reasons": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "description": "Removals per reason. A candidate can fail several checks, so these can add up to more than n_removed.",
+            "title": "Reasons",
+            "type": "object"
+          }
+        },
+        "required": [
+          "n_removed"
+        ],
+        "title": "RejectionSummary",
         "type": "object"
       },
       "RouteAConstraintConfig": {
@@ -3439,7 +3789,7 @@
         "additionalProperties": false,
         "properties": {
           "allergenicity_min_length": {
-            "default": 50,
+            "default": 3,
             "minimum": 1.0,
             "title": "Allergenicity Min Length",
             "type": "integer"
@@ -3775,13 +4125,6 @@
       },
       "ValidationError": {
         "properties": {
-          "ctx": {
-            "title": "Context",
-            "type": "object"
-          },
-          "input": {
-            "title": "Input"
-          },
           "loc": {
             "items": {
               "anyOf": [
@@ -3821,6 +4164,25 @@
   },
   "openapi": "3.1.0",
   "paths": {
+    "/api/v1/immunomodulation/models": {
+      "get": {
+        "description": "What the studio's six cytokine models are: version and checksum from the model registry, performance and limits from each model card, and the per-length applicability ranges from the weights' info.json.",
+        "operationId": "immunomodulation_models_api_v1_immunomodulation_models_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImmunoModelsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Immunomodulation Models"
+      }
+    },
     "/api/v1/jobs/create": {
       "post": {
         "operationId": "create_job_api_v1_jobs_create_post",
@@ -3857,6 +4219,164 @@
           }
         },
         "summary": "Create Job"
+      }
+    },
+    "/api/v1/jobs/immunomodulation/create": {
+      "post": {
+        "description": "Start a job that scores peptides on six cytokine-induction models. The worker processes them in batches of IMMUNO_BATCH_SIZE (default 100); progress is reported in the status route's `stage`. With DEV_MODE the job runs as a local process on local weights.",
+        "operationId": "create_immunomodulation_job_api_v1_jobs_immunomodulation_create_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ImmunoCreateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImmunoCreateResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Immunomodulation Job"
+      }
+    },
+    "/api/v1/jobs/immunomodulation/{job_id}/cancel": {
+      "post": {
+        "operationId": "cancel_immunomodulation_job_api_v1_jobs_immunomodulation__job_id__cancel_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "title": "Job Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CancelJobResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Cancel Immunomodulation Job"
+      }
+    },
+    "/api/v1/jobs/immunomodulation/{job_id}/results": {
+      "get": {
+        "description": "Per-peptide predictions, in input order. Empty until the job has succeeded. Read each result's `applicability` before its probability.",
+        "operationId": "get_immunomodulation_job_results_api_v1_jobs_immunomodulation__job_id__results_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "title": "Job Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImmunoJobResultsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Immunomodulation Job Results"
+      }
+    },
+    "/api/v1/jobs/immunomodulation/{job_id}/status": {
+      "get": {
+        "description": "Same envelope as the pipeline status route. While running, `stage` reads like `batch 3 of 12 (300/1200 peptides)`.",
+        "operationId": "get_immunomodulation_job_status_api_v1_jobs_immunomodulation__job_id__status_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "title": "Job Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobStatusResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Immunomodulation Job Status"
       }
     },
     "/api/v1/jobs/{job_id}/cancel": {

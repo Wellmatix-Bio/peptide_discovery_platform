@@ -150,7 +150,7 @@ class Fakes:
         def allergen(seqs, fe):
             f.calls["allergenicity"].append(list(seqs))
             return [
-                {"p_allergen": (p := (f.allergen or {}).get(s, 0.1)), "members": {"svm": p, "lda": p, "mlp": p}}
+                {"p_allergen": (p := (f.allergen or {}).get(s, 0.1)), "score": p - 0.5}
                 for s in seqs
             ]
 
@@ -278,15 +278,16 @@ class TestModels:
         assert all(v["exact"] is False for v in by_cell.values())
         assert {v["requested"] for v in by_cell.values()} == {"keratinocyte", "fibroblast"}
 
-    LONG = "GHKAS" * 12  # 60 residues, inside the trained length range
+    LONG = "GHKAS" * 9  # 45 residues, inside the trained length range
+    TOO_LONG = "GHKAS" * 12  # 60 residues, above the trained range
 
-    def test_peptides_shorter_than_the_trained_range_are_not_scored_and_never_pass_or_reject(self, monkeypatch) -> None:
-        fakes = Fakes(allergen={"GHKASS": 0.99})
+    def test_peptides_outside_the_trained_range_are_not_scored_and_never_pass_or_reject(self, monkeypatch) -> None:
+        fakes = Fakes(allergen={self.TOO_LONG: 0.99})
         fakes.install(monkeypatch)
-        (out,) = run([candidate()])
+        (out,) = run([candidate(self.TOO_LONG)])
         assert fakes.calls["allergenicity"] == []
         a = out.predictions["allergenicity"]
-        assert a["status"] == "outside_scored_length_range" and a["p_allergen"] is None and a["trained_min_length"] == 50
+        assert a["status"] == "outside_scored_length_range" and a["p_allergen"] is None and a["trained_min_length"] == 3
         assert "allergenicity_not_screened" in out.predictions["safety_flags"]
 
     @pytest.mark.parametrize("p,rejected", [(0.5, True), (0.49, False)])
@@ -294,20 +295,28 @@ class TestModels:
         Fakes(allergen={self.LONG: p}).install(monkeypatch)
         assert (run([candidate(self.LONG)]) == []) is rejected
 
-    def test_min_length_is_configurable_so_short_peptides_can_be_scored_anyway(self, monkeypatch) -> None:
-        Fakes(allergen={"GHKASS": 0.9}).install(monkeypatch)
-        assert run([candidate()], {"allergenicity_min_length": 1}) == []
-        assert len(run([candidate()], {"allergenicity_min_length": 1, "allergenicity_reject_min": 0.95})) == 1
+    def test_short_cosmetic_peptides_are_scored(self, monkeypatch) -> None:
+        fakes = Fakes(allergen={"GHKASS": 0.9})
+        fakes.install(monkeypatch)
+        assert run([candidate()]) == []
+        assert fakes.calls["allergenicity"] == [["GHKASS"]]
+        assert len(run([candidate()], {"allergenicity_reject_min": 0.95})) == 1
 
-    def test_ensemble_and_member_probabilities_are_recorded(self, monkeypatch) -> None:
+    def test_min_length_is_configurable(self, monkeypatch) -> None:
+        fakes = Fakes(allergen={"GHKASS": 0.9})
+        fakes.install(monkeypatch)
+        (out,) = run([candidate()], {"allergenicity_min_length": 8})
+        assert fakes.calls["allergenicity"] == [] and out.predictions["allergenicity"]["status"] == "outside_scored_length_range"
+
+    def test_probability_and_score_are_recorded(self, monkeypatch) -> None:
         Fakes(allergen={self.LONG: 0.2}).install(monkeypatch)
         (out,) = run([candidate(self.LONG)])
         a = out.predictions["allergenicity"]
-        assert a["status"] == "ok" and a["p_allergen"] == 0.2 and set(a["members"]) == {"svm", "lda", "mlp"}
+        assert a["status"] == "ok" and a["p_allergen"] == 0.2 and a["score"] == pytest.approx(-0.3)
         assert "allergenicity_not_screened" not in out.predictions["safety_flags"]
 
     def test_default_min_length_is_the_shortest_training_sequence(self) -> None:
-        assert Stage8CosmeticParams().allergenicity_min_length == 50
+        assert Stage8CosmeticParams().allergenicity_min_length == 3
 
     def test_half_life_below_the_cutoff_rejects(self, monkeypatch) -> None:
         Fakes(half_life={"GHKASS": 3.0}).install(monkeypatch)

@@ -2,6 +2,7 @@
   "model_name": "cleavage_site_predictor_v2",
   "supersedes": "cleavage_site_predictor_v2 (joint model, 121-enzyme panel)",
   "task": "Per-residue P1 protease cleavage-site probability for a candidate peptide (substrate), against a bundled panel of 6,460 enzymes (proteases).",
+  "position_indexing": "cleavage_site_positions are 0-based indices of the P1 residue (the residue before the scissile bond) into the sequence and into per_residue_probability. Add 1 when showing a position to a person.",
   "architecture": "UniZyme Transformer_DE: one encoder layer per side (2 heads, d_model 480, Gaussian distance kernels, K=10); the enzyme side also takes a residue frustration matrix; an active-site head feeds a pooled concatenation MLP that scores each substrate residue. See architecture.py.",
   "inference_inputs_required": {
     "sequence": "candidate peptide amino-acid sequence, standard 20 AAs, at most 1500 residues",

@@ -45,6 +45,7 @@ class AuditWriter:
                 "n_in": result.n_in,
                 "n_out": result.n_out,
                 "n_removed": result.n_removed,
+                "rejection_reasons": result.rejection_reasons,
                 "duration_s": round(result.duration_s, 3),
                 # "models_used": [
                 #     dataclasses.asdict(ref) for ref in result.models_used

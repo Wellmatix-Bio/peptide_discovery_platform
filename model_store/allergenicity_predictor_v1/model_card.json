@@ -1,27 +1,33 @@
 {
   "model_name": "allergenicity_predictor_v1",
-  "task": "binary classification of protein sequences as allergen (positive) vs non-allergen; P(allergen) in [0, 1], the mean of three member probabilities, called allergen at >= 0.5",
-  "architecture": "equal-weight mean of three probabilities: RBF SVC (StandardScaler -> SVC, C=1, gamma=0.0005; sigmoid of the margin), LDA (StandardScaler -> LinearDiscriminantAnalysis; posterior) and an MLP (640-480-240-64-1, BatchNorm + GELU, dropout 0.5; sigmoid of the logit). The notebook's random forest is not part of the ensemble",
-  "esm_model_name": "facebook/esm2_t30_150M_UR50D",
-  "esm_embedding": "mean-pooled last_hidden_state over residue positions, BOS/EOS excluded",
-  "embedding_dim": 640,
+  "task": "binary classification of short peptides as IgE-binding (allergen, positive) vs non-binding (non-allergen); P(allergen) in [0, 1], called allergen at >= 0.5",
+  "output": "score (0 at the decision boundary) and p_allergen = sigmoid(score). p_allergen is an uncalibrated monotone transform of the score, not a measured probability",
   "weights_dir": "model_store/model_weights/allergenicity_predictor_v1",
-  "weights_layout": "SVM.joblib, LDA.joblib (sklearn pipelines), MLP.pt (joblib dict: state, scaler, d_in)",
+  "weights_layout": "ten fold files (five per member family, named mlp_fold0-4.joblib and cnn_fold0-4.pt) plus ensemble.json (score scales, decision threshold, training length range)",
+  "input": "20 uppercase standard amino acids, length 3-49 (the trained range); anything else is rejected",
   "training_data": {
-    "n_train": {"allergen": 8060, "non_allergen": 8060},
-    "n_validation": {"allergen": 2015, "non_allergen": 2015},
-    "length_range": [50, 3408],
-    "median_length": {"allergen": 170, "non_allergen": 345},
-    "residues": "20 standard amino acids",
-    "source_files": "datasets/AlgPred 2.0/{train,validation}_{positive,negative}.txt",
-    "note": "full-length proteins; no sequence is shorter than 50 residues"
+    "source": "IEDB B-cell assay export, IgE-binding assays on peptides tested as themselves",
+    "filters": "peptides shorter than 50 residues of the 20 standard amino acids; the tested antigen is the peptide itself; IgE binding measured; outcome Positive or Negative; no modified residues; methods ELISA, peptide microarray, immunoblot / dot blot, SPR; assay rows collapsed to unique peptides and peptides with conflicting Positive/Negative assays dropped (9,030 peptides); 91 embedding-space outliers then removed (8,939 peptides)",
+    "n_peptides": {"allergen": 2725, "non_allergen": 6214},
+    "length_range": [3, 49],
+    "median_length": 12,
+    "split": "grouped by source allergen protein (peptides without one by CD-HIT cluster at 80% identity), class-stratified: 7,160 peptides in 5-fold cross-validation and 1,779 in a held-out test set; held-out peptides sharing an 8-mer with the training side are excluded from evaluation (1,581 evaluable, 482 allergen)",
+    "label_note": "label 1 means IgE binding was observed in the assay, which is an epitope-level label, not a clinical allergy diagnosis"
   },
-  "validation_metrics": {
-    "source": "Models/Allergenicity/training.ipynb, threshold at each member's own class boundary",
-    "SVM": {"Sens": 0.8104, "Spec": 0.9792, "Acc": 0.8948, "AUC": 0.9710, "MCC": 0.8011},
-    "LDA": {"Sens": 0.8069, "Spec": 0.9653, "Acc": 0.8861, "AUC": 0.9629, "MCC": 0.7821},
-    "MLP": {"Sens": 0.7380, "Spec": 0.9861, "Acc": 0.8620, "AUC": 0.9453, "MCC": 0.7474},
-    "ensemble_mean_of_probabilities": {"Sens": 0.7742, "Spec": 0.9811, "Acc": 0.8777, "AUC": 0.9731, "MCC": 0.7720},
-    "caveat": "the ensemble rule is not in the notebook; it was chosen here by validation AUC and does not beat SVM alone on MCC (0.801)"
-  }
+  "holdout_metrics": {
+    "source": "Models/Allergenicity/training.ipynb and export_deployment.py; the deployed weights were re-fitted with the notebook's own code and are scored on the evaluable hold-out peptides at the decision boundary",
+    "n": 1581,
+    "Sens": 0.4523,
+    "Spec": 0.8808,
+    "Prec": 0.6246,
+    "Acc": 0.7502,
+    "AUC": 0.7292,
+    "MCC": 0.3697,
+    "caveat": "The notebook's cached cross-validated run scored AUC 0.7403 and MCC 0.4099; the re-fit is close to, not identical to, that run (score correlation 0.92). The numbers above are the ones for these weights. Sensitivity is low: at the default boundary fewer than half of the IgE-binding peptides are flagged."
+  },
+  "limitations": [
+    "Trained on 3-49 residue peptides from IgE-binding assays only; sequences outside that range are not scored.",
+    "p_allergen is not calibrated; the 0.5 boundary is the model's own class boundary, not a risk threshold.",
+    "Not trained on cosmetic or therapeutic peptides specifically."
+  ]
 }

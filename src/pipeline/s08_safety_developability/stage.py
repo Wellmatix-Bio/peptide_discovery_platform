@@ -219,6 +219,7 @@ class Stage8(CandidateStage):
             candidate.predictions["safety_verdict"] = verdict
 
             if verdict["overall"] == "reject":
+                self.note_rejection(*(k for k, v in verdict["properties"].items() if v == "reject"))
                 logger.info(
                     "s08.reject",
                     extra={

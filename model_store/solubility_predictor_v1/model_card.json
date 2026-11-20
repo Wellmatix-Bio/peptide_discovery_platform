@@ -1,9 +1,9 @@
 {
   "task": "binary classification: P(soluble) for a peptide in a given solvent",
   "target_column": "y (0=Insoluble, 1=Soluble) from long_peptide_solvent.csv",
-  "esm_model_name": "facebook/esm2_t33_650M_UR50D",
+  "esm_model_name": "facebook/esm2_t30_150M_UR50D",
   "esm_pooling": "mean-pool per-residue last_hidden_state, BOS and EOS tokens excluded from the mean",
-  "n_esm_features": 1280,
+  "n_esm_features": 640,
   "esm_feature_prefix": "esm_",
   "solvent_feature_cols": [
     "pH_value",
@@ -14,7 +14,7 @@
     "polarity_index"
   ],
   "n_solvent_features": 6,
-  "n_total_features": 1286,
+  "n_total_features": 646,
   "solvent_join_key": "solvent_key = normalize_solvent_name(solvent_name), joined against bundled solvent_descriptors.json",
   "solvent_vocabulary": [
     "Ultrapure water",
@@ -39,11 +39,10 @@
     "random_state": 42
   },
   "deployment_artifact": {
-    "file": "pair_stratified_87a389cf6ee76d08.joblib",
+    "file": "pair_stratified_8af6a134fd4c5f76.joblib",
     "variant": "Pipeline B raw (ESM2 embedding + solvent descriptors, no PCA)",
     "split_strategy": "pair_stratified: random 64/16/20 train/val/test split stratified on y (peptide-solvent pairs can appear across both train and test)",
-    "best_iteration": 141,
-    "n_features_in": 1286
+    "n_features_in": 646
   },
   "evaluation_summary_from_prior_investigation": {
     "loso_macro_auc": 0.773,

@@ -83,7 +83,7 @@ None of the six skin-sensitizer predictions survived Stage 8, so every final sur
 - Stage 6 tested the collagen primary function only. Antioxidant and pigmentation were not run, so the survival figures apply only to collagen-ECM targeting.
 - **Stage 6 AMP filter: resolved.** The notebook ran under the `peptide_platform` conda kernel (scikit-learn 1.9.0, the repo pin). The earlier failure came from the default Python 3.13 install, which has scikit-learn 1.6.1. In that install `amp_classifier_v1` raises `'LogisticRegression' object has no attribute 'multi_class'`. To confirm, the 12 antimicrobial rejections were recomputed from the saved Stage 5 survivors. The same 12 peptides exceed 0.6 (`DPR`, `FDPAL`, `HFR`, `HHL`, `LH`, `MGKVVNPTQK`, `PGTAVFK`, `SWLRL`, `WGWNPR`, `WH`, `WLRL`, `WMHVR`), leaving 79 survivors. Run the platform in the `peptide_platform` environment.
 - Peptides are scored without modifications, so the palmitoyl, acetyl and amide forms are represented by their bare sequences.
-- The allergenicity model does not run on sequences under 50 residues, so it does not affect these results.
+- This benchmark ran before the allergenicity model was replaced with a peptide-trained one. The old model did not run on sequences under 50 residues, so it did not affect these results; the current one does score them.
 - The skin-sensitization model has thin evidence (24 held-out peptides); see `model_store/skin_sensitization_predictor_v1/README.md`.
 - The penetration filter is disabled, so target depth does not remove anything in this run.
 

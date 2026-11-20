@@ -271,6 +271,7 @@ class Stage6Metabolic(CandidateStage):
             if result["passed"]:
                 survivors.append(candidate)
             else:
+                self.note_rejection(*result["failed_requirements"])
                 logger.info("s06m.filter", extra=candidate.predictions["stage6_filter"])
         return survivors
 

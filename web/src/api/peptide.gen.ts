@@ -4,6 +4,26 @@
  */
 
 export interface paths {
+    "/api/v1/immunomodulation/models": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Immunomodulation Models
+         * @description What the studio's six cytokine models are: version and checksum from the model registry, performance and limits from each model card, and the per-length applicability ranges from the weights' info.json.
+         */
+        get: operations["immunomodulation_models_api_v1_immunomodulation_models_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/jobs/create": {
         parameters: {
             query?: never;
@@ -15,6 +35,83 @@ export interface paths {
         put?: never;
         /** Create Job */
         post: operations["create_job_api_v1_jobs_create_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/jobs/immunomodulation/create": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Create Immunomodulation Job
+         * @description Start a job that scores peptides on six cytokine-induction models. The worker processes them in batches of IMMUNO_BATCH_SIZE (default 100); progress is reported in the status route's `stage`. With DEV_MODE the job runs as a local process on local weights.
+         */
+        post: operations["create_immunomodulation_job_api_v1_jobs_immunomodulation_create_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/jobs/immunomodulation/{job_id}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Cancel Immunomodulation Job */
+        post: operations["cancel_immunomodulation_job_api_v1_jobs_immunomodulation__job_id__cancel_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/jobs/immunomodulation/{job_id}/results": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Immunomodulation Job Results
+         * @description Per-peptide predictions, in input order. Empty until the job has succeeded. Read each result's `applicability` before its probability.
+         */
+        get: operations["get_immunomodulation_job_results_api_v1_jobs_immunomodulation__job_id__results_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/jobs/immunomodulation/{job_id}/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Immunomodulation Job Status
+         * @description Same envelope as the pipeline status route. While running, `stage` reads like `batch 3 of 12 (300/1200 peptides)`.
+         */
+        get: operations["get_immunomodulation_job_status_api_v1_jobs_immunomodulation__job_id__status_get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -454,7 +551,7 @@ export interface components {
             s07_structure_mechanism: components["schemas"]["Stage7Request"];
             /**
              * @default {
-             *       "allergenicity_min_length": 50,
+             *       "allergenicity_min_length": 3,
              *       "allergenicity_reject_min": 0.5,
              *       "cleavage_decay_rate": 0.5,
              *       "cleavage_stability_reject_min": 0.3,
@@ -560,6 +657,7 @@ export interface components {
             pipeline: "cosmetic";
             /** Ranked Candidates */
             ranked_candidates?: number | null;
+            rejections?: components["schemas"]["RejectionSummary"] | null;
             /** Run Id */
             run_id: string;
             /** Status */
@@ -626,6 +724,123 @@ export interface components {
             /** Detail */
             detail?: components["schemas"]["ValidationError"][];
         };
+        /** ImmunoCreateRequest */
+        ImmunoCreateRequest: {
+            /**
+             * Peptides
+             * @description Sequences or FASTA entries. Each is checked for the 20 standard residues, length 6-50 and duplicates; the worker then scores them in batches.
+             */
+            peptides: string[];
+            /**
+             * Request Id
+             * @description Caller's name for the run. A repeat of the same request_id returns the first job instead of starting another.
+             */
+            request_id: string;
+        };
+        /** ImmunoCreateResponse */
+        ImmunoCreateResponse: {
+            /**
+             * Accepted
+             * @description Peptides submitted to the job, after QC and de-duplication.
+             */
+            accepted: number;
+            /** Job Id */
+            job_id: string;
+            /**
+             * Rejected
+             * @description What QC removed, and why.
+             */
+            rejected?: components["schemas"]["ImmunoRejection"][];
+            /** Request Id */
+            request_id: string;
+            /** Result Path */
+            result_path: string;
+        };
+        /** ImmunoJobResultsResponse */
+        ImmunoJobResultsResponse: {
+            /** Job Id */
+            job_id: string;
+            /** N Final */
+            n_final?: number | null;
+            /**
+             * Pipeline
+             * @default immunomodulation
+             * @constant
+             */
+            pipeline: "immunomodulation";
+            /** Results */
+            results?: components["schemas"]["ImmunoPeptideResult"][];
+            /** Run Id */
+            run_id: string;
+            /** Status */
+            status: string;
+        };
+        /** ImmunoModelInfo */
+        ImmunoModelInfo: {
+            /** Card Status */
+            card_status?: string | null;
+            /** Checksum */
+            checksum?: string | null;
+            /** Cv Metrics */
+            cv_metrics?: {
+                [key: string]: unknown;
+            };
+            /** Cytokine */
+            cytokine: string;
+            /** Domain */
+            domain?: {
+                [key: string]: unknown;
+            } | null;
+            /** Name */
+            name: string;
+            /** Package */
+            package: string;
+            /** Registered */
+            registered: boolean;
+            /** Task */
+            task?: string | null;
+            /** Threshold */
+            threshold?: number | null;
+            /** Training */
+            training?: {
+                [key: string]: unknown;
+            };
+            /** Version */
+            version: string;
+        };
+        /** ImmunoModelsResponse */
+        ImmunoModelsResponse: {
+            /** Caveat */
+            caveat: string;
+            /** Models */
+            models: components["schemas"]["ImmunoModelInfo"][];
+        };
+        /** ImmunoPeptideResult */
+        ImmunoPeptideResult: {
+            /**
+             * Predictions
+             * @description Keyed by cytokine (TNF-alpha, IL-6, IL-10, IL-4, IL-13, IFN-gamma). Each holds probability, label (probability >= 0.5), in_length_range, model (the package that produced it) and applicability {status, reasons, checks, reference, similarity, not_checked}.
+             */
+            predictions?: {
+                [key: string]: unknown;
+            };
+            /** Sequence */
+            sequence?: string | null;
+        };
+        /** ImmunoRejection */
+        ImmunoRejection: {
+            /**
+             * Detail
+             * @default
+             */
+            detail: string;
+            /** Id */
+            id: string;
+            /** Reason */
+            reason: string;
+            /** Sequence */
+            sequence: string;
+        };
         /** JobResultsResponse */
         JobResultsResponse: {
             /**
@@ -650,6 +865,7 @@ export interface components {
             pipeline: "wound_healing";
             /** Ranked Candidates */
             ranked_candidates?: number | null;
+            rejections?: components["schemas"]["RejectionSummary"] | null;
             /** Run Id */
             run_id: string;
             /** Status */
@@ -932,6 +1148,7 @@ export interface components {
             pipeline: "metabolic";
             /** Ranked Candidates */
             ranked_candidates?: number | null;
+            rejections?: components["schemas"]["RejectionSummary"] | null;
             /** Run Id */
             run_id: string;
             /** Status */
@@ -965,6 +1182,21 @@ export interface components {
             models: components["schemas"]["ModelEntry"][];
             /** Weights Source */
             weights_source?: string | null;
+        };
+        /**
+         * RejectionSummary
+         * @description Candidates removed from stage 5 on. Only runs made after this was added carry it.
+         */
+        RejectionSummary: {
+            /** N Removed */
+            n_removed: number;
+            /**
+             * Reasons
+             * @description Removals per reason. A candidate can fail several checks, so these can add up to more than n_removed.
+             */
+            reasons?: {
+                [key: string]: number;
+            };
         };
         /** RouteAConstraintConfig */
         RouteAConstraintConfig: {
@@ -1871,7 +2103,7 @@ export interface components {
         Stage8CosmeticRequest: {
             /**
              * Allergenicity Min Length
-             * @default 50
+             * @default 3
              */
             allergenicity_min_length: number;
             /**
@@ -2098,10 +2330,6 @@ export interface components {
         };
         /** ValidationError */
         ValidationError: {
-            /** Context */
-            ctx?: Record<string, never>;
-            /** Input */
-            input?: unknown;
             /** Location */
             loc: (string | number)[];
             /** Message */
@@ -2118,6 +2346,26 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    immunomodulation_models_api_v1_immunomodulation_models_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImmunoModelsResponse"];
+                };
+            };
+        };
+    };
     create_job_api_v1_jobs_create_post: {
         parameters: {
             query?: never;
@@ -2138,6 +2386,132 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["CreateJobResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_immunomodulation_job_api_v1_jobs_immunomodulation_create_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ImmunoCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImmunoCreateResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    cancel_immunomodulation_job_api_v1_jobs_immunomodulation__job_id__cancel_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                job_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CancelJobResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_immunomodulation_job_results_api_v1_jobs_immunomodulation__job_id__results_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                job_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImmunoJobResultsResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_immunomodulation_job_status_api_v1_jobs_immunomodulation__job_id__status_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                job_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JobStatusResponse"];
                 };
             };
             /** @description Validation Error */

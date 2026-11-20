@@ -165,9 +165,15 @@ describe("a metabolic run", () => {
     show();
     await expand("HSQGTFTSDYSKYLD");
     expect(screen.getByText("Receptor potency")).toBeInTheDocument();
-    expect(screen.getByText("pEC50 9.40")).toBeInTheDocument();
-    expect(screen.getByText("0.40 nM")).toBeInTheDocument();
-    expect(screen.getByText("143.5")).toBeInTheDocument();
+    expect(screen.getAllByText("pEC50 (potency)").length).toBe(3);
+    expect(screen.getByText("9.40")).toBeInTheDocument();
+    // pKd is its own row with its own unit, not a footnote to pEC50.
+    expect(screen.getAllByText("pKd (binding)").length).toBe(3);
+    expect(screen.getByText("8.90")).toBeInTheDocument();
+    expect(screen.getByText("0.40")).toBeInTheDocument();
+    expect(screen.getByText("nM")).toBeInTheDocument();
+    expect(screen.getByText("3.94")).toBeInTheDocument();
+    expect(screen.getByText("log10 s")).toBeInTheDocument();
   });
 
   it("shows every receptor the API mentioned, not only the ones in one of its maps", async () => {
@@ -191,7 +197,7 @@ describe("a metabolic run", () => {
     // Flagged in the header, before anything is expanded: a reader who never opens the panel
     // still sees it. And the number is still reported -- the contract is "flagged", not "withheld".
     await expand("HSQGTFTSDYSKYLD");
-    expect(screen.getByText("pEC50 7.25")).toBeInTheDocument();
+    expect(screen.getByText("7.25")).toBeInTheDocument();
     expect(screen.getByText(UNRELIABLE_NOTE)).toBeInTheDocument();
   });
 

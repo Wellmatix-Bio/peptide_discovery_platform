@@ -1,6 +1,9 @@
 {
   "model_name": "half_life_predictor_v1",
   "task": "regression: peptide half-life as log10(half-life in seconds)",
+  "model_family": "sequence-embedding-based regression: ESM2-150M mean-pooled embedding plus physicochemical descriptors, modification flags and measurement context, fed to gradient-boosted trees",
+  "output_units": "log10(seconds); half-life in seconds = 10 ** prediction",
+  "measurement_organisms": "Half-life measurements come from mammalian organisms, mostly rat, mouse and human.",
   "architecture": "mean of 5 cluster-fold XGBRegressor models (reg:squarederror, enable_categorical=True); no full-data refit",
   "weights_layout": "fold_0.joblib .. fold_4.joblib",
   "weights_dir": "model_store/model_weights/half_life_predictor_v1",

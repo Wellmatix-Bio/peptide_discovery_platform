@@ -1,7 +1,8 @@
-"""Loader/inference wrapper for the allergenicity ensemble (SVM + LDA + MLP) on mean-pooled ESM2-150M embeddings."""
+"""Loader/inference wrapper for the peptide allergenicity model (IgE-binding peptides); see README.md."""
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import joblib
@@ -11,19 +12,18 @@ import torch
 from common.model_sync import sync_model_weights, weights_dir_for
 from pipeline.feature_extractor import FeatureExtractor
 
-from .architecture import EMBED_DIM, MLP
+from .architecture import EMBED_DIM, MLP, AllergenCNN, one_hot
 
 CODE_DIR = Path(__file__).resolve().parent
 MODEL_DIR = weights_dir_for(CODE_DIR)
 
 AMINO_ACID_SET = set("ACDEFGHIKLMNPQRSTVWY")
 
-# ESM2's context limit; the training notebook truncated here, this wrapper refuses instead.
-MAX_LENGTH = 1022
-# Shortest sequence in the training data (AlgPred 2.0 full-length proteins); nothing shorter was ever seen.
-TRAINED_MIN_LENGTH = 50
+# Training peptides were 3-49 residues; the wrapper refuses anything outside that range.
+TRAINED_MIN_LENGTH = 3
+MAX_LENGTH = 49
 
-MEMBERS = ("svm", "lda", "mlp")
+N_FOLDS = 5
 
 
 def _validate_sequence(sequence: str) -> None:
@@ -34,8 +34,10 @@ def _validate_sequence(sequence: str) -> None:
         raise ValueError(
             f"sequence contains residues outside the 20 uppercase standard amino acids: {bad}"
         )
-    if len(sequence) > MAX_LENGTH:
-        raise ValueError(f"sequence length {len(sequence)} exceeds the ESM2 limit of {MAX_LENGTH}.")
+    if not TRAINED_MIN_LENGTH <= len(sequence) <= MAX_LENGTH:
+        raise ValueError(
+            f"sequence length {len(sequence)} outside the trained range {TRAINED_MIN_LENGTH}-{MAX_LENGTH}."
+        )
 
 
 def esm_mean_embeddings(
@@ -51,7 +53,7 @@ def _sigmoid(z: np.ndarray) -> np.ndarray:
 
 
 class AllergenicityPredictor:
-    """Lazy-loaded equal-weight mean of three allergen probabilities, see README.md."""
+    """Lazy-loaded fold models returning a score and P(allergen) = sigmoid(score); the score is 0 at the decision boundary."""
 
     version = "v1"
 
@@ -64,33 +66,44 @@ class AllergenicityPredictor:
             return
         sync_model_weights(CODE_DIR)
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        meta = json.loads((self.model_dir / "ensemble.json").read_text(encoding="utf-8"))
+        self.scale = meta["scale"]
         # Trusted first-party artifacts: joblib unpickles arbitrary objects.
-        self.svm = joblib.load(self.model_dir / "SVM.joblib")
-        self.lda = joblib.load(self.model_dir / "LDA.joblib")
-        bundle = joblib.load(self.model_dir / "MLP.pt")
-        self.mlp_scaler = bundle["scaler"]
-        self.mlp = MLP(int(bundle["d_in"])).to(self.device)
-        self.mlp.load_state_dict(bundle["state"])
-        self.mlp.eval()
-        if int(bundle["d_in"]) != EMBED_DIM:
-            raise ValueError(f"MLP expects {bundle['d_in']}-d embeddings, not {EMBED_DIM}.")
+        self.mlps = []
+        for f in range(N_FOLDS):
+            bundle = joblib.load(self.model_dir / f"mlp_fold{f}.joblib")
+            if int(bundle["d_in"]) != EMBED_DIM:
+                raise ValueError(f"expects {bundle['d_in']}-d embeddings, not {EMBED_DIM}.")
+            net = MLP(EMBED_DIM).to(self.device)
+            net.load_state_dict(bundle["state"])
+            self.mlps.append((bundle["scaler"], net.eval()))
+        self.cnns = []
+        for f in range(N_FOLDS):
+            bundle = torch.load(self.model_dir / f"cnn_fold{f}.pt", map_location=self.device, weights_only=True)
+            net = AllergenCNN().to(self.device)
+            net.load_state_dict(bundle["state"])
+            self.cnns.append(net.eval())
         self.loaded = True
 
-    def _member_probabilities(self, embeddings: np.ndarray) -> dict[str, np.ndarray]:
-        """Each member's P(allergen); 0.5 is that member's own class boundary (SVM margin 0, MLP logit 0, LDA posterior 0.5)."""
+    def _scores(self, sequences: list[str], embeddings: np.ndarray) -> np.ndarray:
+        """Each member family's fold-mean raw score divided by its training-time spread, then averaged; 0 is the boundary."""
         with torch.no_grad():
-            x = torch.tensor(self.mlp_scaler.transform(embeddings), dtype=torch.float32, device=self.device)
-            mlp_logit = self.mlp(x).cpu().numpy()
-        return {
-            "svm": _sigmoid(self.svm.decision_function(embeddings)),
-            "lda": self.lda.predict_proba(embeddings)[:, 1],
-            "mlp": _sigmoid(mlp_logit),
-        }
+            a = np.mean(
+                [
+                    net(torch.tensor(scaler.transform(embeddings), dtype=torch.float32, device=self.device)).cpu().numpy()
+                    for scaler, net in self.mlps
+                ],
+                axis=0,
+            )
+            x = one_hot(sequences, self.device)
+            logits = [net(x) for net in self.cnns]
+            b = np.mean([(lg[:, 1] - lg[:, 0]).cpu().numpy() for lg in logits], axis=0)
+        return np.mean([a / self.scale["MLP"], b / self.scale["CNN"]], axis=0)
 
     def predict_batch(
         self, sequences: list[str], feature_extractor: FeatureExtractor
     ) -> list[dict]:
-        """P(allergen) per sequence, the mean of the three members, with each member's value."""
+        """Per sequence: `score` (0 = decision boundary) and `p_allergen` = sigmoid(score), an uncalibrated 0-1 value, 0.5 at the boundary."""
         if not sequences:
             return []
         for i, sequence in enumerate(sequences):
@@ -99,14 +112,10 @@ class AllergenicityPredictor:
             except ValueError as exc:
                 raise ValueError(f"sequence at index {i} invalid: {exc}") from exc
         self._load()
-        members = self._member_probabilities(esm_mean_embeddings(sequences, feature_extractor))
-        mean = np.mean([members[name] for name in MEMBERS], axis=0)
+        scores = self._scores(sequences, esm_mean_embeddings(sequences, feature_extractor))
         return [
-            {
-                "p_allergen": float(mean[i]),
-                "members": {name: float(members[name][i]) for name in MEMBERS},
-            }
-            for i in range(len(sequences))
+            {"score": float(s), "p_allergen": float(p)}
+            for s, p in zip(scores, _sigmoid(scores))
         ]
 
     def predict_proba_batch(

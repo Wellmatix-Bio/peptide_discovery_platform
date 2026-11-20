@@ -29,6 +29,8 @@
     "Staphylococcus aureus", "Staphylococcus epidermidis", "Streptococcus mutans",
     "Streptococcus sanguinis"
   ],
+  "prediction_resolution": "Species level. The model takes a species, not a strain, as input (one-hot over species_vocabulary), so strain-specific prediction is not available.",
+  "strain_handling": "BAAMP and DBAASP records are reported against many different strains (e.g. 'PAO1', 'PAO1 / ATCC 15692'). Every strain name is mapped to its species through species_strain.csv and target_species is overwritten with that species name; the train/test split is stratified by species. Strain information is discarded before training, so the model cannot tell strains apart.",
   "species_ohe_handle_unknown": "ignore (out-of-vocabulary species map to an all-zero one-hot vector, not an error)",
   "preprocessing_order": [
     "1. compute 14 modlAMP physchem descriptors on the raw sequence",

@@ -53,7 +53,7 @@ predictor = CleavageSitePredictor()
 # from a resolved or predicted structure of the candidate peptide.
 result = predictor.predict_one(sequence, distance_matrix, enzyme_accession="A1E295")
 # {"enzyme_accession": "A1E295", "enzyme_name": "cathepsin B precursor",
-#  "per_residue_probability": [...], "cleavage_site_positions": [4, 11, ...],
+#  "per_residue_probability": [...], "cleavage_site_positions": [4, 11, ...],  # 0-based P1 indices; add 1 to show a person
 #  "max_probability": 0.91, "n_predicted_sites": 3}
 
 # score against the full 118-enzyme panel (or pass enzyme_accessions=[...] for a subset)

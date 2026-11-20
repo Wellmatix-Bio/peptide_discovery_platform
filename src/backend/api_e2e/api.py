@@ -914,6 +914,16 @@ class MetabolicCandidateResponse(BaseModel):
     inhibited_pathways: list[str] | None = None
 
 
+class RejectionSummary(BaseModel):
+    """Candidates removed from stage 5 on. Only runs made after this was added carry it."""
+
+    n_removed: int
+    reasons: dict[str, int] = Field(
+        default_factory=dict,
+        description="Removals per reason. A candidate can fail several checks, so these can add up to more than n_removed.",
+    )
+
+
 class MetabolicJobResultsResponse(BaseModel):
     pipeline: Literal["metabolic"] = "metabolic"
     job_id: str
@@ -923,6 +933,7 @@ class MetabolicJobResultsResponse(BaseModel):
     ranked_candidates: int | None = None
     insufficient_evidence_candidates: int | None = None
     component_stats: dict[str, ComponentStats] = Field(default_factory=dict)
+    rejections: RejectionSummary | None = None
     candidates: list[MetabolicCandidateResponse] = []
 
 
@@ -935,6 +946,7 @@ class JobResultsResponse(BaseModel):
     ranked_candidates: int | None = None
     insufficient_evidence_candidates: int | None = None
     component_stats: dict[str, ComponentStats] = Field(default_factory=dict)
+    rejections: RejectionSummary | None = None
     candidates: list[CandidateResponse] = []
 
 
@@ -1081,7 +1093,7 @@ class CosmeticCandidateResponse(BaseModel):
     cleavage_stability: float | None = None
     safety_flags: list[str] = []
     synthesis_feasibility_probability: float | None = None
-    synthesis_flags: dict[str, list[int]] = {}
+    synthesis_flags: dict[str, list[int]] = {}  # flag -> 0-based residue positions; the web UI shows them +1
 
 
 class CosmeticJobResultsResponse(BaseModel):
@@ -1093,6 +1105,7 @@ class CosmeticJobResultsResponse(BaseModel):
     ranked_candidates: int | None = None
     insufficient_evidence_candidates: int | None = None
     component_stats: dict[str, ComponentStats] = Field(default_factory=dict)
+    rejections: RejectionSummary | None = None
     candidates: list[CosmeticCandidateResponse] = []
 
 
@@ -1302,6 +1315,7 @@ def get_job_results(job_id: str):
         ranked_candidates=ranked,
         insufficient_evidence_candidates=len(candidates) - ranked,
         component_stats=_component_stats(candidates),
+        rejections=status_payload.get("rejections"),
     )
     pipeline = _run_pipeline(run_dir, candidates)
     if pipeline == "cosmetic":

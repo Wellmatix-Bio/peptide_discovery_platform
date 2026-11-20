@@ -70,7 +70,7 @@ def test_stage_params_are_resolved_over_defaults() -> None:
     p["stages"]["s11_cosmetic_ranking"] = {"points_primary": 6}
     config = validate_job_config(p, pipeline="cosmetic")
     assert config.for_stage("s11_cosmetic_ranking").params["points_primary"] == 6
-    assert config.for_stage("s08_cosmetic_safety_developability").params["allergenicity_min_length"] == 50
+    assert config.for_stage("s08_cosmetic_safety_developability").params["allergenicity_min_length"] == 3
 
 
 def test_other_pipelines_do_not_build_cosmetic_stages() -> None:

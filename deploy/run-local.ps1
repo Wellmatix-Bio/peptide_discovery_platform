@@ -28,7 +28,7 @@ if (-not $EnvFile) { $EnvFile = Join-Path $PSScriptRoot '../.env' }
 
 $Network = 'peptide-discovery'
 $Volume = 'peptide-accounts-data'
-$Containers = @('web', 'accounts', 'api')
+$Containers = @('peptide-web', 'peptide-accounts', 'peptide-api')
 
 function Step($msg) { Write-Host "`n==> $msg" -ForegroundColor Cyan }
 function Ok($msg) { Write-Host "    OK  $msg" -ForegroundColor Green }

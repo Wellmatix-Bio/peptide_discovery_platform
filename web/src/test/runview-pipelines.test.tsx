@@ -81,6 +81,7 @@ const cosmetic: CosmeticJobResultsResponse = {
       final_score_rank: 1,
       final_score: 0.61,
       primary_function: "collagen_synthesis",
+      secondary_functions: [],
       component_scores: {
         collagen_synthesis: { score: 0.73, screened: true },
         antioxidant: { score: null, screened: false },
@@ -222,6 +223,57 @@ describe("a cosmetic run", () => {
     fireEvent.click(screen.getByRole("button", { name: "More" }));
     expect(screen.getByText("Skin safety")).toBeInTheDocument();
     expect(screen.getByText("0.730")).toBeInTheDocument();
+  });
+});
+
+describe("a cosmetic run's function components", () => {
+  it("names the primary and secondary functions in brackets", async () => {
+    serve({
+      ...cosmetic,
+      candidates: [
+        {
+          ...cosmetic.candidates![0],
+          primary_function: "collagen_ecm",
+          secondary_functions: ["antioxidant", "pigmentation"],
+          component_scores: {
+            primary_function: { score: 0.8, screened: true },
+            secondary_functions: { score: 0.5, screened: true },
+          },
+        },
+      ],
+    });
+    show();
+    await expand("KTTKS");
+    expect(screen.getByText("primary function (collagen ecm)")).toBeInTheDocument();
+    expect(screen.getByText("secondary functions (antioxidant, pigmentation)")).toBeInTheDocument();
+  });
+
+  it("shows no bracket when the API names no secondary function", async () => {
+    serve({
+      ...cosmetic,
+      candidates: [
+        {
+          ...cosmetic.candidates![0],
+          primary_function: "collagen_ecm",
+          component_scores: { secondary_functions: { score: null, screened: false } },
+        },
+      ],
+    });
+    show();
+    await expand("KTTKS");
+    expect(screen.getByText("secondary functions")).toBeInTheDocument();
+  });
+
+  it("says the peptides are not shown to reach the dermis, on cosmetic runs only", async () => {
+    serve(cosmetic);
+    const { unmount } = show();
+    await waitFor(() => expect(screen.getByText("KTTKS")).toBeInTheDocument());
+    expect(screen.getByText(/not shown to penetrate the outer skin barrier and reach the dermis/)).toBeInTheDocument();
+    unmount();
+    serve(metabolic);
+    show();
+    await waitFor(() => expect(screen.getByText("HSQGTFTSDYSKYLD")).toBeInTheDocument());
+    expect(screen.queryByText(/outer skin barrier/)).not.toBeInTheDocument();
   });
 });
 

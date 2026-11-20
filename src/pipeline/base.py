@@ -22,6 +22,7 @@ serialisation — is framework code and must not be overridden.
 
 from __future__ import annotations
 
+import re
 import time
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
@@ -252,7 +253,8 @@ class CandidateStage(Stage):
         )
 
         ctx.audit.record_stage(result, run_id=ctx.run_id)
-        if int(self.name[1:3]) >= FIRST_COUNTED_STAGE:
+        number = re.match(r"s(\d+)_", self.name)
+        if number and int(number.group(1)) >= FIRST_COUNTED_STAGE:
             ctx.rejections.add(result.n_removed, result.rejection_reasons)
         ctx.boundary.write(self.name, survivors, run_id=ctx.run_id)
         # self.release_models()

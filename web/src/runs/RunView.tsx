@@ -793,6 +793,18 @@ function CosmeticCandidate({
               label={
                 <>
                   {words(component)}
+                  {(() => {
+                    // Which function(s) the component refers to, as the API names them.
+                    const named =
+                      component === "primary_function"
+                        ? candidate.primary_function != null
+                          ? [candidate.primary_function]
+                          : []
+                        : component === "secondary_functions"
+                          ? (candidate.secondary_functions ?? [])
+                          : [];
+                    return named.length > 0 ? ` (${named.map(words).join(", ")})` : null;
+                  })()}
                   {score.screened ? null : (
                     <>
                       {" "}
@@ -1257,6 +1269,14 @@ export function RunView() {
               candidate; it is not a low rank, and it is listed below without a position rather
               than placed last.
             </p>
+            {results.pipeline === "cosmetic" ? (
+              <div className="status">
+                These peptides are not shown to penetrate the outer skin barrier and reach the
+                dermis. The pipeline records a size and lipid-tail rule for the target depth but
+                does not filter on it, and there is no penetration model. Treat delivery to the
+                dermis as untested.
+              </div>
+            ) : null}
             {results.ranked_candidates != null && results.ranked_candidates !== ranked.length ? (
               <div className="status">
                 The API reports {results.ranked_candidates} ranked candidate

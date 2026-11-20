@@ -1171,6 +1171,7 @@ class CosmeticCandidateResponse(BaseModel):
     not_screened: list[str] = []
     component_scores: dict[str, CosmeticComponentScore] = {}
     primary_function: str | None = None
+    secondary_functions: list[str] = []
     functional_scores: dict[str, dict] = {}
     antimicrobial_probability: float | None = None
     molecular_weight: float | None = None
@@ -1307,6 +1308,7 @@ def _cosmetic_candidate_response(candidate: dict) -> CosmeticCandidateResponse:
             for name, c in components.items()
         },
         primary_function=verdict.get("primary_function"),
+        secondary_functions=verdict.get("secondary_functions") or [],
         functional_scores=preds.get("functional_scores") or {},
         antimicrobial_probability=(preds.get("antimicrobial") or {}).get("probability"),
         molecular_weight=preds.get("molecular_weight"),

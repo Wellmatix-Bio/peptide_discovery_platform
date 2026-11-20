@@ -783,6 +783,14 @@
             "title": "Safety Flags",
             "type": "array"
           },
+          "secondary_functions": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Secondary Functions",
+            "type": "array"
+          },
           "sequence": {
             "anyOf": [
               {

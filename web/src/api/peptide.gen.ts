@@ -457,6 +457,11 @@ export interface components {
              * @default []
              */
             safety_flags: string[];
+            /**
+             * Secondary Functions
+             * @default []
+             */
+            secondary_functions: string[];
             /** Sequence */
             sequence?: string | null;
             /** Skin Sensitization Probability */

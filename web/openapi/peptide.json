@@ -2479,6 +2479,14 @@
       "RejectionSummary": {
         "description": "Candidates removed from stage 5 on. Only runs made after this was added carry it.",
         "properties": {
+          "cutoffs": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "description": "The cutoff each reason was judged against, from the run's own stage settings, e.g. 'P(hemolytic) above 0.5'. A reason with no entry has no single cutoff to state.",
+            "title": "Cutoffs",
+            "type": "object"
+          },
           "n_removed": {
             "title": "N Removed",
             "type": "integer"

@@ -35,7 +35,7 @@ from common.sequence_utils import parse_sequence_items
 from schemas.brief import Brief, CosmeticBrief, MetabolicBrief
 from schemas.e2e_config import validate_job_config
 from schemas.immuno_config import CYTOKINE_MODELS, DEFAULT_BATCH_SIZE, IMMUNO_MAX_PEPTIDES, REQUIRED_WEIGHT_FILES, ImmunoRunConfig
-from schemas.stage_configs import CosmeticE2ERequest, E2ERequest, MetabolicE2ERequest
+from schemas.stage_configs import CosmeticE2ERequest, E2ERequest, MetabolicE2ERequest, resolve_params
 
 app = FastAPI(title="End-to-end Pipeline Job API")
 
@@ -922,6 +922,106 @@ class RejectionSummary(BaseModel):
         default_factory=dict,
         description="Removals per reason. A candidate can fail several checks, so these can add up to more than n_removed.",
     )
+    cutoffs: dict[str, str] = Field(
+        default_factory=dict,
+        description="The cutoff each reason was judged against, from the run's own stage settings, e.g. 'P(hemolytic) above 0.5'. A reason with no entry has no single cutoff to state.",
+    )
+
+
+#: The stages whose rejections are counted, per pipeline: stage 5, 6, 8, 9.
+_CUTOFF_STAGES = {
+    "wound_healing": ("s05_physchem_screening", "s06_functional_models", "s08_safety_developability", "s09_synthesis_cmc"),
+    "metabolic": (
+        "s05_metabolic_physchem_screening",
+        "s06_metabolic_functional_screening",
+        "s08_metabolic_safety_developability",
+        "s09_synthesis_cmc",
+    ),
+    "cosmetic": (
+        "s05_cosmetic_physchem_screening",
+        "s06_cosmetic_functional_models",
+        "s08_cosmetic_safety_developability",
+        "s09_cosmetic_synthesis_cmc",
+    ),
+}
+
+#: Wound-healing stage 5 reads these two from constants in the stage, not from its params schema.
+_WOUND_S5_MW_REJECT_MAX = 5000.0
+_WOUND_S5_HYDROPHOBICITY_REJECT_MAX = 0.5
+
+
+def _cutoff_text(pipeline: str, reason: str, s5: dict, s6: dict, s8: dict, s9: dict) -> str | None:
+    """The cutoff behind one rejection reason, as words; None when no single value applies."""
+    g = lambda x: f"{x:g}"  # noqa: E731
+    base, _, qualifier = reason.partition(":")
+    try:
+        if pipeline == "cosmetic":
+            thresholds = [s6.get(f"{f}_threshold") for f in ("collagen_ecm", "antioxidant", "pigmentation")]
+            table = {
+                "molecular_weight_too_high": lambda: f"above {g(s5['molecular_weight_reject_max'])} Da",
+                "net_charge_out_of_range": lambda: f"outside {g(s5['net_charge_reject_min'])} to {g(s5['net_charge_reject_max'])}",
+                "hydrophobicity_outside_seed_range": lambda: f"outside the {g(s5['hydrophobicity_percentile_low'])}th to {g(s5['hydrophobicity_percentile_high'])}th percentile of the seed peptides",
+                "membrane_active_profile": lambda: f"hydrophobic moment above the seed {g(s5['moment_percentile'])}th percentile with net charge of {g(s5['membrane_active_min_charge'])} or more",
+                "repeated_residues": lambda: f"{s5['repeat_run_length']} or more identical residues in a row",
+                "solubility_insoluble": lambda: f"P(soluble) below {g(s5['solubility_threshold'])}",
+                "primary_function_below_threshold": lambda: f"score below {g(thresholds[0])}" if len(set(thresholds)) == 1 else None,
+                "antimicrobial": lambda: f"P(antimicrobial) at or above {g(s6['antimicrobial_reject_min'])}",
+                "irritation_high": lambda: f"irritation score above the seed {g(s8['irritation_percentile_high'])}th percentile",
+                "irritation_medium": lambda: f"irritation score above the seed {g(s8['irritation_percentile_medium'])}th percentile",
+                "skin_sensitization": lambda: "predicted sensitizer (the model's own cutoff, 0.55)",
+                "hemolysis": lambda: f"P(hemolytic) at or above {g(s8['hemolysis_reject_min'])}",
+                "half_life": lambda: f"log10 half-life below {g(s8['half_life_reject_min'])} s",
+                "allergenicity": lambda: f"P(allergen) at or above {g(s8['allergenicity_reject_min'])}",
+                "cytotoxicity": lambda: f"P(cytotoxic) at or above {g(s8['cytotoxicity_reject_min'])}",
+                "cleavage_stability": lambda: f"stability below {g(s8['cleavage_stability_reject_min'])}",
+                "synthesis_feasibility_below_min": lambda: f"P(feasible) below {g(s9['synthesis_feasibility_min'])}",
+            }
+        else:
+            metabolic = pipeline == "metabolic"
+            t6 = s6.get("stage6_thresholds") or {}
+            table = {
+                "molecular_weight": lambda: f"above {g(s5['molecular_weight_reject_max'] if metabolic else _WOUND_S5_MW_REJECT_MAX)} Da",
+                "hydrophobicity": lambda: f"mean hydrophobicity above {g(s5['hydrophobicity_reject_max'] if metabolic else _WOUND_S5_HYDROPHOBICITY_REJECT_MAX)}",
+                "cytotoxicity": lambda: f"P(cytotoxic) above {g(s8['cytotoxicity_reject_max'])}",
+                "aggregation_tendency": lambda: f"P(aggregation-prone) above {g(s8['aggregation_reject_max'])}",
+                "cleavage_stability": lambda: f"stability below {g(s8['cleavage_stability_reject_min'])}",
+                "hemolysis": lambda: (
+                    f"P(hemolytic) above {g(s8['hemolysis_probability_reject_max'])}"
+                    if metabolic
+                    else f"pHC50 above {g(s8['hemolysis_phc50_reject_max'])}"
+                ),
+                "plasma_half_life": lambda: f"below {g(s8['plasma_half_life_min_minutes'])} min",
+                "difficulty_class": lambda: "difficulty class: " + ", ".join(s9["rejected_difficulty_classes"]),
+                "high_ec50": lambda: f"above {g(s6['ec50_max_nm'][qualifier])} nM",
+                "low_agonism_probability": lambda: f"P(agonist) below {g(s6['agonism_probability_min'][qualifier])}",
+                "low_anti_inflammatory_probability": lambda: f"P(anti-inflammatory) below {g(s6['anti_inflammatory_probability_min'] if metabolic else t6['min_anti_inflammatory_probability'])}",
+                "low_amp_probability": lambda: f"P(antimicrobial) below {g(t6['min_amp_probability'])}",
+                "low_proliferation_migration": lambda: f"below {g(t6['min_proliferation_migration'])}",
+                "low_angiogenic_activity": lambda: f"below {g(t6['min_angiogenic_activity'])}",
+                "high_mic": lambda: f"above {g(t6['max_mic'][qualifier])} µM",
+                "high_mbic": lambda: f"above {g(t6['max_mbic'][qualifier])} µM",
+            }
+        return table[base]()
+    except (KeyError, TypeError, IndexError):
+        return None
+
+
+def _rejection_cutoffs(run_dir: str, pipeline: str, reasons: list[str]) -> dict[str, str]:
+    """Cutoff text per rejection reason: the run's stored stage settings over the schema defaults."""
+    try:
+        stages = json.loads(storage.read_text(storage.join(run_dir, "config.json"))).get("stages") or {}
+    except Exception:  # noqa: BLE001 - an older run or an unreadable config: the defaults still apply
+        stages = {}
+
+    def params(name: str) -> dict:
+        try:
+            return resolve_params(name, (stages.get(name) or {}).get("params") or {})
+        except Exception:  # noqa: BLE001 - stored params that no longer validate: report no cutoffs for that stage
+            return {}
+
+    s5, s6, s8, s9 = (params(name) for name in _CUTOFF_STAGES[pipeline])
+    texts = {reason: _cutoff_text(pipeline, reason, s5, s6, s8, s9) for reason in reasons}
+    return {reason: text for reason, text in texts.items() if text}
 
 
 class MetabolicJobResultsResponse(BaseModel):
@@ -1318,6 +1418,10 @@ def get_job_results(job_id: str):
         rejections=status_payload.get("rejections"),
     )
     pipeline = _run_pipeline(run_dir, candidates)
+    rejections = status_payload.get("rejections")
+    if rejections:
+        rejections = {**rejections, "cutoffs": _rejection_cutoffs(run_dir, pipeline, list(rejections.get("reasons") or {}))}
+    common["rejections"] = rejections
     if pipeline == "cosmetic":
         ranking_of = lambda c: (c.get("predictions") or {}).get("ranking") or {}  # noqa: E731
         cosmetic_common = {

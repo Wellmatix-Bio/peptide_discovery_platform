@@ -967,15 +967,18 @@ const REJECTION_TEXT: Record<string, string> = {
   low_anti_inflammatory_activity: "Anti-inflammatory probability too low (below the minimum)",
 };
 
-function describeRejection(reason: string): string {
+function describeRejection(reason: string, cutoff?: string): string {
   const [name, qualifier] = reason.split(":");
   const suffix = qualifier ? `: ${qualifier}` : "";
-  if (REJECTION_TEXT[name]) return `${REJECTION_TEXT[name]}${suffix}`;
-  if (name === "high_ec50") return `EC50 too high (above the maximum)${suffix}`;
-  if (name === "low_agonism_probability") return `Agonism probability too low (below the minimum)${suffix}`;
-  if (name === "high_mic") return `MIC too high (above the maximum)${suffix}`;
-  if (name === "high_mbic") return `MBIC too high (above the maximum)${suffix}`;
-  return reason.replace(/_/g, " ");
+  let text: string;
+  if (REJECTION_TEXT[name]) text = REJECTION_TEXT[name];
+  else if (name === "high_ec50") text = "EC50 too high (above the maximum)";
+  else if (name === "low_agonism_probability") text = "Agonism probability too low (below the minimum)";
+  else if (name === "high_mic") text = "MIC too high (above the maximum)";
+  else if (name === "high_mbic") text = "MBIC too high (above the maximum)";
+  else return reason.replace(/_/g, " ");
+  // With the real cutoff the generic parenthetical is redundant.
+  return cutoff ? `${text.replace(/ \([^)]*\)$/, "")}${suffix} — cutoff: ${cutoff}` : `${text}${suffix}`;
 }
 
 export function RunView() {
@@ -1240,13 +1243,11 @@ export function RunView() {
                 {Object.entries(results.rejections.reasons ?? {})
                   .sort(([, a], [, b]) => b - a)
                   .map(([reason, count]) => (
-                    <Fact key={reason} label={describeRejection(reason)} value={count} />
+                    <Fact key={reason} label={describeRejection(reason, results.rejections?.cutoffs?.[reason])} value={count} />
                   ))}
                 <p className="footer-note">
                   A peptide can fail more than one check, so the reasons can add up to more than the
-                  number removed. The API reports counts and reason names, not the cutoff values, so
-                  each reason says which side of its cutoff the peptide fell on. The cutoffs are the
-                  run&rsquo;s stage settings.
+                  number removed. Each cutoff is the one this run&rsquo;s stage settings used.
                 </p>
               </>
             ) : null}

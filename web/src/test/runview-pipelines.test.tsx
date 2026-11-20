@@ -234,3 +234,29 @@ describe("a response with no pipeline field", () => {
     expect(screen.queryByText("Receptor potency")).not.toBeInTheDocument();
   });
 });
+
+describe("rejection reasons", () => {
+  it("states the direction and the run's cutoff for each reason", async () => {
+    serve({
+      ...metabolic,
+      rejections: {
+        n_removed: 3,
+        reasons: { hemolysis: 2, plasma_half_life: 1 },
+        cutoffs: { hemolysis: "P(hemolytic) above 0.5", plasma_half_life: "below 60 min" },
+      },
+    });
+    show();
+    await waitFor(() =>
+      expect(screen.getByText("Hemolysis too high — cutoff: P(hemolytic) above 0.5")).toBeInTheDocument(),
+    );
+    expect(screen.getByText("Plasma half-life too short — cutoff: below 60 min")).toBeInTheDocument();
+  });
+
+  it("falls back to the direction alone when the API gives no cutoff", async () => {
+    serve({ ...metabolic, rejections: { n_removed: 1, reasons: { hemolysis: 1 } } });
+    show();
+    await waitFor(() =>
+      expect(screen.getByText(/^Hemolysis too high \(predicted hemolytic activity above the cutoff\)/)).toBeInTheDocument(),
+    );
+  });
+});

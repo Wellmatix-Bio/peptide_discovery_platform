@@ -1188,6 +1188,13 @@ export interface components {
          * @description Candidates removed from stage 5 on. Only runs made after this was added carry it.
          */
         RejectionSummary: {
+            /**
+             * Cutoffs
+             * @description The cutoff each reason was judged against, from the run's own stage settings, e.g. 'P(hemolytic) above 0.5'. A reason with no entry has no single cutoff to state.
+             */
+            cutoffs?: {
+                [key: string]: string;
+            };
             /** N Removed */
             n_removed: number;
             /**

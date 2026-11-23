@@ -75,6 +75,8 @@ class CosmeticStage6(CandidateStage):
             candidate.predictions["primary_function_pass"] = result["pass"]
             if result["pass"]:
                 standing.append(candidate)
+            else:
+                self.note_rejection("primary_function_below_threshold")
         rejected = {"primary_function_below_threshold": len(candidates) - len(standing)}
 
         # B. Antimicrobial reject filter, on the candidates still standing.
@@ -89,6 +91,7 @@ class CosmeticStage6(CandidateStage):
                     "reject_min": params.antimicrobial_reject_min,
                 }
                 if probability >= params.antimicrobial_reject_min:
+                    self.note_rejection("antimicrobial")
                     continue
                 survivors.append(candidate)
         rejected["antimicrobial"] = len(standing) - len(survivors)

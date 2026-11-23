@@ -53,17 +53,32 @@ function NoValue({ why = "The API returned no value for this." }: { why?: string
   );
 }
 
+/** Unit label beside a regression value. */
+function Unit({ children }: { children: ReactNode }) {
+  return <span className="unit"> {children}</span>;
+}
+
+/* Units of the regression outputs, written once so one quantity is never labelled two ways. */
+const NEG_LOG10_M = "−log10 M";
+const LOG10_UM = "log10 µM";
+
 function Scored({
   label,
   value,
   meaning,
   digits = 3,
+  unit,
   scale,
+  why,
 }: {
-  label: string;
+  label: ReactNode;
+  /** Why the value is absent, when the API says. Shown on hover of "No value". */
+  why?: string;
   value: number | null | undefined;
   meaning: string;
   digits?: number;
+  /** Unit of a regression output, shown beside the value. Omitted for unitless scores. */
+  unit?: string;
   /** Present only where the API's value genuinely lies on a known range. The bar is a reading
    *  aid for THAT value; it is never drawn for a number whose range is not known, because a bar
    *  implies a scale and inventing one would misrepresent the score. */
@@ -73,7 +88,7 @@ function Scored({
     <div className="stat" title={meaning}>
       <div className="stat-head">
         <span>{label}</span>
-        {value == null ? <NoValue /> : <b>{num(value, digits)}</b>}
+        {value == null ? <NoValue why={why} /> : <b>{num(value, digits)}{unit ? <Unit>{unit}</Unit> : null}</b>}
       </div>
       {value != null && scale ? (
         <div className="stat-bar">
@@ -84,6 +99,50 @@ function Scored({
           />
         </div>
       ) : null}
+    </div>
+  );
+}
+
+/** A label with a text value, laid out exactly like a Scored row (no bar). A missing value is
+ *  "No value", the same as everywhere else. */
+function Fact({ label, value }: { label: ReactNode; value: ReactNode }) {
+  return (
+    <div className="stat">
+      <div className="stat-head">
+        <span>{label}</span>
+        {value == null || value === "" ? <NoValue /> : <b>{value}</b>}
+      </div>
+    </div>
+  );
+}
+
+/** A label over a wrapping row of chips. Stacked rather than side by side: a chip list beside its
+ *  label overflows a narrow column and runs into the next one. */
+function ChipList({
+  label,
+  items,
+  empty,
+  missing,
+}: {
+  label: ReactNode;
+  items: ReactNode[] | null | undefined;
+  /** Shown when the list is present but empty. */
+  empty?: string;
+  /** Why the whole list is absent, when it is null or undefined. */
+  missing?: string;
+}) {
+  return (
+    <div className="stat">
+      <div className="stat-label">{label}</div>
+      <div className="chip-row">
+        {items == null ? (
+          <NoValue why={missing} />
+        ) : items.length === 0 ? (
+          <span className="stat-none">{empty ?? "None"}</span>
+        ) : (
+          items
+        )}
+      </div>
     </div>
   );
 }
@@ -241,22 +300,16 @@ function RankingEvidence({
         meaning="Activated modules that produced a score, over activated modules. Below 1 means the rank was computed from part of the intended evidence, with the remaining weights renormalised."
         scale={[0, 1]}
       />
-      <div className="kv">
-        <span>Modules with no score</span>
-        <span>
-          {missingModules == null ? (
-            <NoValue why="The API reported no missing_modules field for this candidate." />
-          ) : missingModules.length === 0 ? (
-            "None — every activated module scored"
-          ) : (
-            missingModules.map((module) => (
-              <span className="chip" key={module}>
-                {words(module)}
-              </span>
-            ))
-          )}
-        </span>
-      </div>
+      <ChipList
+        label="Modules with no score"
+        missing="The API reported no missing_modules field for this candidate."
+        empty="None — every activated module scored"
+        items={missingModules?.map((module) => (
+          <span className="chip" key={module}>
+            {words(module)}
+          </span>
+        ))}
+      />
     </div>
   );
 }
@@ -305,7 +358,7 @@ function WoundCandidate({
         <Scored
           label="Anti-inflammatory probability"
           value={candidate.anti_inflammatory_probability}
-          meaning="From anti_inflammatory_predictor_v1."
+          meaning="From anti_inflammatory_predictor_v2."
           scale={[0, 1]}
         />
         <Scored
@@ -337,21 +390,21 @@ function WoundCandidate({
       <div className="cand-col">
         <h4>Safety &amp; developability</h4>
         <Scored
-          label="Cytotoxicity score"
+          label="Cytotoxicity probability"
           value={candidate.cytotoxicity_probability}
-          meaning="Score from cytotoxicity_predictor_v1, against the cell line this run selected. Lower is better."
+          meaning="P(cytotoxic) from cytotoxicity_predictor_v1, against the cell line this run selected. Lower is better."
           scale={[0, 1]}
         />
         <Scored
-          label="Solubility score"
+          label="Solubility probability"
           value={candidate.solubility}
-          meaning="From solubility_predictor_v1. Higher is better."
+          meaning="P(soluble) from solubility_predictor_v1. Higher is better."
           scale={[0, 1]}
         />
         <Scored
-          label="Aggregation tendency"
+          label="Aggregation probability"
           value={candidate.aggregation_tendency}
-          meaning="From aggregation_predictor_v1. Higher is more aggregation-prone."
+          meaning="P(aggregation-prone) from aggregation_predictor_v1. Lower is better."
           scale={[0, 1]}
         />
         <Scored
@@ -361,9 +414,10 @@ function WoundCandidate({
           scale={[0, 1]}
         />
         <Scored
-          label="Haemolysis pHC50"
+          label="Hemolysis pHC50"
           value={candidate.hemolytic_activity_phc50}
-          meaning="pHC50 from hemolysis_predictor_v1. Higher is less haemolytic. No bar: the API states no range for this value."
+          unit={NEG_LOG10_M}
+          meaning="pHC50 = −log10(HC50 in M) from the hemolysis model. Higher is MORE hemolytic (hemolysis at a lower concentration). No bar: the API states no range for this value."
         />
         <Scored
           label="Instability index"
@@ -371,46 +425,42 @@ function WoundCandidate({
           meaning="Computed physicochemically in stage 5, not by a learned model. No bar: it is unbounded and can be negative."
           digits={2}
         />
-        <div className="stat">
-          <div className="stat-head">
-            <span>Deamidation / oxidation risk</span>
-            <b>
-              {candidate.deamidation_risk ?? "no value"} /{" "}
-              {candidate.oxidation_risk ?? "no value"}
-            </b>
-          </div>
-        </div>
+        <Fact label="Deamidation risk" value={candidate.deamidation_risk} />
+        <Fact label="Oxidation risk" value={candidate.oxidation_risk} />
       </div>
 
       <div className="cand-col">
-        <h4>MIC by pathogen (log10 µM)</h4>
+        <h4>MIC by pathogen ({LOG10_UM})</h4>
         {Object.keys(candidate.log_mic_um ?? {}).length === 0 ? (
           <p className="stat-none">No MIC was returned for this candidate.</p>
         ) : (
           Object.entries(candidate.log_mic_um ?? {}).map(([organism, value]) => (
             <div className="pathogen" key={organism}>
               <i>{words(organism)}</i>
-              <b>{num(value as number, 3)}</b>
+              <b>
+                {num(value as number, 3)}
+                <Unit>{LOG10_UM}</Unit>
+              </b>
             </div>
           ))
         )}
       </div>
 
       <div className="cand-col">
-        <h4>Biofilm pMBIC by pathogen</h4>
+        <h4>Biofilm pMBIC by pathogen ({NEG_LOG10_M})</h4>
         {Object.keys(candidate.pmbic ?? {}).length === 0 ? (
           <p className="stat-none">No biofilm potency was returned for this candidate.</p>
         ) : (
           Object.entries(candidate.pmbic ?? {}).map(([organism, value]) => (
             <div className="pathogen" key={organism}>
               <i>{words(organism)}</i>
-              <b>{num(value as number, 3)}</b>
+              <b>
+                {num(value as number, 3)}
+                <Unit>{NEG_LOG10_M}</Unit>
+              </b>
             </div>
           ))
         )}
-        <p className="help" style={{ marginTop: 8 }}>
-          The biofilm model scores more organisms than a brief may request.
-        </p>
       </div>
     </CandidateShell>
   );
@@ -497,31 +547,46 @@ function MetabolicCandidate({
                     </>
                   ) : null}
                 </span>
-                <b>
-                  {candidate.pec50?.[receptor] == null ? (
-                    <NoValue why={`No pEC50 was returned for ${receptor}.`} />
-                  ) : (
-                    <>pEC50 {num(candidate.pec50[receptor] as number, 2)}</>
-                  )}
-                </b>
               </div>
-              <div className="cand-facts" style={{ marginTop: 4 }}>
-                {candidate.ec50_nm?.[receptor] != null ? (
-                  <span>
-                    EC50 <b>{num(candidate.ec50_nm[receptor] as number, 2)} nM</b>
-                  </span>
-                ) : null}
-                {candidate.binding_pkd?.[receptor] != null ? (
-                  <span>
-                    pKd <b>{num(candidate.binding_pkd[receptor] as number, 2)}</b>
-                  </span>
-                ) : null}
-                {candidate.agonism_probability?.[receptor] != null ? (
-                  <span>
-                    P(agonist) <b>{num(candidate.agonism_probability[receptor] as number, 2)}</b>
-                  </span>
-                ) : null}
+              {/* pEC50 (functional potency) and pKd (binding) are two models answering two
+                  questions. Each gets its own row and unit; neither is derived from the other. */}
+              <div className="stat-head" style={{ marginTop: 4 }}>
+                <span>pEC50 (potency)</span>
+                {candidate.pec50?.[receptor] == null ? (
+                  <NoValue why={`No pEC50 was returned for ${receptor}.`} />
+                ) : (
+                  <b>
+                    {num(candidate.pec50[receptor] as number, 2)}
+                    <Unit>{NEG_LOG10_M}</Unit>
+                  </b>
+                )}
               </div>
+              {candidate.ec50_nm?.[receptor] != null ? (
+                <div className="stat-head" style={{ marginTop: 2 }}>
+                  <span>EC50</span>
+                  <b>
+                    {num(candidate.ec50_nm[receptor] as number, 2)}
+                    <Unit>nM</Unit>
+                  </b>
+                </div>
+              ) : null}
+              <div className="stat-head" style={{ marginTop: 2 }}>
+                <span>pKd (binding)</span>
+                {candidate.binding_pkd?.[receptor] == null ? (
+                  <NoValue why={`No pKd was returned for ${receptor}.`} />
+                ) : (
+                  <b>
+                    {num(candidate.binding_pkd[receptor] as number, 2)}
+                    <Unit>{NEG_LOG10_M}</Unit>
+                  </b>
+                )}
+              </div>
+              {candidate.agonism_probability?.[receptor] != null ? (
+                <div className="stat-head" style={{ marginTop: 2 }}>
+                  <span>P(agonist)</span>
+                  <b>{num(candidate.agonism_probability[receptor] as number, 2)}</b>
+                </div>
+              ) : null}
             </div>
           ))
         )}
@@ -543,18 +608,20 @@ function MetabolicCandidate({
         <Scored
           label="Anti-inflammatory probability"
           value={candidate.anti_inflammatory_probability}
-          meaning="From anti_inflammatory_predictor_v1."
+          meaning="From anti_inflammatory_predictor_v2."
           scale={[0, 1]}
         />
         <Scored
           label="Plasma half-life"
-          value={candidate.half_life_minutes}
-          meaning="Minutes, from half_life_predictor_v1. No bar: the API states no range for this value."
-          digits={1}
+          value={candidate.half_life_minutes != null && candidate.half_life_minutes > 0 ? Math.log10(candidate.half_life_minutes * 60) : null}
+          unit="log10 s"
+          meaning={`The model predicts log10 seconds; the API returns minutes, so this is log10(minutes × 60)${candidate.half_life_minutes != null ? ` (${candidate.half_life_minutes.toFixed(1)} min)` : ""}, from half_life_predictor_v2. No bar: the API states no range.`}
+          digits={2}
         />
         <Scored
           label="pEC50 − pKd gap"
           value={candidate.pec50_pkd_gap}
+          unit="log units"
           meaning="The API's own difference between predicted potency and predicted binding. No bar: it is a signed difference, not a score on a range."
           digits={2}
         />
@@ -569,32 +636,33 @@ function MetabolicCandidate({
       <div className="cand-col">
         <h4>Safety &amp; developability</h4>
         <Scored
-          label="Haemolysis probability"
+          label="Hemolysis probability"
           value={candidate.p_hemolytic}
-          meaning="P(haemolytic) from hemolysis_predictor_v2."
+          meaning="P(hemolytic) from hemolysis_predictor_v2."
           scale={[0, 1]}
         />
         <Scored
-          label="Haemolysis pHC50"
+          label="Hemolysis pHC50"
           value={candidate.hemolytic_activity_phc50}
-          meaning="pHC50 from hemolysis_predictor_v1. Higher is less haemolytic. No bar: the API states no range for this value."
+          unit={NEG_LOG10_M}
+          meaning="pHC50 = −log10(HC50 in M) from the hemolysis model. Higher is MORE hemolytic (hemolysis at a lower concentration). No bar: the API states no range for this value."
         />
         <Scored
-          label="Cytotoxicity score"
+          label="Cytotoxicity probability"
           value={candidate.cytotoxicity_probability}
-          meaning="Score from cytotoxicity_predictor_v1, against the cell line this run selected. Lower is better."
+          meaning="P(cytotoxic) from cytotoxicity_predictor_v1, against the cell line this run selected. Lower is better."
           scale={[0, 1]}
         />
         <Scored
-          label="Solubility score"
+          label="Solubility probability"
           value={candidate.solubility}
-          meaning="From solubility_predictor_v1. Higher is better."
+          meaning="P(soluble) from solubility_predictor_v1. Higher is better."
           scale={[0, 1]}
         />
         <Scored
-          label="Aggregation tendency"
+          label="Aggregation probability"
           value={candidate.aggregation_tendency}
-          meaning="From aggregation_predictor_v1. Higher is more aggregation-prone."
+          meaning="P(aggregation-prone) from aggregation_predictor_v1. Lower is better."
           scale={[0, 1]}
         />
         <Scored
@@ -609,15 +677,8 @@ function MetabolicCandidate({
           meaning="Computed physicochemically in stage 5, not by a learned model. No bar: it is unbounded and can be negative."
           digits={2}
         />
-        <div className="stat">
-          <div className="stat-head">
-            <span>Deamidation / oxidation risk</span>
-            <b>
-              {candidate.deamidation_risk ?? "no value"} /{" "}
-              {candidate.oxidation_risk ?? "no value"}
-            </b>
-          </div>
-        </div>
+        <Fact label="Deamidation risk" value={candidate.deamidation_risk} />
+        <Fact label="Oxidation risk" value={candidate.oxidation_risk} />
       </div>
     </CandidateShell>
   );
@@ -686,25 +747,21 @@ function CosmeticCandidate({
           scale={[0, 1]}
         />
         <Scored
-          label="Half-life (log10 seconds)"
+          label="Half-life"
           value={candidate.half_life_log10_seconds}
-          meaning="From half_life_predictor_v1, in the log10 seconds the API returns. No bar: the API states no range."
+          unit="log10 s"
+          meaning="From half_life_predictor_v2, in the log10 seconds the API returns. No bar: the API states no range."
           digits={2}
         />
-        <div className="kv">
-          <span>Functional screens reported</span>
-          <span>
-            {Object.keys(candidate.functional_scores ?? {}).length === 0 ? (
-              <NoValue why="The API returned no functional_scores for this candidate." />
-            ) : (
-              Object.keys(candidate.functional_scores).map((name) => (
-                <span className="chip" key={name}>
-                  {words(name)}
-                </span>
-              ))
-            )}
-          </span>
-        </div>
+        <ChipList
+          label="Functional screens reported"
+          missing="The API returned no functional_scores for this candidate."
+          items={Object.keys(candidate.functional_scores ?? {}).map((name) => (
+            <span className="chip" key={name}>
+              {words(name)}
+            </span>
+          ))}
+        />
         <p className="help" style={{ marginTop: 8 }}>
           The per-screen detail the API returns under these names is in the exported results JSON;
           this page does not summarise it into a single number.
@@ -716,8 +773,10 @@ function CosmeticCandidate({
         <Scored
           label="Final score"
           value={candidate.final_score}
-          meaning="The weighted multi-objective score from s11_cosmetic_ranking, after flag deductions."
-          scale={[0, 1]}
+          meaning="The weighted multi-objective score from s11_cosmetic_ranking, after flag deductions. On a 0 to 100 scale, unlike the other pipelines."
+          digits={1}
+          unit="/ 100"
+          scale={[0, 100]}
         />
         <Scored
           label="Evidence coverage"
@@ -729,10 +788,23 @@ function CosmeticCandidate({
           <p className="stat-none">The API returned no component scores for this candidate.</p>
         ) : (
           components.map(([component, score]) => (
-            <div className="stat" key={component}>
-              <div className="stat-head">
-                <span>
+            <Scored
+              key={component}
+              label={
+                <>
                   {words(component)}
+                  {(() => {
+                    // Which function(s) the component refers to, as the API names them.
+                    const named =
+                      component === "primary_function"
+                        ? candidate.primary_function != null
+                          ? [candidate.primary_function]
+                          : []
+                        : component === "secondary_functions"
+                          ? (candidate.secondary_functions ?? [])
+                          : [];
+                    return named.length > 0 ? ` (${named.map(words).join(", ")})` : null;
+                  })()}
                   {score.screened ? null : (
                     <>
                       {" "}
@@ -744,50 +816,33 @@ function CosmeticCandidate({
                       </span>
                     </>
                   )}
-                </span>
-                {score.score == null ? (
-                  <NoValue
-                    why={
-                      score.screened
-                        ? "The screen ran but the API returned no score."
-                        : "The screen did not run, so the API returned no score."
-                    }
-                  />
-                ) : (
-                  <b>{num(score.score, 3)}</b>
-                )}
-              </div>
-            </div>
+                </>
+              }
+              value={score.score}
+              why={
+                score.screened
+                  ? "The screen ran but the API returned no score."
+                  : "The screen did not run, so the API returned no score."
+              }
+              meaning="This component's score, 0 to 1, before its weight is applied."
+              scale={[0, 1]}
+            />
           ))
         )}
       </div>
 
       <div className="cand-col">
         <h4>Skin safety</h4>
-        <div className="stat">
-          <div className="stat-head">
-            <span>Irritation tier</span>
-            <b>{candidate.irritation_tier ?? "no value"}</b>
-          </div>
-        </div>
+        <Fact label="Irritation tier" value={candidate.irritation_tier} />
         <Scored
           label="Irritation score"
           value={candidate.irritation_score}
-          meaning="From the stage 8 cosmetic irritation screen. Higher is more irritant."
-          scale={[0, 1]}
+          meaning="Hydrophobic moment × positive net charge (0 if not positive), from stage 8. Not a probability: it has no fixed range, and the tier compares it with this run's seed peptides. Higher is more irritant. No bar."
         />
-        <div className="stat">
-          <div className="stat-head">
-            <span>Skin sensitizer</span>
-            <b>
-              {candidate.skin_sensitizer == null
-                ? "no value"
-                : candidate.skin_sensitizer
-                  ? "yes"
-                  : "no"}
-            </b>
-          </div>
-        </div>
+        <Fact
+          label="Skin sensitizer"
+          value={candidate.skin_sensitizer == null ? null : candidate.skin_sensitizer ? "yes" : "no"}
+        />
         <Scored
           label="Skin sensitization probability"
           value={candidate.skin_sensitization_probability}
@@ -797,43 +852,38 @@ function CosmeticCandidate({
         <Scored
           label="Allergenicity probability"
           value={candidate.allergenicity_probability}
-          meaning="From allergenicity_predictor_v1."
+          meaning="From allergenicity_predictor_v1, trained on 3-49 residue IgE-binding peptides."
           scale={[0, 1]}
         />
         <Scored
-          label="Haemolysis probability"
+          label="Hemolysis probability"
           value={candidate.hemolysis_probability}
-          meaning="P(haemolytic) from hemolysis_predictor_v2."
+          meaning="P(hemolytic) from hemolysis_predictor_v2."
           scale={[0, 1]}
         />
-        <div className="kv">
-          <span>Cytotoxicity cell lines reported</span>
-          <span>
-            {Object.keys(candidate.cytotoxicity ?? {}).length === 0 ? (
-              <NoValue why="The API returned no cytotoxicity entries for this candidate." />
-            ) : (
-              Object.keys(candidate.cytotoxicity).map((line) => (
-                <span className="chip" key={line}>
-                  {words(line)}
-                </span>
-              ))
-            )}
-          </span>
-        </div>
+        <ChipList
+          label="Cytotoxicity cell lines reported"
+          missing="The API returned no cytotoxicity entries for this candidate."
+          items={Object.keys(candidate.cytotoxicity ?? {}).map((line) => (
+            <span className="chip" key={line}>
+              {words(line)}
+            </span>
+          ))}
+        />
       </div>
 
       <div className="cand-col">
         <h4>Developability</h4>
         <Scored
-          label="Solubility score"
+          label="Solubility probability"
           value={candidate.solubility}
-          meaning="From solubility_predictor_v1. Higher is better."
+          meaning="P(soluble) from solubility_predictor_v1. Higher is better."
           scale={[0, 1]}
         />
         <Scored
-          label="Aggregation tendency"
+          label="Aggregation probability"
           value={candidate.aggregation_tendency}
-          meaning="From aggregation_predictor_v1. Higher is more aggregation-prone."
+          meaning="P(aggregation-prone) from aggregation_predictor_v1. Lower is better."
           scale={[0, 1]}
         />
         <Scored
@@ -854,30 +904,16 @@ function CosmeticCandidate({
           meaning="From the stage 9 cosmetic synthesis screen."
           scale={[0, 1]}
         />
-        <div className="kv">
-          <span>Physicochemical flags</span>
-          <span>
-            {candidate.physchem_flag_count == null ? (
-              <NoValue why="The API reported no physchem_flag_count for this candidate." />
-            ) : (
-              candidate.physchem_flag_count
-            )}
-          </span>
-        </div>
-        <div className="kv">
-          <span>Synthesis flags, by residue position</span>
-          <span>
-            {Object.keys(candidate.synthesis_flags ?? {}).length === 0 ? (
-              "None reported"
-            ) : (
-              Object.entries(candidate.synthesis_flags).map(([flag, positions]) => (
-                <span className="chip" key={flag}>
-                  {words(flag)} @ {positions.join(", ")}
-                </span>
-              ))
-            )}
-          </span>
-        </div>
+        <Fact label="Physicochemical flags" value={candidate.physchem_flag_count} />
+        <ChipList
+          label="Synthesis flags, by residue position (1 = first residue)"
+          empty="None reported"
+          items={Object.entries(candidate.synthesis_flags ?? {}).map(([flag, positions]) => (
+            <span className="chip" key={flag}>
+              {words(flag)} @ {positions.map((position) => position + 1).join(", ")}
+            </span>
+          ))}
+        />
       </div>
     </CandidateShell>
   );
@@ -913,6 +949,48 @@ function CandidateCard({
     );
   }
   return <WoundCandidate candidate={candidate as CandidateResponse} tiedWith={tiedWith} />;
+}
+
+/* What each reason from the API's rejections.reasons means, and which side of its cutoff failed it.
+   The API sends the reason name only; the cutoff itself is not in the results. */
+const REJECTION_TEXT: Record<string, string> = {
+  hemolysis: "Hemolysis too high (predicted hemolytic activity above the cutoff)",
+  cytotoxicity: "Cytotoxicity too high (probability above the cutoff)",
+  aggregation_tendency: "Aggregation tendency too high (above the cutoff)",
+  cleavage_stability: "Cleavage stability too low (below the cutoff)",
+  plasma_half_life: "Plasma half-life too short (below the minimum)",
+  molecular_weight: "Molecular weight too high (above the maximum)",
+  hydrophobicity: "Hydrophobicity too high (above the maximum)",
+  length: "Length outside the allowed range",
+  difficulty_class: "Synthesis difficulty too high",
+  molecular_weight_too_high: "Molecular weight too high (above the maximum)",
+  net_charge_out_of_range: "Net charge outside the allowed range",
+  hydrophobicity_outside_seed_range: "Hydrophobicity outside the seed peptides' range",
+  membrane_active_profile: "Membrane-active profile (high hydrophobic moment with positive charge)",
+  repeated_residues: "Too many identical residues in a row",
+  solubility_insoluble: "Predicted solubility below the cutoff",
+  primary_function_below_threshold: "Primary function score below the cutoff",
+  antimicrobial: "Antimicrobial probability too high (at or above the cutoff)",
+  synthesis_feasibility_below_min: "Synthesis feasibility below the minimum",
+  low_amp_probability: "Antimicrobial probability too low (below the minimum)",
+  low_proliferation_migration: "Proliferation/migration score too low (below the minimum)",
+  low_angiogenic_activity: "Angiogenic activity too low (below the minimum)",
+  low_anti_inflammatory_probability: "Anti-inflammatory probability too low (below the minimum)",
+  low_anti_inflammatory_activity: "Anti-inflammatory probability too low (below the minimum)",
+};
+
+function describeRejection(reason: string, cutoff?: string): string {
+  const [name, qualifier] = reason.split(":");
+  const suffix = qualifier ? `: ${qualifier}` : "";
+  let text: string;
+  if (REJECTION_TEXT[name]) text = REJECTION_TEXT[name];
+  else if (name === "high_ec50") text = "EC50 too high (above the maximum)";
+  else if (name === "low_agonism_probability") text = "Agonism probability too low (below the minimum)";
+  else if (name === "high_mic") text = "MIC too high (above the maximum)";
+  else if (name === "high_mbic") text = "MBIC too high (above the maximum)";
+  else return reason.replace(/_/g, " ");
+  // With the real cutoff the generic parenthetical is redundant.
+  return cutoff ? `${text.replace(/ \([^)]*\)$/, "")}${suffix} — cutoff: ${cutoff}` : `${text}${suffix}`;
 }
 
 export function RunView() {
@@ -1171,12 +1249,34 @@ export function RunView() {
                 <b>{results.insufficient_evidence_candidates ?? <NoValue />}</b>
               </div>
             </div>
+            {results.rejections ? (
+              <>
+                <h3>Removed from stage 5 on: {results.rejections.n_removed}</h3>
+                {Object.entries(results.rejections.reasons ?? {})
+                  .sort(([, a], [, b]) => b - a)
+                  .map(([reason, count]) => (
+                    <Fact key={reason} label={describeRejection(reason, results.rejections?.cutoffs?.[reason])} value={count} />
+                  ))}
+                <p className="footer-note">
+                  A peptide can fail more than one check, so the reasons can add up to more than the
+                  number removed. Each cutoff is the one this run&rsquo;s stage settings used.
+                </p>
+              </>
+            ) : null}
             <p className="footer-note">
               Every count here is the API&rsquo;s own field, not counted from the list.
               &ldquo;Insufficient evidence&rdquo; means the pipeline declined to rank that
               candidate; it is not a low rank, and it is listed below without a position rather
               than placed last.
             </p>
+            {results.pipeline === "cosmetic" ? (
+              <div className="status">
+                These peptides are not shown to penetrate the outer skin barrier and reach the
+                dermis. The pipeline records a size and lipid-tail rule for the target depth but
+                does not filter on it, and there is no penetration model. Treat delivery to the
+                dermis as untested.
+              </div>
+            ) : null}
             {results.ranked_candidates != null && results.ranked_candidates !== ranked.length ? (
               <div className="status">
                 The API reports {results.ranked_candidates} ranked candidate

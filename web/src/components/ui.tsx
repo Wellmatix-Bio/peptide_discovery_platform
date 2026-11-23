@@ -7,8 +7,27 @@
 import type { ReactNode } from "react";
 import { ApiError } from "../api/client";
 
-export const pct = (v: number | null | undefined): string | null => (v == null ? null : (v * 100).toFixed(2) + "%");
-export const num = (v: number | null | undefined, d = 1): string | null => (v == null ? null : Number(v).toFixed(d));
+/** A value that `toFixed(d)` would show as zero, shown as whichever of plain decimal or scientific
+ *  notation is shorter (4 significant digits, trailing zeros dropped). Never rounds to zero. */
+function tiny(v: number): string {
+  const sci = v.toExponential(3).replace(/\.?0+e/, "e").replace("e+", "e");
+  const sig = Number(v.toPrecision(4));
+  const places = Math.min(100, Math.max(0, 3 - Math.floor(Math.log10(Math.abs(sig)))));
+  const plain = sig.toFixed(places).replace(/(\.\d*?)0+$/, "$1").replace(/\.$/, "");
+  return plain.length <= sci.length ? plain : sci;
+}
+
+/** Fixed `d` decimals, except a nonzero value that would display as 0 (e.g. 0.0004 at 2 dp). */
+export const num = (v: number | null | undefined, d = 1): string | null => {
+  if (v == null) return null;
+  const n = Number(v);
+  const fixed = n.toFixed(d);
+  return n !== 0 && Number.isFinite(n) && Number(fixed) === 0 ? tiny(n) : fixed;
+};
+export const pct = (v: number | null | undefined): string | null => {
+  const n = num(v == null ? v : v * 100, 2);
+  return n == null ? null : n + "%";
+};
 export const words = (s: string | null | undefined): string => String(s ?? "").replace(/_/g, " ");
 
 export function Metric({ label, value }: { label: string; value: ReactNode }) {

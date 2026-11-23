@@ -168,6 +168,7 @@ def run_job(
                     "run_id": config.run_id,
                     "status": "success",
                     "n_final": len(candidates),
+                    "rejections": ctx.rejections.as_dict(),
                     "progress": 1.0,
                     "stage": None,
                 }

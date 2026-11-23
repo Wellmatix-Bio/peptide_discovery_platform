@@ -451,6 +451,43 @@ failure, `503` missing credentials or server settings.
 | `422` | Invalid job resource name |
 | `503` | Missing server settings |
 
+## Immunomodulation studio
+
+A separate, much smaller job: it scores a list of peptides on six cytokine-induction models and runs no pipeline stages. It uses the same status, results-by-job-id and cancel mechanics, under its own prefix.
+
+| Method and path | Purpose |
+|---|---|
+| `POST /api/v1/jobs/immunomodulation/create` | Submit peptides |
+| `GET /api/v1/jobs/immunomodulation/{job_id}/status` | Same envelope as `/status`; `stage` carries batch progress |
+| `GET /api/v1/jobs/immunomodulation/{job_id}/results` | Per-peptide predictions |
+| `POST /api/v1/jobs/immunomodulation/{job_id}/cancel` | Same as `/cancel` |
+| `GET /api/v1/immunomodulation/models` | The six models: version, checksum, cross-validation figures, trained lengths, per-length applicability ranges and similarity cut-offs |
+
+Request: `{"request_id": "...", "peptides": ["ALPMHIR", ">name
+AMKPWIQPK", ...]}`, 1 to 10000 entries. Each is checked for standard residues, length 6-50, and duplicates; `422` if none survive. `request_id` names the run; the API accepts any non-empty string but uses it as a storage path segment, so stick to letters, digits, `.`, `-` and `_`. A repeat of the same `request_id` returns the first job instead of starting another, so a client must give every run its own.
+
+**Batches.** The worker splits the accepted peptides into batches of `IMMUNO_BATCH_SIZE` (default 100), loads the models once, and scores one batch at a time through all six models. Results come back in input order. After each batch the status route's `stage` reads, for example, `batch 3 of 12 (300/1200 peptides)`. A failure in any batch fails the whole run; there are no partial results.
+
+Response `202`: the usual `request_id`, `job_id`, `result_path`, plus `accepted` (peptides submitted) and `rejected` (each with `id`, `sequence`, `reason` of `invalid_residues`, `too_short`, `too_long`, `duplicate` or `empty`, and `detail`).
+
+Results: `{pipeline: "immunomodulation", job_id, run_id, status, n_final, results: [{sequence, predictions}]}`. `predictions` is keyed `TNF-alpha`, `IL-6`, `IL-10`, `IL-4`, `IL-13`, `IFN-gamma`; each holds:
+
+| Field | Meaning |
+|---|---|
+| `probability` | The model's estimate that the peptide induces the cytokine in the training assays' context. Not calibrated and not comparable across cytokines |
+| `label` | `1` when `probability >= 0.5` |
+| `in_length_range` | Whether the length is inside the model's trained range (kept for compatibility; `applicability` supersedes it) |
+| `model` | The `model_store` package that produced the value |
+| `applicability` | `{status, reasons, checks, reference, not_checked}`, below |
+
+**Read `applicability` before trusting a probability.** `status` is `in_domain`, `limited_evidence` or `out_of_domain`. It comes from two checks: the peptide's length against the model's trained range (`checks.length_range`), and the number of positive and negative training peptides at exactly that length (`checks.reference_support`; `reference` gives the counts and the minimum of 10 per class). `reasons` explains the status in words. A third check answers *is the peptide similar to what the model was trained on?*: `similarity` is `{best_identity, verdict, similar_at, distant_below}` and `checks.sequence_similarity` is `pass`, `weak` or `fail`. `best_identity` (0-1) is the highest BLOSUM62 alignment identity, over the peptide's length, between it and a shortlist of the model's training peptides (the 30 closest by 2-mer composition); `verdict` is `similar` at or above `similar_at`, `distant` below `distant_below`, else `moderate`. The two cut-offs are per model, taken from how far held-out training peptides were from the other cross-validation folds (10th and 50th percentiles). A `distant` peptide is capped at `limited_evidence`; a similarity result never raises a status. The training peptides themselves are never returned. `not_checked` lists what was not assessed: `embedding_distribution` always, and `sequence_similarity` for weights without a similarity profile, so `in_domain` is not a full domain check. Trained length ranges: IFN-gamma 8-20, IL-6 8-25, IL-13 8-35, IL-10 8-46, IL-4 7-45, TNF-alpha 7-50.
+
+Build details of the models are not returned anywhere: the results carry one probability per cytokine, and the registry and `/api/v1/models` serve the model cards without them.
+
+**Local mode.** With `DEV_MODE=true` the job runs as a local process on the weights in `model_store/model_weights/`, with no Vertex job, bucket or image. Job ids then start with `projects/local/locations/local/customJobs/`; the process handle lives in the API process, so after an API restart a running job cannot be cancelled. In this mode the API also answers requests from any origin (CORS `*`), so a standalone page can call it; never set it in production. Otherwise the job runs on a Vertex Custom Job on `WORKER_IMMUNO_IMAGE_URI` and downloads the weights from `VERTEX_MODEL_STORE`.
+
+Needs `WORKER_IMMUNO_IMAGE_URI` (503 without it, unless `DEV_MODE`) and the shared settings; no seed file. `IMMUNO_BATCH_SIZE` is optional.
+
 ## Error responses
 
 Errors use `{"detail": "message"}` or FastAPI's validation-error list under
@@ -495,6 +532,9 @@ Pipeline-specific settings are required only for jobs of that pipeline; a missin
 | `wound_healing` | `WORKER_IMAGE_URI` | `SEED_CANDIDATES_FILE` |
 | `metabolic` | `WORKER_METABOLIC_IMAGE_URI` | `SEED_CANDIDATES_FILE_METABOLIC` |
 | `cosmetic` | `WORKER_COSMETIC_IMAGE_URI` | `SEED_CANDIDATES_FILE_COSMETIC` |
+| `immunomodulation` (own endpoint, see below) | `WORKER_IMMUNO_IMAGE_URI` | none: the peptides are in the request |
+
+`IMMUNO_BATCH_SIZE` (optional, default 100) sets how many peptides the immunomodulation worker scores at a time.
 
 Each seed file is a `gs://` FASTA. Seeds are a server setting, so each pipeline's
 seed set is fixed by the operator and cannot be changed per request.

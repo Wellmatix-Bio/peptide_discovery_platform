@@ -761,6 +761,25 @@ repository root is matched by none of the `data/` rules, so `git add -A` would h
 Eight more tests, from the three defects found in browser testing (below). The failing seven are
 unchanged and are still all missing weight files.
 
+## Baseline moved to 709 passed / 4 failed
+
+The immunomodulation, cosmetic and rejection-tally work added about 110 passing tests. Two things
+changed the failing count from 7:
+
+- **The 3 `test_allergenicity_predictor` failures are gone.** The tests now skip when the
+  allergenicity weights are absent, as every other weight-dependent test should.
+- **Eight cytokine tests are skipped, not failing.** The six cytokine-induction packages keep their
+  `predictor.py` and `__init__.py` out of git on purpose (`.gitignore`), so a fresh checkout has the
+  cards and no code. `test_cytokine_ensemble.py` (6), `test_worker_immuno.py` (1) and
+  `test_api_immuno.py` (1) skip with that reason; with the code present they run as before.
+
+The 4 that still fail are environmental, as before: `test_s04_generation.py::
+TestRouteA::test_run_returns_candidate_per_population_member` needs the ESM weights, and three
+`test_skin_sensitization_predictor.py` tests need `RF.joblib`.
+
+Measured in a clean checkout of the commit, with no `model_store/model_weights`:
+`DEV_MODE=true python .github/check_baseline.py` gives 709 passed, 4 failed, 27 skipped.
+
 ## Three defects found by retesting, and one test that was pinning the first
 
 ### A retry started a second GPU job that read the first run's config out from under it

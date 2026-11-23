@@ -78,6 +78,7 @@ class CosmeticStage5(CandidateStage):
             if reasons:
                 for reason in reasons:
                     rejected[reason] = rejected.get(reason, 0) + 1
+                self.note_rejection(*reasons)
                 logger.info("s05_cosmetic.reject", extra={"candidate_id": candidate.id, "reasons": reasons})
                 continue
             flags = rule_flags(sequence, props, mods, thresholds)
@@ -118,6 +119,7 @@ class CosmeticStage5(CandidateStage):
                     flags["solubility_unreliable"] = score
                 else:
                     rejected["solubility_insoluble"] = rejected.get("solubility_insoluble", 0) + 1
+                    self.note_rejection("solubility_insoluble")
                     logger.info(
                         "s05_cosmetic.reject",
                         extra={"candidate_id": candidate.id, "reasons": ["solubility_insoluble"]},

@@ -13,11 +13,11 @@ Peptide-in-solvent solubility probability classifier. Predicts `P(soluble)` for 
 
 ## Architecture
 
-Single XGBoost classifier (`xgboost.XGBClassifier`) over a 1286-dim flat feature vector: 1280-dim mean-pooled ESM2 (`facebook/esm2_t33_650M_UR50D`) embedding (per-residue hidden states, BOS/EOS excluded from the mean) concatenated with a 6-dim solvent descriptor block (`pH_value`, `pH_missing_flag`, `ionic_strength`, `dielectric_constant`, `protic_aprotic`, `polarity_index`) looked up per solvent. No PCA — this is the "raw" feature variant (Pipeline B, `B_raw`).
+Single XGBoost classifier (`xgboost.XGBClassifier`) over a 646-dim flat feature vector: 640-dim mean-pooled ESM2 (`facebook/esm2_t30_150M_UR50D`) embedding (per-residue hidden states, BOS/EOS excluded from the mean) concatenated with a 6-dim solvent descriptor block (`pH_value`, `pH_missing_flag`, `ionic_strength`, `dielectric_constant`, `protic_aprotic`, `polarity_index`) looked up per solvent. No PCA — this is the "raw" feature variant (Pipeline B, `B_raw`).
 
 ## Files
 
-- `pair_stratified_87a389cf6ee76d08.joblib` — the deployed XGBoost model (see Provenance for why this specific split was chosen)
+- `pair_stratified_8af6a134fd4c5f76.joblib` — the deployed XGBoost model (see Provenance for why this specific split was chosen)
 - `solvent_descriptors.json` — bundled 7-solvent lookup table (pH, ionic strength, dielectric constant, protic/aprotic, polarity index), self-contained copy of `solvent_descriptors.csv`
 - `model_card.json` — feature columns, XGBoost hyperparameters, solvent vocabulary, deployment artifact rationale
 
@@ -52,6 +52,6 @@ Exported from `Models/Solubility` (`pipelineB.ipynb`, raw feature variant, `mode
 
 The notebook ends immediately after the LOSO summary cell (cell 20 of 21); there is no subsequent cell that refits on the full dataset with no held-out portion, cached or otherwise.
 
-Per the documented fallback rule, **`pair_stratified_87a389cf6ee76d08.joblib` was selected as the deployment artifact.** It was not chosen because it is ideal — it still holds out 20% test + a further validation slice — but because among the six evaluation-fold models it uses the largest training portion and is a standard random split rather than a group-held-out one (unlike `seq_disjoint` and the `loso_*` files, which deliberately withhold entire peptides or an entire solvent from training). This is the closest available approximation to a general-purpose model, but it is explicitly a **fallback choice, not a true full-data-refit deployment model**. If a full-data refit is later produced, this export should be superseded.
+Per the documented fallback rule, **`pair_stratified_8af6a134fd4c5f76.joblib` was selected as the deployment artifact.** It was not chosen because it is ideal — it still holds out 20% test + a further validation slice — but because among the six evaluation-fold models it uses the largest training portion and is a standard random split rather than a group-held-out one (unlike `seq_disjoint` and the `loso_*` files, which deliberately withhold entire peptides or an entire solvent from training). This is the closest available approximation to a general-purpose model, but it is explicitly a **fallback choice, not a true full-data-refit deployment model**. If a full-data refit is later produced, this export should be superseded.
 
 Not used: `model_cache/A` (pipeline A, hand-crafted descriptor variant) and `model_cache/B_pca` (PCA-reduced embedding variant — the fitted PCA transform was never persisted alongside the cached model, so its features cannot be reproduced at inference time; unresolved reproducibility gap, do not use).

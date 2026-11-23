@@ -6,6 +6,9 @@ import os
 import re
 import statistics
 import logging
+import subprocess
+import sys
+import time
 from functools import lru_cache
 from pathlib import Path
 from typing import Annotated, Literal, Union
@@ -24,11 +27,24 @@ from common import storage
 
 # Imported for its side effect: common/env.py loads .env into os.environ; do not remove as unused.
 from common import env  # noqa: F401
+from common.env import DEV_MODE
+from common.model_registry import ModelRegistry
+from common.model_sync import weights_dir_for
+from common.applicability import NOT_CHECKED, ReferenceProfile
+from common.sequence_utils import parse_sequence_items
 from schemas.brief import Brief, CosmeticBrief, MetabolicBrief
 from schemas.e2e_config import validate_job_config
-from schemas.stage_configs import CosmeticE2ERequest, E2ERequest, MetabolicE2ERequest
+from schemas.immuno_config import CYTOKINE_MODELS, DEFAULT_BATCH_SIZE, IMMUNO_MAX_PEPTIDES, REQUIRED_WEIGHT_FILES, ImmunoRunConfig
+from schemas.stage_configs import CosmeticE2ERequest, E2ERequest, MetabolicE2ERequest, resolve_params
 
 app = FastAPI(title="End-to-end Pipeline Job API")
+
+if DEV_MODE:
+    # Local development only: a page opened from a file or another port (the standalone studio) is cross-origin to this API.
+    # No credentials are involved, so any origin is allowed; production (DEV_MODE off) adds no CORS and stays same-origin.
+    from fastapi.middleware.cors import CORSMiddleware
+
+    app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
 
 def required(name):
@@ -317,6 +333,389 @@ def create_job(request: CreateJobRequest):
     )
 
 
+def _immuno_batch_size() -> int:
+    """Peptides the worker's models process at a time: IMMUNO_BATCH_SIZE, else the schema default."""
+    try:
+        return max(1, int(os.environ.get("IMMUNO_BATCH_SIZE", DEFAULT_BATCH_SIZE)))
+    except ValueError:
+        return DEFAULT_BATCH_SIZE
+
+
+class ImmunoCreateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    request_id: str = Field(min_length=1, description="Caller's name for the run. A repeat of the same request_id returns the first job instead of starting another.")
+    peptides: list[str] = Field(
+        min_length=1,
+        max_length=IMMUNO_MAX_PEPTIDES,
+        description="Sequences or FASTA entries. Each is checked for the 20 standard residues, length 6-50 and duplicates; the worker then scores them in batches.",
+    )
+
+
+class ImmunoRejection(BaseModel):
+    id: str
+    sequence: str
+    reason: str
+    detail: str = ""
+
+
+class ImmunoCreateResponse(CreateJobResponse):
+    accepted: int = Field(description="Peptides submitted to the job, after QC and de-duplication.")
+    rejected: list[ImmunoRejection] = Field(default_factory=list, description="What QC removed, and why.")
+
+
+#: DEV_MODE: immunomodulation jobs run as local subprocesses and get ids shaped like a Vertex resource name, so the status,
+#: results and cancel routes, the accounts proxy's ownership check and the web page treat them like any other job. The handles
+#: live in this process: after an API restart a running job cannot be cancelled, and its status falls back to its results.json.
+LOCAL_JOB_PREFIX = "projects/local/locations/local/customJobs/"
+_REPO = Path(__file__).resolve().parents[3]
+_local_processes: dict[str, subprocess.Popen] = {}
+
+
+def _local_artifacts() -> str:
+    """VERTEX_ARTIFACTS_DIR when it is a local path, else <repo>/artifacts."""
+    configured = os.environ.get("VERTEX_ARTIFACTS_DIR", "")
+    return configured if configured and not configured.startswith("gs://") else str(_REPO / "artifacts")
+
+
+def _create_local_immunomodulation_job(request: ImmunoCreateRequest, peptides: list[str], rejected: list[ImmunoRejection]):
+    """DEV_MODE: run the worker as a subprocess with local weights; its output goes to <run dir>/worker.log."""
+    artifacts = _local_artifacts()
+    run_id = str(time.time_ns() // 1_000_000)
+    run_dir = storage.join(artifacts, "runs", run_id)
+    config_path = storage.join(run_dir, "config.json")
+    config = ImmunoRunConfig(run_id=run_id, artifacts_dir=artifacts, model_store="model_store", peptides=peptides, batch_size=_immuno_batch_size())
+    storage.write_text(config_path, config.model_dump_json(indent=2))
+    env = {**os.environ, "DEV_MODE": "true", "PYTHONPATH": os.pathsep.join([str(_REPO / "src"), str(_REPO), os.environ.get("PYTHONPATH", "")])}
+    with open(Path(run_dir) / "worker.log", "ab") as log:
+        _local_processes[run_id] = subprocess.Popen(
+            [sys.executable, "-m", "backend.worker_immuno.worker", "--config", config_path],
+            cwd=str(_REPO),
+            env=env,
+            stdout=log,
+            stderr=subprocess.STDOUT,
+        )
+    return ImmunoCreateResponse(
+        request_id=request.request_id,
+        job_id=LOCAL_JOB_PREFIX + run_id,
+        result_path=run_dir,
+        accepted=len(peptides),
+        rejected=rejected,
+    )
+
+
+@app.post("/api/v1/jobs/immunomodulation/create", response_model=ImmunoCreateResponse, status_code=202)
+def create_immunomodulation_job(request: ImmunoCreateRequest):
+    """Start a job that scores peptides on six cytokine-induction models. The worker processes them in batches of IMMUNO_BATCH_SIZE (default 100); progress is reported in the status route's `stage`. With DEV_MODE the job runs as a local process on local weights."""
+    parsed = parse_sequence_items(request.peptides)
+    rejected = [ImmunoRejection(id=r.id, sequence=r.sequence, reason=r.reason, detail=r.detail) for r in parsed.rejected]
+    if not parsed.accepted:
+        raise HTTPException(422, {"message": "No valid peptides in the request", "rejected": [r.model_dump() for r in rejected]})
+    peptides = parsed.sequences
+    if DEV_MODE:
+        return _create_local_immunomodulation_job(request, peptides, rejected)
+
+    parent = f"projects/{required('VERTEX_CLOUD_PROJECT')}/locations/{required('VERTEX_LOCATION')}"
+    artifacts = required("VERTEX_ARTIFACTS_DIR")
+    models = required("VERTEX_MODEL_STORE")
+    image = required("WORKER_IMMUNO_IMAGE_URI")
+    service_account = required("WORKER_SERVICE_ACCOUNT")
+    machine_type = required("MACHINE_TYPE")
+    accelerator_type = required("ACCELERATOR_TYPE")
+    accelerator_count = int(required("ACCELERATOR_COUNT"))
+    if not all(storage.is_gcs_path(p) for p in (artifacts, models)):
+        raise HTTPException(503, "Artifacts and model store must use gs:// paths")
+    # The worker runs with DEV_MODE=false (set in the job below), so it downloads every model from this bucket.
+    # Refuse now if the bucket is the placeholder or lacks a model, rather than failing the GPU job minutes in.
+    if "TODO-bucket" in models:
+        raise HTTPException(503, "VERTEX_MODEL_STORE is still the placeholder; set it to the bucket that holds the model weights")
+    missing = [f for f in REQUIRED_WEIGHT_FILES if not storage.exists(storage.join(models, f))]
+    if missing:
+        raise HTTPException(503, f"Model weights missing from {models}: {', '.join(missing)}")
+
+    # Its own staging folder, so a request_id shared with another pipeline cannot return that pipeline's job.
+    staging_config_path = storage.join(artifacts, "requests", "immunomodulation", request.request_id, "config.json")
+
+    # A retry returns the job the first attempt started rather than submitting a second one; see create_job for why.
+    if storage.exists(staging_config_path):
+        try:
+            run_id = json.loads(storage.read_text(staging_config_path))["run_id"]
+        except Exception:
+            logging.exception("Staging config %s exists but could not be read; treating %s as new", staging_config_path, request.request_id)
+        else:
+            return ImmunoCreateResponse(
+                request_id=request.request_id,
+                job_id=f"{parent}/customJobs/{run_id}",
+                result_path=storage.join(artifacts, "runs", run_id),
+                accepted=len(peptides),
+                rejected=rejected,
+            )
+
+    custom_job = {
+        "display_name": f"ai-peptide-discovery-immuno-{request.request_id[:12]}",
+        "labels": {"service": "battery-ai", "pipeline": "immunomodulation", "request-id": _label_value(request.request_id)},
+        "job_spec": {
+            "service_account": service_account,
+            "worker_pool_specs": [
+                {
+                    "replica_count": 1,
+                    "machine_spec": {
+                        "machine_type": machine_type,
+                        "accelerator_type": accelerator_type,
+                        "accelerator_count": accelerator_count,
+                    },
+                    "disk_spec": {"boot_disk_type": "pd-ssd", "boot_disk_size_gb": 200},
+                    "container_spec": {
+                        "image_uri": image,
+                        "args": ["--config", staging_config_path, "--wait-for-config", "120"],
+                        "env": [
+                            {"name": "DEV_MODE", "value": "false"},
+                            {"name": "VERTEX_MODEL_STORE", "value": models},
+                        ],
+                    },
+                }
+            ],
+        },
+    }
+    try:
+        client = job_client()
+        job = client.create_custom_job(parent=parent, custom_job=custom_job)
+        job_id = job.name.rsplit("/", 1)[-1]
+        result_path = storage.join(artifacts, "runs", job_id)
+        config = ImmunoRunConfig(run_id=job_id, artifacts_dir=artifacts, model_store=models, peptides=peptides, batch_size=_immuno_batch_size())
+        try:
+            body = config.model_dump_json(indent=2)
+            storage.write_text(storage.join(result_path, "config.json"), body)
+            storage.write_text(staging_config_path, body)
+        except Exception as exc:
+            try:
+                client.cancel_custom_job(name=job.name, timeout=30)
+            except Exception:
+                logging.exception("Could not cancel job %s after config upload failed", job.name)
+            raise HTTPException(502, f"Config upload failed for {job.name}; cancellation requested") from exc
+    except GoogleAuthError as exc:
+        raise HTTPException(503, "Google credentials are unavailable") from exc
+    except GoogleAPICallError as exc:
+        raise HTTPException(502, str(exc)) from exc
+    return ImmunoCreateResponse(
+        request_id=request.request_id, job_id=job.name, result_path=result_path, accepted=len(peptides), rejected=rejected
+    )
+
+
+#: Model-card fields that describe how a cytokine model is built (which classifiers, how they are combined, how they were
+#: trained) and so are never returned to clients. The cards in model_store/ keep them for the team.
+CONFIDENTIAL_CARD_KEYS = ("members", "aggregation", "cv_metrics_note", "limits", "provenance")
+
+
+def _public_card(package: str, card: dict | None) -> dict | None:
+    """The card as clients may see it: for the immunomodulation models, without the build details above."""
+    if card is None or package not in {p for p, _ in CYTOKINE_MODELS.values()}:
+        return card
+    public = {k: v for k, v in card.items() if k not in CONFIDENTIAL_CARD_KEYS}
+    public["training"] = {k: v for k, v in (card.get("training") or {}).items() if k != "final_fit"}
+    return public
+
+
+class ImmunoModelInfo(BaseModel):
+    cytokine: str
+    package: str
+    name: str
+    version: str
+    registered: bool  # found in common.model_registry.ModelRegistry (needs a readable model_card.json)
+    checksum: str | None = None
+    card_status: str | None = None  # e.g. "first version"
+    task: str | None = None
+    threshold: float | None = None
+    cv_metrics: dict = Field(default_factory=dict)  # of the model as served
+    training: dict = Field(default_factory=dict)  # n, positive_rate, length_min, length_max, source
+    #: None when the weights' info.json cannot be read here (the API image carries no weights and the bucket is unset or unreachable).
+    domain: dict | None = None
+
+
+class ImmunoModelsResponse(BaseModel):
+    models: list[ImmunoModelInfo]
+    caveat: str
+
+
+def _immuno_weights_info(package: str) -> dict | None:
+    """The weights' info.json: the local weights folder first, else the model store bucket; None if neither is readable."""
+    local = weights_dir_for(MODEL_STORE_DIR / package) / "info.json"
+    try:
+        if local.is_file():
+            return json.loads(local.read_text(encoding="utf-8"))
+        store = os.environ.get("VERTEX_MODEL_STORE", "")
+        if not DEV_MODE and storage.is_gcs_path(store) and "TODO-bucket" not in store:
+            return json.loads(storage.read_text(storage.join(store, package, "info.json")))
+    except Exception:
+        logging.warning("Could not read info.json for %s", package, exc_info=True)
+    return None
+
+
+def _immuno_domain(info: dict | None) -> dict | None:
+    if not info:
+        return None
+    try:
+        profile = ReferenceProfile.from_info(info)
+    except (KeyError, TypeError, ValueError):
+        return None
+    domain = info.get("domain") or {}
+    return {
+        "min_examples_per_class": profile.min_per_class,
+        "per_length_counts_recorded": profile.counts is not None,
+        "status_ranges": profile.status_ranges(),  # lengths 6-50 -> in_domain / limited_evidence / out_of_domain
+        "not_checked": [c for c in NOT_CHECKED if not (c == "sequence_similarity" and info.get("similarity"))],
+        "similarity": {k: v for k, v in (info.get("similarity") or {}).items() if k in ("method", "similar_at", "distant_below")} or None,
+        "source": domain.get("source"),
+    }
+
+
+@app.get("/api/v1/immunomodulation/models", response_model=ImmunoModelsResponse)
+def immunomodulation_models():
+    """What the studio's six cytokine models are: version and checksum from the model registry, performance and limits from each model card, and the per-length applicability ranges from the weights' info.json."""
+    registry = ModelRegistry(MODEL_STORE_DIR)
+    entries = []
+    for cytokine, (package, _cls) in CYTOKINE_MODELS.items():
+        name, version = package.rsplit("_", 1)
+        ref = registry.get(name, version)
+        card: dict = {}
+        card_path = MODEL_STORE_DIR / package / "model_card.json"
+        try:
+            card = json.loads(card_path.read_text(encoding="utf-8")) if card_path.is_file() else {}
+        except ValueError:
+            logging.warning("Unreadable model card %s", card_path)
+        card = _public_card(package, card) or {}
+        entries.append(
+            ImmunoModelInfo(
+                cytokine=cytokine,
+                package=package,
+                name=name,
+                version=version,
+                registered=ref is not None,
+                checksum=ref.checksum if ref else None,
+                card_status=card.get("status"),
+                task=card.get("task"),
+                threshold=card.get("threshold"),
+                cv_metrics=card.get("cv_metrics_5fold_mean", {}),
+                training=card.get("training", {}),
+                domain=_immuno_domain(_immuno_weights_info(package)),
+            )
+        )
+    return ImmunoModelsResponse(
+        models=entries,
+        caveat=(
+            "Cross-validation figures estimate performance on peptides like the training data, at threshold 0.5. The domain ranges"
+            " reflect peptide length, per-length training counts and, where shown, similarity to the training peptides; the embedding distribution is not checked."
+        ),
+    )
+
+
+# Declared before the generic /{job_id:path}/... routes below: those would otherwise take "immunomodulation/<job>" as the job id and 422.
+@app.get("/api/v1/jobs/immunomodulation/{job_id:path}/status", response_model=JobStatusResponse)
+def get_immunomodulation_job_status(job_id: str):
+    """Same envelope as the pipeline status route. While running, `stage` reads like `batch 3 of 12 (300/1200 peptides)`."""
+    if DEV_MODE and job_id.startswith(LOCAL_JOB_PREFIX):
+        return _local_immunomodulation_status(job_name(job_id))
+    return get_job_status(job_id)
+
+
+def _local_immunomodulation_status(name: str) -> JobStatusResponse:
+    run_id = _run_id_from_job_id(name)
+    status_path = storage.join(_local_artifacts(), "runs", run_id, "results.json")
+    results = json.loads(storage.read_text(status_path)) if storage.exists(status_path) else None
+    worker_status = (results.get("status") if results else None) or None
+    process = _local_processes.get(run_id)
+    if process is not None:
+        code = process.poll()
+        vertex_state = "JOB_STATE_RUNNING" if code is None else "JOB_STATE_SUCCEEDED" if code == 0 else "JOB_STATE_FAILED"
+    elif worker_status == "success":
+        vertex_state = "JOB_STATE_SUCCEEDED"
+    elif worker_status in ("failed", "fail"):
+        vertex_state = "JOB_STATE_FAILED"
+    else:
+        vertex_state = "JOB_STATE_RUNNING"  # unknown: no process handle and no verdict from the worker
+    return JobStatusResponse(
+        job_id=name,
+        status=worker_status or "pending",
+        stage=(results.get("stage") if results else None) or "pending",
+        vertex_state=vertex_state,
+        run_state=run_state(worker_status, vertex_state),
+        error=(results.get("error") if results else None),
+    )
+
+
+class CancelJobResponse(BaseModel):
+    job_id: str
+    status: Literal["cancelling", "cancelled", "failed"]
+
+
+class ImmunoPeptideResult(BaseModel):
+    sequence: str | None = None
+    predictions: dict = Field(
+        default_factory=dict,
+        description=(
+            "Keyed by cytokine (TNF-alpha, IL-6, IL-10, IL-4, IL-13, IFN-gamma). Each holds probability, label (probability >= 0.5),"
+            " in_length_range, model (the package that produced it) and applicability {status, reasons, checks, reference, similarity, not_checked}."
+        ),
+    )
+
+
+class ImmunoJobResultsResponse(BaseModel):
+    pipeline: Literal["immunomodulation"] = "immunomodulation"
+    job_id: str
+    run_id: str
+    status: str
+    n_final: int | None = None
+    results: list[ImmunoPeptideResult] = Field(default_factory=list)
+
+
+@app.get("/api/v1/jobs/immunomodulation/{job_id:path}/results", response_model=ImmunoJobResultsResponse)
+def get_immunomodulation_job_results(job_id: str):
+    """Per-peptide predictions, in input order. Empty until the job has succeeded. Read each result's `applicability` before its probability."""
+    name = job_name(job_id)
+    run_id = _run_id_from_job_id(name)
+    artifacts = _local_artifacts() if DEV_MODE and name.startswith(LOCAL_JOB_PREFIX) else required("VERTEX_ARTIFACTS_DIR")
+    run_dir = storage.join(artifacts, "runs", run_id)
+    status_path = storage.join(run_dir, "results.json")
+    if not storage.exists(status_path):
+        raise HTTPException(404, "Job results not found")
+    status_payload = json.loads(storage.read_text(status_path))
+    status = status_payload.get("status", "unknown")
+    n_final = status_payload.get("n_final")
+    results: list[dict] = []
+    if status == "success":
+        results_path = storage.join(run_dir, "immuno_results.json")
+        if not storage.exists(results_path):
+            raise HTTPException(404, "Job reported success but immuno_results.json is missing")
+        results = json.loads(storage.read_text(results_path))
+    return ImmunoJobResultsResponse(
+        job_id=name,
+        run_id=run_id,
+        status=status,
+        n_final=n_final,
+        results=[
+            ImmunoPeptideResult(
+                sequence=r.get("sequence"),
+                predictions={
+                    cytokine: {k: v for k, v in prediction.items() if k != "members"}
+                    for cytokine, prediction in (r.get("predictions") or {}).items()
+                },
+            )
+            for r in results
+        ],
+    )
+
+
+@app.post("/api/v1/jobs/immunomodulation/{job_id:path}/cancel", response_model=CancelJobResponse)
+def cancel_immunomodulation_job(job_id: str):
+    if DEV_MODE and job_id.startswith(LOCAL_JOB_PREFIX):
+        name = job_name(job_id)
+        process = _local_processes.get(_run_id_from_job_id(name))
+        if process is None or process.poll() is not None:
+            return {"job_id": name, "status": "failed"}  # not started by this API process, or already over
+        process.terminate()
+        return {"job_id": name, "status": "cancelling"}
+    return cancel_job(job_id)
+
+
 def run_state(worker_status: str | None, vertex_state: str | None) -> str:
     """What the run actually is, from the worker's self-report AND the live Vertex state.
 
@@ -515,6 +914,116 @@ class MetabolicCandidateResponse(BaseModel):
     inhibited_pathways: list[str] | None = None
 
 
+class RejectionSummary(BaseModel):
+    """Candidates removed from stage 5 on. Only runs made after this was added carry it."""
+
+    n_removed: int
+    reasons: dict[str, int] = Field(
+        default_factory=dict,
+        description="Removals per reason. A candidate can fail several checks, so these can add up to more than n_removed.",
+    )
+    cutoffs: dict[str, str] = Field(
+        default_factory=dict,
+        description="The cutoff each reason was judged against, from the run's own stage settings, e.g. 'P(hemolytic) above 0.5'. A reason with no entry has no single cutoff to state.",
+    )
+
+
+#: The stages whose rejections are counted, per pipeline: stage 5, 6, 8, 9.
+_CUTOFF_STAGES = {
+    "wound_healing": ("s05_physchem_screening", "s06_functional_models", "s08_safety_developability", "s09_synthesis_cmc"),
+    "metabolic": (
+        "s05_metabolic_physchem_screening",
+        "s06_metabolic_functional_screening",
+        "s08_metabolic_safety_developability",
+        "s09_synthesis_cmc",
+    ),
+    "cosmetic": (
+        "s05_cosmetic_physchem_screening",
+        "s06_cosmetic_functional_models",
+        "s08_cosmetic_safety_developability",
+        "s09_cosmetic_synthesis_cmc",
+    ),
+}
+
+#: Wound-healing stage 5 reads these two from constants in the stage, not from its params schema.
+_WOUND_S5_MW_REJECT_MAX = 5000.0
+_WOUND_S5_HYDROPHOBICITY_REJECT_MAX = 0.5
+
+
+def _cutoff_text(pipeline: str, reason: str, s5: dict, s6: dict, s8: dict, s9: dict) -> str | None:
+    """The cutoff behind one rejection reason, as words; None when no single value applies."""
+    g = lambda x: f"{x:g}"  # noqa: E731
+    base, _, qualifier = reason.partition(":")
+    try:
+        if pipeline == "cosmetic":
+            thresholds = [s6.get(f"{f}_threshold") for f in ("collagen_ecm", "antioxidant", "pigmentation")]
+            table = {
+                "molecular_weight_too_high": lambda: f"above {g(s5['molecular_weight_reject_max'])} Da",
+                "net_charge_out_of_range": lambda: f"outside {g(s5['net_charge_reject_min'])} to {g(s5['net_charge_reject_max'])}",
+                "hydrophobicity_outside_seed_range": lambda: f"outside the {g(s5['hydrophobicity_percentile_low'])}th to {g(s5['hydrophobicity_percentile_high'])}th percentile of the seed peptides",
+                "membrane_active_profile": lambda: f"hydrophobic moment above the seed {g(s5['moment_percentile'])}th percentile with net charge of {g(s5['membrane_active_min_charge'])} or more",
+                "repeated_residues": lambda: f"{s5['repeat_run_length']} or more identical residues in a row",
+                "solubility_insoluble": lambda: f"P(soluble) below {g(s5['solubility_threshold'])}",
+                "primary_function_below_threshold": lambda: f"score below {g(thresholds[0])}" if len(set(thresholds)) == 1 else None,
+                "antimicrobial": lambda: f"P(antimicrobial) at or above {g(s6['antimicrobial_reject_min'])}",
+                "irritation_high": lambda: f"irritation score above the seed {g(s8['irritation_percentile_high'])}th percentile",
+                "irritation_medium": lambda: f"irritation score above the seed {g(s8['irritation_percentile_medium'])}th percentile",
+                "skin_sensitization": lambda: "predicted sensitizer (the model's own cutoff, 0.55)",
+                "hemolysis": lambda: f"P(hemolytic) at or above {g(s8['hemolysis_reject_min'])}",
+                "half_life": lambda: f"log10 half-life below {g(s8['half_life_reject_min'])} s",
+                "allergenicity": lambda: f"P(allergen) at or above {g(s8['allergenicity_reject_min'])}",
+                "cytotoxicity": lambda: f"P(cytotoxic) at or above {g(s8['cytotoxicity_reject_min'])}",
+                "cleavage_stability": lambda: f"stability below {g(s8['cleavage_stability_reject_min'])}",
+                "synthesis_feasibility_below_min": lambda: f"P(feasible) below {g(s9['synthesis_feasibility_min'])}",
+            }
+        else:
+            metabolic = pipeline == "metabolic"
+            t6 = s6.get("stage6_thresholds") or {}
+            table = {
+                "molecular_weight": lambda: f"above {g(s5['molecular_weight_reject_max'] if metabolic else _WOUND_S5_MW_REJECT_MAX)} Da",
+                "hydrophobicity": lambda: f"mean hydrophobicity above {g(s5['hydrophobicity_reject_max'] if metabolic else _WOUND_S5_HYDROPHOBICITY_REJECT_MAX)}",
+                "cytotoxicity": lambda: f"P(cytotoxic) above {g(s8['cytotoxicity_reject_max'])}",
+                "aggregation_tendency": lambda: f"P(aggregation-prone) above {g(s8['aggregation_reject_max'])}",
+                "cleavage_stability": lambda: f"stability below {g(s8['cleavage_stability_reject_min'])}",
+                "hemolysis": lambda: (
+                    f"P(hemolytic) above {g(s8['hemolysis_probability_reject_max'])}"
+                    if metabolic
+                    else f"pHC50 above {g(s8['hemolysis_phc50_reject_max'])}"
+                ),
+                "plasma_half_life": lambda: f"below {g(s8['plasma_half_life_min_minutes'])} min",
+                "difficulty_class": lambda: "difficulty class: " + ", ".join(s9["rejected_difficulty_classes"]),
+                "high_ec50": lambda: f"above {g(s6['ec50_max_nm'][qualifier])} nM",
+                "low_agonism_probability": lambda: f"P(agonist) below {g(s6['agonism_probability_min'][qualifier])}",
+                "low_anti_inflammatory_probability": lambda: f"P(anti-inflammatory) below {g(s6['anti_inflammatory_probability_min'] if metabolic else t6['min_anti_inflammatory_probability'])}",
+                "low_amp_probability": lambda: f"P(antimicrobial) below {g(t6['min_amp_probability'])}",
+                "low_proliferation_migration": lambda: f"below {g(t6['min_proliferation_migration'])}",
+                "low_angiogenic_activity": lambda: f"below {g(t6['min_angiogenic_activity'])}",
+                "high_mic": lambda: f"above {g(t6['max_mic'][qualifier])} µM",
+                "high_mbic": lambda: f"above {g(t6['max_mbic'][qualifier])} µM",
+            }
+        return table[base]()
+    except (KeyError, TypeError, IndexError):
+        return None
+
+
+def _rejection_cutoffs(run_dir: str, pipeline: str, reasons: list[str]) -> dict[str, str]:
+    """Cutoff text per rejection reason: the run's stored stage settings over the schema defaults."""
+    try:
+        stages = json.loads(storage.read_text(storage.join(run_dir, "config.json"))).get("stages") or {}
+    except Exception:  # noqa: BLE001 - an older run or an unreadable config: the defaults still apply
+        stages = {}
+
+    def params(name: str) -> dict:
+        try:
+            return resolve_params(name, (stages.get(name) or {}).get("params") or {})
+        except Exception:  # noqa: BLE001 - stored params that no longer validate: report no cutoffs for that stage
+            return {}
+
+    s5, s6, s8, s9 = (params(name) for name in _CUTOFF_STAGES[pipeline])
+    texts = {reason: _cutoff_text(pipeline, reason, s5, s6, s8, s9) for reason in reasons}
+    return {reason: text for reason, text in texts.items() if text}
+
+
 class MetabolicJobResultsResponse(BaseModel):
     pipeline: Literal["metabolic"] = "metabolic"
     job_id: str
@@ -524,6 +1033,7 @@ class MetabolicJobResultsResponse(BaseModel):
     ranked_candidates: int | None = None
     insufficient_evidence_candidates: int | None = None
     component_stats: dict[str, ComponentStats] = Field(default_factory=dict)
+    rejections: RejectionSummary | None = None
     candidates: list[MetabolicCandidateResponse] = []
 
 
@@ -536,6 +1046,7 @@ class JobResultsResponse(BaseModel):
     ranked_candidates: int | None = None
     insufficient_evidence_candidates: int | None = None
     component_stats: dict[str, ComponentStats] = Field(default_factory=dict)
+    rejections: RejectionSummary | None = None
     candidates: list[CandidateResponse] = []
 
 
@@ -660,6 +1171,7 @@ class CosmeticCandidateResponse(BaseModel):
     not_screened: list[str] = []
     component_scores: dict[str, CosmeticComponentScore] = {}
     primary_function: str | None = None
+    secondary_functions: list[str] = []
     functional_scores: dict[str, dict] = {}
     antimicrobial_probability: float | None = None
     molecular_weight: float | None = None
@@ -682,7 +1194,7 @@ class CosmeticCandidateResponse(BaseModel):
     cleavage_stability: float | None = None
     safety_flags: list[str] = []
     synthesis_feasibility_probability: float | None = None
-    synthesis_flags: dict[str, list[int]] = {}
+    synthesis_flags: dict[str, list[int]] = {}  # flag -> 0-based residue positions; the web UI shows them +1
 
 
 class CosmeticJobResultsResponse(BaseModel):
@@ -694,6 +1206,7 @@ class CosmeticJobResultsResponse(BaseModel):
     ranked_candidates: int | None = None
     insufficient_evidence_candidates: int | None = None
     component_stats: dict[str, ComponentStats] = Field(default_factory=dict)
+    rejections: RejectionSummary | None = None
     candidates: list[CosmeticCandidateResponse] = []
 
 
@@ -795,6 +1308,7 @@ def _cosmetic_candidate_response(candidate: dict) -> CosmeticCandidateResponse:
             for name, c in components.items()
         },
         primary_function=verdict.get("primary_function"),
+        secondary_functions=verdict.get("secondary_functions") or [],
         functional_scores=preds.get("functional_scores") or {},
         antimicrobial_probability=(preds.get("antimicrobial") or {}).get("probability"),
         molecular_weight=preds.get("molecular_weight"),
@@ -903,8 +1417,13 @@ def get_job_results(job_id: str):
         ranked_candidates=ranked,
         insufficient_evidence_candidates=len(candidates) - ranked,
         component_stats=_component_stats(candidates),
+        rejections=status_payload.get("rejections"),
     )
     pipeline = _run_pipeline(run_dir, candidates)
+    rejections = status_payload.get("rejections")
+    if rejections:
+        rejections = {**rejections, "cutoffs": _rejection_cutoffs(run_dir, pipeline, list(rejections.get("reasons") or {}))}
+    common["rejections"] = rejections
     if pipeline == "cosmetic":
         ranking_of = lambda c: (c.get("predictions") or {}).get("ranking") or {}  # noqa: E731
         cosmetic_common = {
@@ -923,11 +1442,6 @@ def get_job_results(job_id: str):
     return JobResultsResponse(
         **common, candidates=[_candidate_response(c) for c in candidates]
     )
-
-
-class CancelJobResponse(BaseModel):
-    job_id: str
-    status: Literal["cancelling", "cancelled", "failed"]
 
 
 @app.post("/api/v1/jobs/{job_id:path}/cancel", response_model=CancelJobResponse)
@@ -999,10 +1513,11 @@ SHARED_SETTINGS = (
 #: A pipeline whose pair is absent answers 503 and the other pipelines are unaffected, so these
 #: are NOT in settings_missing -- a wound-healing-only deployment is correctly configured, and
 #: reporting it as missing four settings would say otherwise.
-PIPELINE_SETTINGS: dict[str, tuple[str, str]] = {
+PIPELINE_SETTINGS: dict[str, tuple[str, ...]] = {
     "wound_healing": ("WORKER_IMAGE_URI", "SEED_CANDIDATES_FILE"),
     "metabolic": ("WORKER_METABOLIC_IMAGE_URI", "SEED_CANDIDATES_FILE_METABOLIC"),
     "cosmetic": ("WORKER_COSMETIC_IMAGE_URI", "SEED_CANDIDATES_FILE_COSMETIC"),
+    "immunomodulation": ("WORKER_IMMUNO_IMAGE_URI",),  # takes peptides in the request, so no seed file
 }
 
 
@@ -1076,6 +1591,7 @@ def model_manifest():
                 card = json.loads(card_path.read_text(encoding="utf-8"))
             except ValueError:
                 card = None
+        card = _public_card(name, card)
         entries.append(
             ModelEntry(
                 name=name,

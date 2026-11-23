@@ -98,6 +98,7 @@ class Stage9(CandidateStage):
             candidate.predictions["synthesis_verdict"] = verdict
 
             if verdict["overall"] == "reject":
+                self.note_rejection(*(k for k, v in verdict["properties"].items() if v == "reject"))
                 logger.info(
                     "s09.reject",
                     extra={"candidate_id": candidate.id, "properties": verdict["properties"]},

@@ -428,9 +428,9 @@ class Stage8CosmeticParams(BaseStageParams):
     cytotoxicity_reject_min: float = Field(0.5, ge=0, le=1)
     hemolysis_reject_min: float = Field(0.5, ge=0, le=1)
     allergenicity_reject_min: float = Field(0.5, ge=0, le=1)
-    #: The allergenicity model was trained on full-length proteins (shortest 50 residues); shorter sequences are not
-    #: scored and are recorded as not screened. Set to 1 to score everything anyway, accepting meaningless values.
-    allergenicity_min_length: int = Field(50, ge=1)
+    #: The allergenicity model was trained on 3-49 residue peptides; sequences outside that range are not scored and are
+    #: recorded as not screened.
+    allergenicity_min_length: int = Field(3, ge=1)
     #: Predicted log10 half-life in seconds below this rejects; the same 60 minutes as the metabolic pipeline.
     half_life_reject_min: float = math.log10(60 * 60)
     # C. Skin-protease stability

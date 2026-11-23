@@ -50,10 +50,12 @@ pages against captured API responses and needs no server. The full service stack
 | | |
 |---|---|
 | **Pipelines** | **Three**, sharing one stage registry and one endpoint: wound healing, metabolic (GLP1R / GCGR / GIPR agonists) and cosmetic (skin beauty). A pipeline is a set of stages that replace their wound-healing peers, not a fork |
+| **Immunomodulation studio** | A fourth, separate job, not a pipeline: scores a list of peptides (up to 10000 per run, in batches) on six cytokine-induction models — TNF-α, IL-6, IL-10, IL-4, IL-13, IFN-γ — each result carrying an applicability flag. Own endpoints under `/api/v1/jobs/immunomodulation/`, own worker `src/backend/worker_immuno/`, models `model_store/*_induction_predictor_v1/`. With `DEV_MODE=true` it runs locally with no Vertex job. See [API_SPECIFICATION.md](API_SPECIFICATION.md) |
 | **Stages** | 14 stage directories under `src/pipeline/`, 8 implemented, plus the metabolic and cosmetic peers |
 | **Models** | 27 predictor packages in `model_store/` — ESM-2 embeddings with XGBoost/sklearn heads, a BiLSTM+CNN MIC ensemble, ESMFold for structure, ProtGPT2+LoRA for de novo generation |
 | **Job API** | `src/backend/api_e2e/` — submits Vertex AI Custom Jobs, reads their artifacts. One `create` endpoint for all three pipelines, discriminated by a `pipeline` field |
 | **Worker** | `src/backend/worker/` — one run loop. `worker_e2e`, `worker_metabolic` and `worker_cosmetic` are a dozen lines each that name their pipeline and are what the three images run |
+| **Studio worker** | `src/backend/worker_immuno/` — its own entry point and image (`WORKER_IMMUNO_IMAGE_URI`); it does not use the run loop |
 | **Accounts** | `services/accounts/` — email/password accounts and the authenticating proxy |
 | **Web app** | `web/` — React, TypeScript, one origin, no CORS. Submits wound-healing, metabolic and cosmetic runs; renders all three |
 | **Deployment** | `deploy/` — three containers, only the web one publishes a port |

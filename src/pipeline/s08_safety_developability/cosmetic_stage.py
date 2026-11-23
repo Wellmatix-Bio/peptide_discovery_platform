@@ -37,7 +37,7 @@ from model_store.allergenicity_predictor_v1.predictor import (  # noqa: E402
     MAX_LENGTH as ALLERGENICITY_MAX_LENGTH,
     TRAINED_MIN_LENGTH as ALLERGENICITY_TRAINED_MIN_LENGTH,
 )
-from model_store.half_life_predictor_v1 import HalfLifeContext  # noqa: E402
+from model_store.half_life_predictor_v2 import HalfLifeContext  # noqa: E402
 from model_store.skin_sensitization_predictor_v1 import (  # noqa: E402
     DECISION_THRESHOLD as SKIN_SENSITIZATION_THRESHOLD,
     SkinSensitizationPredictor,
@@ -80,7 +80,7 @@ class CosmeticStage8(Stage8):
             ModelRef(name="skin_sensitization_predictor", version=_get_skin_sensitization_model().version),
             ModelRef(name="hemolysis_predictor", version="v2"),
             ModelRef(name="allergenicity_model", version=_get_allergenicity_model().version),
-            ModelRef(name="half_life_predictor", version="v1"),
+            ModelRef(name="half_life_predictor", version="v2"),
             ModelRef(name="cleavage_site_predictor", version="v2"),
         ]
 
@@ -106,6 +106,7 @@ class CosmeticStage8(Stage8):
 
         def reject(candidate: Candidate, reason: str) -> None:
             rejected.setdefault(reason, []).append(candidate.id)
+            self.note_rejection(reason)
             logger.info("s08_cosmetic.reject", extra={"candidate_id": candidate.id, "reason": reason})
 
         # A. Rule checks.
@@ -258,7 +259,7 @@ class CosmeticStage8(Stage8):
         if not candidates:
             return []
         model = _get_allergenicity_model()
-        # The model saw only full-length proteins, so shorter sequences are not scored: its output there is noise.
+        # Only sequences inside the model's trained length range are scored; others are recorded as not screened.
         scorable = [
             c for c in candidates
             if params.allergenicity_min_length <= len(c.sequence) <= ALLERGENICITY_MAX_LENGTH
@@ -282,7 +283,7 @@ class CosmeticStage8(Stage8):
                 continue
             candidate.predictions["allergenicity"] = {
                 "p_allergen": result["p_allergen"],
-                "members": result["members"],
+                "score": result["score"],
                 "reject_min": params.allergenicity_reject_min,
                 "status": "ok",
                 "model_version": model.version,

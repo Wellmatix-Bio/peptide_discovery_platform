@@ -1,6 +1,7 @@
 {
   "model_name": "cleavage_site_predictor_v1",
   "task": "Per-residue P1 protease cleavage-site probability for a candidate peptide (substrate), against a bundled panel of enzymes (proteases).",
+  "position_indexing": "cleavage_site_positions are 0-based indices of the P1 residue (the residue before the scissile bond) into the sequence and into per_residue_probability. Add 1 when showing a position to a person.",
   "architecture": "Shared EnzymeEncoder + ActiveSiteHead produce a pooled enzyme representation h^e; SubstrateEncoder produces per-residue substrate hidden states H^s; CleavageSiteHead gathers a +/-15-residue window of H^s around each candidate position, concatenates with h^e, and scores a per-residue logit via MLP. See architecture.py and README.md.",
   "inference_inputs_required": {
     "sequence": "candidate peptide amino-acid sequence, standard 20 AAs",

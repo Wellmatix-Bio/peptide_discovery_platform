@@ -207,6 +207,7 @@ class Stage5(CandidateStage):
             candidate.predictions["screening_verdict"] = verdict
 
             if verdict["overall"] == "reject":
+                self.note_rejection(*(k for k, v in verdict["properties"].items() if v == "reject"))
                 failed = {k: v for k, v in verdict["properties"].items() if v != "pass"}
                 logger.info(
                     "s05.reject",

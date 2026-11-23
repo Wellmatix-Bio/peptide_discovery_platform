@@ -29,7 +29,7 @@ if str(MODEL_STORE_DIR) not in sys.path:
     sys.path.insert(0, str(MODEL_STORE_DIR))
 
 from model_store.cleavage_site_predictor_v2 import CleavageSitePredictor  # noqa: E402
-from model_store.half_life_predictor_v1 import HalfLifeContext, HalfLifePredictor  # noqa: E402
+from model_store.half_life_predictor_v2 import HalfLifeContext, HalfLifePredictor  # noqa: E402
 from model_store.hemolysis_predictor_v2 import HemolysisPredictor  # noqa: E402
 
 #: Single source of the thresholds, so the run-config schema and the stage cannot drift apart.
@@ -41,7 +41,7 @@ METABOLIC_PROTEASE_ACCESSIONS = {"P27487", "P08473", "P42785"}
 STANDARD_RESIDUES = set("ACDEFGHIKLMNPQRSTVWY")
 
 # The half-life model's trained length range.
-HALF_LIFE_MIN_LENGTH = 5
+HALF_LIFE_MIN_LENGTH = 6
 HALF_LIFE_MAX_LENGTH = 50
 
 _half_life_model: HalfLifePredictor | None = None
@@ -173,6 +173,7 @@ class Stage8Metabolic(Stage8):
             candidate.predictions["safety_verdict"] = verdict
 
             if verdict["overall"] == "reject":
+                self.note_rejection(*(k for k, v in verdict["properties"].items() if v == "reject"))
                 logger.info(
                     "s08_metabolic.reject",
                     extra={
@@ -193,7 +194,7 @@ class Stage8Metabolic(Stage8):
         ] + [
             ModelRef(name="hemolysis_predictor", version="v2"),
             ModelRef(name="cleavage_site_predictor", version="v2"),
-            ModelRef(name="half_life_predictor", version="v1"),
+            ModelRef(name="half_life_predictor", version="v2"),
         ]
 
     def release_models(self) -> None:

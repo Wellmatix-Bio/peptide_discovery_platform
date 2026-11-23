@@ -1,33 +1,29 @@
 # allergenicity_predictor_v1
 
-Scores how likely a protein sequence is to be an allergen, from sequence alone.
+Scores how likely a short peptide is to bind IgE (to be an allergen epitope), from sequence alone.
 
-- **Model:** equal-weight mean of three probabilities from an RBF SVM, an LDA and an MLP, all on one mean-pooled ESM2-150M embedding. Each member's 0.5 is its own class boundary (SVM margin 0, MLP logit 0, LDA posterior 0.5), so the ensemble reads as an average vote with confidence. It is not a calibrated probability.
-- **Embedding:** `facebook/esm2_t30_150M_UR50D` from the shared `FeatureExtractor`, mean over residues with BOS/EOS excluded.
-- **Weights:** `model_store/model_weights/allergenicity_predictor_v1/` (`SVM.joblib`, `LDA.joblib`, `MLP.pt`).
-- **Input:** 20 uppercase standard amino acids, length 1-1022. Longer sequences are rejected, not truncated.
+- **Output:** `score` (0 is the decision boundary) and `p_allergen = sigmoid(score)`. It is not a calibrated probability: 0.5 is the model's own class boundary.
+- **Weights:** `model_store/model_weights/allergenicity_predictor_v1/` (ten fold files and `ensemble.json`).
+- **Input:** 20 uppercase standard amino acids, length 3-49, the trained range. Anything else is rejected.
 
 ```python
 from model_store.allergenicity_predictor_v1 import AllergenicityPredictor
 
 pred = AllergenicityPredictor()
 pred.predict_proba_batch(sequences, feature_extractor)   # list[float], P(allergen)
-pred.predict_batch(sequences, feature_extractor)         # list of {"p_allergen", "members": {svm, lda, mlp}}
+pred.predict_batch(sequences, feature_extractor)         # list of {"score", "p_allergen"}
 ```
 
-## Trained on full-length proteins
+## Training data
 
-The training data (AlgPred 2.0) holds proteins of 50-3,408 residues, median 170-345. **Nothing shorter than 50 residues was seen.** On random 3-12-residue peptides the ensemble spreads over 0.09-0.91 with 40% at or above 0.5, and the cosmetic peptide KTTKS scores 0.81, so values on peptides are not meaningful. The wrapper still scores any length (`TRAINED_MIN_LENGTH = 50` is exposed), and callers decide: cosmetic Stage 8 does not score sequences under 50 residues by default.
+IEDB IgE-binding peptides: 8,939 unique peptides of 3-49 residues (median 12), 2,725 IgE-binding and 6,214 not. Peptides are split by source allergen protein, so peptides of one protein never straddle train and test, and held-out peptides that share an 8-mer with the training side are excluded from evaluation. The label records that IgE binding was seen in an assay, not a clinical allergy.
 
-## Validation (4,030 proteins)
+## Hold-out performance (1,581 evaluable peptides, 482 IgE-binding)
 
-| Model | Sens | Spec | Acc | AUC | MCC |
+| Sens | Spec | Prec | Acc | AUC | MCC |
 |---|---|---|---|---|---|
-| SVM | 0.810 | 0.979 | 0.895 | 0.971 | 0.801 |
-| LDA | 0.807 | 0.965 | 0.886 | 0.963 | 0.782 |
-| MLP | 0.738 | 0.986 | 0.862 | 0.945 | 0.747 |
-| Ensemble (mean of probabilities) | 0.774 | 0.981 | 0.878 | 0.973 | 0.772 |
+| 0.452 | 0.881 | 0.625 | 0.750 | 0.729 | 0.370 |
 
-The notebook does not define the ensemble rule. The mean of probabilities has the best AUC of the rules tried (majority vote 0.925, mean of logits 0.971, the latter dominated by LDA's much larger scale) but does not beat SVM alone on MCC. The notebook's random forest (validation MCC 0.688) is left out.
+The deployed weights were re-fitted with the notebook's code, so they differ slightly from the notebook's cached run (AUC 0.740, MCC 0.410). Sensitivity is low at the default boundary: fewer than half of the IgE-binding peptides are flagged.
 
-Training code and metrics: `Models/Allergenicity/training.ipynb`.
+Training code and metrics: `Models/Allergenicity/training.ipynb`, export: `Models/Allergenicity/export_deployment.py`.

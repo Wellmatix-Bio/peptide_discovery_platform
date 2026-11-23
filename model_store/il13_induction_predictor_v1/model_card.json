@@ -1,0 +1,28 @@
+{
+  "model_name": "il13_induction_predictor_v1",
+  "version": "v1",
+  "status": "first version",
+  "task": "binary classification: P(peptide induces IL-13), in the training assays' context. Not secretion amount, dose-response or clinical effect.",
+  "cytokine": "IL-13",
+  "threshold": 0.5,
+  "cv_metrics_5fold_mean": {
+    "MCC": 0.282,
+    "AUROC": 0.751,
+    "AUPRC": 0.37,
+    "BalAcc": 0.611,
+    "Sensitivity": 0.259,
+    "Specificity": 0.964
+  },
+  "cv_design": "5 label-stratified folds, no CD-HIT 0.9-identity cluster crossing folds; metrics at threshold 0.5",
+  "training": {
+    "n": 3221,
+    "positive_rate": 0.097,
+    "length_min": 8,
+    "length_max": 35
+  },
+  "limits": [
+    "Very low sensitivity (0.26) at the 0.5 threshold: most true inducers are missed. The training set is 10% positive.",
+    "Applicability: predict_batch returns an `applicability` assessment per peptide (in_domain, limited_evidence or out_of_domain, with reasons) from the trained length range 8-35 and the positive/negative training counts at that exact length (info.json `domain`); sequence similarity and embedding-distribution checks are not run yet. `in_length_range` is kept.",
+    "Probabilities are not comparable across cytokines or calibrated; label is simply probability >= 0.5."
+  ]
+}

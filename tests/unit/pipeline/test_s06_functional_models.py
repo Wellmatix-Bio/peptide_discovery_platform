@@ -26,6 +26,9 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "src"))
 
 from pipeline.s06_functional_models.stage import (  # noqa: E402
+    MBIC_SUPPORTED_SPECIES,
+    MIC_SUPPORTED_ORGANISMS,
+    _selected,
     STAGE6_THRESHOLDS,
     check_pathogen_vocabulary,
     filter_predictions,
@@ -229,3 +232,17 @@ def test_each_prediction_is_read_from_the_field_its_model_actually_writes():
         functions=("angiogenesis",),
     )
     assert wrong_field["evaluated_predictions"]["angiogenic_activity"]["value"] is None
+
+
+def test_mic_and_mbic_run_only_on_the_briefs_pathogens():
+    """The brief spells organisms with underscores and the models with spaces. A plain `in` match
+    never hit, so every candidate was scored against all supported organisms."""
+    assert _selected(["Staphylococcus_aureus"], MIC_SUPPORTED_ORGANISMS) == ["Staphylococcus aureus"]
+    assert _selected(["Escherichia_coli", "Escherichia_coli"], MBIC_SUPPORTED_SPECIES) == [
+        "Escherichia coli"
+    ]
+
+
+def test_no_selected_pathogen_scores_nothing_instead_of_everything():
+    assert _selected([], MIC_SUPPORTED_ORGANISMS) == []
+    assert _selected(["Candida_auris"], MBIC_SUPPORTED_SPECIES) == []

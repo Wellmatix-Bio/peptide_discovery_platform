@@ -22,6 +22,7 @@ serialisation — is framework code and must not be overridden.
 
 from __future__ import annotations
 
+import re
 import time
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
@@ -65,6 +66,26 @@ class PreconditionError(StageError):
         super().__init__(stage, reason)
 
 
+#: Removals are tallied from this stage number on; earlier stages build the candidate pool rather than screen it.
+FIRST_COUNTED_STAGE = 5
+
+
+class RejectionTally:
+    """Run-wide removals from stage 5 on: total removed and reason -> count, summed from each stage's own counter."""
+
+    def __init__(self) -> None:
+        self.n_removed = 0
+        self.reasons: dict[str, int] = {}
+
+    def add(self, n_removed: int, reasons: dict[str, int]) -> None:
+        self.n_removed += n_removed
+        for reason, count in reasons.items():
+            self.reasons[reason] = self.reasons.get(reason, 0) + count
+
+    def as_dict(self) -> dict[str, Any]:
+        return {"n_removed": self.n_removed, "reasons": dict(self.reasons)}
+
+
 @dataclass(frozen=True)
 class RunContext:
     """Shared services handed to every stage, injected so stages can be tested against a fake context."""
@@ -81,6 +102,9 @@ class RunContext:
     objectives: ObjectiveVector | None = None
     standardized_records: list[dict[str, Any]] | None = None
     knowledge_base: KnowledgeBase | None = None
+
+    #: Filled by each candidate stage as it finishes, saved with the run's results.
+    rejections: RejectionTally = field(default_factory=RejectionTally)
 
 
 @dataclass
@@ -103,6 +127,9 @@ class CandidateStageResult:
     n_out: int
     n_removed: int
     duration_s: float
+    #: Why candidates were removed, reason -> count. One candidate can fail several checks, so the counts can add up to
+    #: more than n_removed.
+    rejection_reasons: dict[str, int] = field(default_factory=dict)
     # models_used: list[ModelRef] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
 
@@ -179,6 +206,12 @@ class CandidateStage(Stage):
     ) -> list[Candidate]:
         """Stage-specific logic. Return the surviving candidates, enriched."""
 
+    def note_rejection(self, *reasons: str) -> None:
+        """Count one removed candidate under each reason it failed; call once per removed candidate from `run()`."""
+        counts = self.__dict__.setdefault("_rejection_reasons", {})
+        for reason in reasons:
+            counts[reason] = counts.get(reason, 0) + 1
+
     def models_used(self) -> list[ModelRef]:
         """Models invoked during the last `run()`, for provenance; override in stages that call registered models."""
         return []
@@ -195,6 +228,7 @@ class CandidateStage(Stage):
 
         n_in = len(candidates)
         started = time.perf_counter()
+        self._rejection_reasons = {}
         logger.info("stage.start", extra={"stage": self.name, "n_in": n_in})
 
         try:
@@ -213,11 +247,15 @@ class CandidateStage(Stage):
             n_out=len(survivors),
             n_removed=n_in - len(survivors),
             duration_s=duration,
+            rejection_reasons=dict(self._rejection_reasons),
             # models_used=self.models_used(),
             warnings=warnings,
         )
 
         ctx.audit.record_stage(result, run_id=ctx.run_id)
+        number = re.match(r"s(\d+)_", self.name)
+        if number and int(number.group(1)) >= FIRST_COUNTED_STAGE:
+            ctx.rejections.add(result.n_removed, result.rejection_reasons)
         ctx.boundary.write(self.name, survivors, run_id=ctx.run_id)
         # self.release_models()
 
@@ -227,6 +265,7 @@ class CandidateStage(Stage):
                 "stage": self.name,
                 "n_out": result.n_out,
                 "n_removed": result.n_removed,
+                "rejection_reasons": result.rejection_reasons,
                 "duration_s": round(duration, 2),
             },
         )

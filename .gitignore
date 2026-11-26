@@ -221,3 +221,15 @@ scripts/smoke/
 structure_benchmark_out/
 tests/benchmark/
 tests/fixtures/
+deploy/run-food-local.ps1
+deploy/run-local.ps1
+deploy/run-local.ps1
+docs/FOOD_DEVELOPMENT_PLAN.md
+docs/FOOD_PIPELINE_PLAN.md
+src/pipeline/food/evidence/data/labeled_peptides_v1.csv
+src/common/food_library/data/source_records.csv
+
+# The bitterness model: its code, tests and notes stay off GitHub for now
+model_store/bitterness_predictor_v1/
+tests/unit/test_bitterness_predictor.py
+tests/unit/pipeline/test_food_bitterness_adapter.py

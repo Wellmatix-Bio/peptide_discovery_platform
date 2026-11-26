@@ -1,0 +1,280 @@
+{
+ "slots": {
+  "allergenicity": "ready",
+  "cytotoxicity": "ready",
+  "solubility": "ready",
+  "aggregation": "ready",
+  "synthesis_feasibility": "ready",
+  "bitterness": "ready"
+ },
+ "applicability_on_phase1_pool": {
+  "pool": 400,
+  "length_quantiles_min_median_max": [
+   4,
+   7,
+   40
+  ],
+  "allergenicity": {
+   "limited": 210,
+   "in_domain": 190
+  },
+  "cytotoxicity": {
+   "in_domain": 285,
+   "limited": 115
+  },
+  "solubility": {
+   "limited": 400
+  },
+  "aggregation": {
+   "limited": 285
+  },
+  "synthesis_feasibility": {
+   "limited": 400
+  },
+  "bitterness": {
+   "in_domain": 324,
+   "limited": 76
+  }
+ },
+ "allergenicity": {
+  "holdout_n": 1591,
+  "holdout_positives": 490,
+  "card_holdout": {
+   "evaluable": 1581,
+   "AUC": 0.7292,
+   "MCC": 0.3697
+  },
+  "adapter_score_vs_label": {
+   "n_good": 1101,
+   "n_bad": 490,
+   "auc_score_ranks_good_above_bad": 0.852,
+   "mean_score_good": 0.684,
+   "mean_score_bad": 0.432,
+   "specificity_at_label_threshold": 0.8955,
+   "sensitivity_at_label_threshold": 0.6347,
+   "mcc_at_label_threshold": 0.5528
+  },
+  "percentile_score_vs_label_auc": 0.8519,
+  "one_minus_p_vs_label_auc": 0.852,
+  "spearman_one_minus_p_vs_percentile": 0.9998,
+  "ks_of_scores_vs_stored_reference": 0.057,
+  "weights_train_length": {
+   "min": 3,
+   "p5": 7.0,
+   "p95": 20.0,
+   "max": 49
+  },
+  "decision_threshold_in_weights": 0.0,
+  "auc_inside_7_20": 0.8222,
+  "auc_outside_7_20": 0.8902,
+  "n_inside_7_20": 1460,
+  "calibration_of_p_allergen": [
+   {
+    "bin": "(-0.001, 0.1]",
+    "n": 31,
+    "mean_p": 0.087,
+    "observed_rate": 0.0
+   },
+   {
+    "bin": "(0.1, 0.2]",
+    "n": 231,
+    "mean_p": 0.162,
+    "observed_rate": 0.061
+   },
+   {
+    "bin": "(0.2, 0.3]",
+    "n": 366,
+    "mean_p": 0.257,
+    "observed_rate": 0.107
+   },
+   {
+    "bin": "(0.3, 0.4]",
+    "n": 315,
+    "mean_p": 0.352,
+    "observed_rate": 0.156
+   },
+   {
+    "bin": "(0.4, 0.5]",
+    "n": 229,
+    "mean_p": 0.452,
+    "observed_rate": 0.349
+   },
+   {
+    "bin": "(0.5, 0.6]",
+    "n": 157,
+    "mean_p": 0.554,
+    "observed_rate": 0.529
+   },
+   {
+    "bin": "(0.6, 0.7]",
+    "n": 133,
+    "mean_p": 0.655,
+    "observed_rate": 0.782
+   },
+   {
+    "bin": "(0.7, 0.8]",
+    "n": 63,
+    "mean_p": 0.755,
+    "observed_rate": 0.937
+   },
+   {
+    "bin": "(0.8, 1.0]",
+    "n": 66,
+    "mean_p": 0.845,
+    "observed_rate": 0.939
+   }
+  ],
+  "score_summary": {
+   "one_minus_p_quantiles_5_50_95": [
+    0.217,
+    0.647,
+    0.863
+   ],
+   "percentile_score_quantiles_5_50_95": [
+    0.051,
+    0.481,
+    0.945
+   ]
+  }
+ },
+ "bitterness": {
+  "note": "in the deployed model's training data: direction only",
+  "n_good": 72,
+  "n_bad": 72,
+  "auc_score_ranks_good_above_bad": 0.9427,
+  "mean_score_good": 0.817,
+  "mean_score_bad": 0.328,
+  "specificity_at_label_threshold": 0.9444,
+  "sensitivity_at_label_threshold": 0.75,
+  "mcc_at_label_threshold": 0.708
+ },
+ "solubility": {
+  "note": "in the model's training data: direction only; label y: 1 = soluble",
+  "n_good": 827,
+  "n_bad": 510,
+  "auc_score_ranks_good_above_bad": 0.9578,
+  "mean_score_good": 0.836,
+  "mean_score_bad": 0.277,
+  "specificity_at_label_threshold": 0.925,
+  "sensitivity_at_label_threshold": 0.8451,
+  "mcc_at_label_threshold": 0.7754
+ },
+ "synthesis_feasibility": {
+  "note": "in the model's training data: direction only; label 1 = feasible",
+  "n_good": 1540,
+  "n_bad": 231,
+  "auc_score_ranks_good_above_bad": 0.9769,
+  "mean_score_good": 0.786,
+  "mean_score_bad": 0.374,
+  "specificity_at_label_threshold": 0.9779,
+  "sensitivity_at_label_threshold": 0.7489,
+  "mcc_at_label_threshold": 0.7619
+ },
+ "aggregation": {
+  "note": "held-out split of the model's own data (sample)",
+  "split_sizes": {
+   "train": 100736,
+   "test": 10956
+  },
+  "positive_rate_test": 0.213,
+  "n_good": 1181,
+  "n_bad": 319,
+  "auc_score_ranks_good_above_bad": 0.7143,
+  "mean_score_good": 0.662,
+  "mean_score_bad": 0.507,
+  "specificity_at_label_threshold": 0.8459,
+  "sensitivity_at_label_threshold": 0.4545,
+  "mcc_at_label_threshold": 0.2978
+ },
+ "training_lengths": {
+  "allergenicity": {
+   "min": 3,
+   "p5": 7.0,
+   "p95": 20.0,
+   "max": 49
+  },
+  "aggregation": {
+   "min": 1,
+   "p5": 4.0,
+   "median": 20.0,
+   "p95": 20.0,
+   "max": 20,
+   "n": 100730
+  },
+  "solubility": {
+   "min": 7,
+   "p5": 9.0,
+   "median": 25.0,
+   "p95": 27.0,
+   "max": 43,
+   "n": 1337
+  },
+  "synthesis_feasibility_PepSySco_only": {
+   "min": 8,
+   "p5": 9.0,
+   "median": 15.0,
+   "p95": 16.0,
+   "max": 25,
+   "n": 1771
+  },
+  "bitterness_BTP720_only": {
+   "min": 2,
+   "p5": 2.0,
+   "median": 5.0,
+   "p95": 12.0,
+   "max": 17,
+   "n": 720
+  }
+ },
+ "illustrations": {
+  "cytotoxicity": {
+   "melittin (cytotoxic, haemolytic)": 0.371,
+   "LL-37 (cytotoxic at high dose)": 0.242,
+   "carnosine-like GHK": 0.59,
+   "tuftsin TKPR": 0.655,
+   "KDEL": 0.394,
+   "SAGPQGPIGPR (collagen fragment)": 0.789
+  },
+  "aggregation": {
+   "Abeta16-22 KLVFFAE (forms amyloid)": 0.755,
+   "GNNQQNY (Sup35 amyloid core)": 0.877,
+   "VQIVYK (tau amyloid core)": 0.606,
+   "KKKKKKK": null,
+   "EEEEEEE": null,
+   "GSGSGSGS": 0.636
+  }
+ },
+ "ranking_allergenicity_definition": {
+  "pool": 400,
+  "final_with_phase1_score": 25,
+  "final_with_platform_score": 25,
+  "same_peptides_in_final": 25,
+  "same_order": false,
+  "only_in_phase1_final": [],
+  "only_in_platform_final": [],
+  "rank_spearman_of_common": 0.978,
+  "pool_spearman_phase1_vs_platform_score": 0.9996,
+  "pool_score_quantiles_5_50_95": {
+   "phase1_percentile": [
+    0.001,
+    0.073,
+    0.83
+   ],
+   "platform_one_minus_p": [
+    0.069,
+    0.276,
+    0.8
+   ]
+  },
+  "allergenicity_is_the_lower_safety_score": {
+   "phase1_percentile": 368,
+   "platform_one_minus_p": 358,
+   "of": 400
+  },
+  "tiebreak_order": [
+   "model_allergenicity_score",
+   "model_cytotoxicity_score",
+   "evidence"
+  ]
+ }
+}

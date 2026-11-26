@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import time
+from collections.abc import Callable
 from dataclasses import replace
 import os
 from pathlib import Path
@@ -56,6 +57,10 @@ class ConfigError(RuntimeError):
     """Raised when a run config cannot produce a valid pipeline."""
 
 
+#: The model cards ship with the code (`model_store/<predictor>/model_card.json`); a `gs://` model store holds weights, not cards.
+CODE_MODEL_STORE = Path(__file__).resolve().parents[1] / "model_store"
+
+
 def build_run_services(
     run_id: str,
     run_dir: str,
@@ -69,7 +74,7 @@ def build_run_services(
         run_id=run_id,
         audit=AuditWriter(f"{run_dir}/audit_log.jsonl"),
         boundary=BoundaryWriter(run_dir),
-        models=ModelRegistry(model_store),
+        models=ModelRegistry(CODE_MODEL_STORE if storage.is_gcs_path(model_store) else model_store),  # a Path() of gs://... is no folder: read the cards that ship with the code
         feature_extractor=feature_extractor,
         seed=seed,
     )
@@ -78,10 +83,18 @@ def build_run_services(
 class PipelineRunner:
     """Executes setup stages, then candidate stages, for one run config."""
 
-    def __init__(self, config: RunConfig, status_path: str | None = None) -> None:
+    #: Which RunContext field each setup stage's payload fills; a pipeline with its own setup stages overrides this.
+    setup_target_fields = SETUP_STAGE_TARGET_FIELD
+
+    def __init__(
+        self,
+        config: RunConfig,
+        status_path: str | None = None,
+        stage_builder: Callable[[RunConfig], tuple[list[SetupStage], list[CandidateStage]]] = build_stages,
+    ) -> None:
         self.config = config
         self.ctx = self._build_context(config)
-        self.setup_stages, self.candidate_stages = build_stages(config)
+        self.setup_stages, self.candidate_stages = stage_builder(config)
         self._cancelled = False
         self._progress_path = status_path
 
@@ -108,7 +121,7 @@ class PipelineRunner:
             if not DEV_MODE:
                 self._update_progress(stage.name, idx / num_stages)
             result = stage.execute(self.config.for_stage(stage.name), self.ctx)
-            target_field = SETUP_STAGE_TARGET_FIELD.get(stage.name)
+            target_field = self.setup_target_fields.get(stage.name)
             if target_field is not None:
                 self.ctx = replace(self.ctx, **{target_field: result.payload})
 

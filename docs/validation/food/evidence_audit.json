@@ -1,0 +1,176 @@
+{
+ "shipped_table": {
+  "peptides": 81,
+  "columns": [
+   "sequence",
+   "length",
+   "label",
+   "label_conflict",
+   "n_observations",
+   "studies",
+   "sources",
+   "food_derivation",
+   "direction",
+   "n_pos_obs",
+   "n_neg_obs",
+   "cell_models",
+   "evidence_tier"
+  ],
+  "positive": 51,
+  "negative": 30
+ },
+ "source_rows": {
+  "labeled_rows": 120,
+  "unique_peptides": 81,
+  "positive_rows": 68,
+  "negative_rows": 52
+ },
+ "conditions_by_sheet": {
+  "BIOPEP positives": {
+   "rows": 15,
+   "concentration": 0,
+   "exposure": 0,
+   "cell_model": 0,
+   "doi": 0,
+   "source_url": 15,
+   "all_three_conditions": 0
+  },
+  "ChatGPT mining": {
+   "rows": 45,
+   "concentration": 45,
+   "exposure": 45,
+   "cell_model": 45,
+   "doi": 45,
+   "source_url": 45,
+   "all_three_conditions": 45
+  },
+  "Paper Agent Derived": {
+   "rows": 27,
+   "concentration": 0,
+   "exposure": 0,
+   "cell_model": 27,
+   "doi": 27,
+   "source_url": 0,
+   "all_three_conditions": 0
+  },
+  "Purity verified CSV": {
+   "rows": 33,
+   "concentration": 6,
+   "exposure": 4,
+   "cell_model": 33,
+   "doi": 0,
+   "source_url": 33,
+   "all_three_conditions": 4
+  }
+ },
+ "conditions_all_rows": {
+  "concentration": {
+   "present": 51,
+   "pct": 42.5
+  },
+  "exposure": {
+   "present": 49,
+   "pct": 40.8
+  },
+  "cell_model": {
+   "present": 105,
+   "pct": 87.5
+  }
+ },
+ "rows_with_all_three_conditions": {
+  "n": 49,
+  "pct": 40.8
+ },
+ "controls": {
+  "rows_with_a_control_recorded": 45,
+  "of_labeled_rows": 120,
+  "pct_of_labeled_rows": 37.5,
+  "control_types": {
+   "buffer": 20,
+   "untreated cells in matched medium": 12,
+   "assay buffer": 7,
+   "HEPES buffer": 6
+  },
+  "replicate_count_present": 45,
+  "p_value_present": 17,
+  "uncertainty_present": 2,
+  "cell_viability_present": 0,
+  "glp1_type": {
+   "active": 45
+  },
+  "workbook_has_a_positive_control_field": false,
+  "rows_without_any_control_information": 75
+ },
+ "negatives": {
+  "negative_only_peptides": 30,
+  "with_a_single_study": 30,
+  "dose_not_recorded": 4,
+  "tested_at_one_recorded_dose": 26,
+  "tested_at_two_or_more_doses": 0,
+  "with_a_control_record": 24,
+  "with_all_three_assay_conditions_in_every_row": 7,
+  "from_one_study": {
+   "PMID33396793": 19,
+   "PMID32516710": 5,
+   "PMID28326005": 4
+  },
+  "result_wording": {
+   "no_significant_change": 28,
+   "no significant change": 18,
+   "no increase": 3,
+   "no increase; lowest GLP-1 of the dipeptide groups": 1,
+   "The 2 mM GLP-1 value (59.0 pM) lacks the significance marker defined by the Table 1 footnote. The starred CCK result is a different endpoint.": 1,
+   "Figure 2b reports no significant change in total GLP-1 output versus baseline (p=0.98).": 1
+  }
+ },
+ "positives": {
+  "positive_peptides": 51,
+  "with_a_control_record": 5,
+  "database_curated_only": 14,
+  "patent_only": 20,
+  "with_all_three_assay_conditions_in_every_row": 4
+ },
+ "provenance": {
+  "study_id_present": 120,
+  "doi_present": 72,
+  "source_url_present": 93,
+  "rows_by_study_kind": {
+   "paper": 84,
+   "patent": 21,
+   "database": 15
+  },
+  "peptides_with_no_doi_in_any_row": 47,
+  "independent_studies": 30,
+  "largest_study": {
+   "PMID33396793": 39,
+   "PMID40509480": 14
+  },
+  "peptides_supported_by_one_study_only": 80
+ },
+ "consistency": {
+  "peptides_in_source_not_in_shipped_table": 0,
+  "peptides_in_shipped_table_not_in_source": 0,
+  "direction_mismatches": [],
+  "shipped_table_has_fields_for": [
+   "n_observations",
+   "studies",
+   "food_derivation",
+   "direction",
+   "n_pos_obs",
+   "n_neg_obs",
+   "cell_models",
+   "evidence_tier"
+  ],
+  "shipped_table_lacks": [
+   "dose",
+   "exposure_time",
+   "endpoint (active/total GLP-1)",
+   "control type",
+   "positive control",
+   "replicate count",
+   "effect size",
+   "viability",
+   "DOI or PMID per observation"
+  ]
+ }
+}

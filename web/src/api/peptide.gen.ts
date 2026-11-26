@@ -4,6 +4,87 @@
  */
 
 export interface paths {
+    "/api/v1/food/digestion/run": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Run Food Digestion
+         * @description Run the digestion engine now, on uploaded or library proteins, and return the theoretical fragments with their positions plus a cleavage map. It is the same engine and default
+         *     settings as stage s03 of the food pipeline, so these fragments are the ones a pipeline run starts from. Synchronous: at most 50 proteins and 30,000 residues.
+         */
+        post: operations["run_food_digestion_api_v1_food_digestion_run_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/food/digestion/settings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Food Digestion Settings
+         * @description The digestion rules, pathways and limits, with what the benchmark says about each rule. The run endpoint accepts a subset of these pathways.
+         */
+        get: operations["food_digestion_settings_api_v1_food_digestion_settings_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/food/library/proteins": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Food Library Proteins
+         * @description Browse the library. `q` matches accession, substrate id, protein name or family. Pass the `substrate_id` values to `food/create` as `library_proteins`.
+         */
+        get: operations["food_library_proteins_api_v1_food_library_proteins_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/food/library/summary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Food Library Summary
+         * @description What the food protein library holds: its release, the proteins per food source and family, and the allergen-source flags.
+         */
+        get: operations["food_library_summary_api_v1_food_library_summary_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/immunomodulation/models": {
         parameters: {
             query?: never;
@@ -35,6 +116,192 @@ export interface paths {
         put?: never;
         /** Create Job */
         post: operations["create_job_api_v1_jobs_create_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/jobs/food/create": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Create Food Job
+         * @description Start a food-peptide run: digestion, generation, screening, gut stability, ranking and a provenance check.
+         *
+         *     Two input modes. **Upload**: send `fasta` and `food_source`; every record is checked (a record that fails is reported in `rejected`, and a FASTA with no usable record is a 422),
+         *     and each record is compared with the food protein library: a protein that is not in the library is not rejected, it is reported as `not_in_library` and keeps what you supplied.
+         *     **Library**: send `library_proteins` (substrate ids from `GET /api/v1/food/library/proteins`); their family, allergen-source flag and release come from the library.
+         *     With DEV_MODE the job runs as a local process on local weights, otherwise as a Vertex AI Custom Job.
+         */
+        post: operations["create_food_job_api_v1_jobs_food_create_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/jobs/food/{job_id}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Cancel Food Job
+         * @description Stop a running food job. `cancelling` while it winds down, `failed` when it had already ended; the status route then reads `cancelled`.
+         */
+        post: operations["cancel_food_job_api_v1_jobs_food__job_id__cancel_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/jobs/food/{job_id}/dossiers/{peptide_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Food Dossier
+         * @description The review dossier of one ranked peptide: provenance, evidence, screening with applicability, gut stability, limitations, controls and an empty assay plan. `format=html` returns a readable page, `format=pdf` a PDF: an overview page, the shared-information page, then one page for the peptide.
+         */
+        get: operations["get_food_dossier_api_v1_jobs_food__job_id__dossiers__peptide_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/jobs/food/{job_id}/experiment-sheet": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Food Experiment Sheet
+         * @description CSV for the biology review: the shortlisted peptides in shortlist order, then the reference controls. Assay design, decision, reviewer and comments are left empty.
+         */
+        get: operations["get_food_experiment_sheet_api_v1_jobs_food__job_id__experiment_sheet_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/jobs/food/{job_id}/results": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Food Job Results
+         * @description The ranked peptides of a finished food run with their traceability, applicability and limitations, the shortlist and the controls. Empty until the job has succeeded.
+         */
+        get: operations["get_food_job_results_api_v1_jobs_food__job_id__results_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/jobs/food/{job_id}/review": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Food Review
+         * @description The biological approval gate of a finished run: where it stands, the current decision on each reviewed peptide, and the full history of decisions.
+         */
+        get: operations["get_food_review_api_v1_jobs_food__job_id__review_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/jobs/food/{job_id}/review/{peptide_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Put Food Review
+         * @description Save the biology lead's decision (approve, hold or reject), the reason and the reviewer for one ranked peptide. The decision is appended to the run's review log; earlier decisions stay
+         *     in the history and the latest one is current. The ranking is never changed by a review. There is no sign-in yet, so the reviewer is the name sent.
+         */
+        put: operations["put_food_review_api_v1_jobs_food__job_id__review__peptide_id__put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/jobs/food/{job_id}/shortlist-dossiers.pdf": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Food Shortlist Dossiers Pdf
+         * @description One PDF for the biology lead: an overview page of the shortlisted peptides, a page with what is the same for every peptide (controls, assay-plan cells, shared limitations), then one page per shortlisted peptide, in shortlist order.
+         */
+        get: operations["get_food_shortlist_dossiers_pdf_api_v1_jobs_food__job_id__shortlist_dossiers_pdf_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/jobs/food/{job_id}/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Food Job Status
+         * @description Same envelope as the pipeline status route; `stage` names the food stage that is running.
+         */
+        get: operations["get_food_job_status_api_v1_jobs_food__job_id__status_get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -711,6 +978,217 @@ export interface components {
             /** Result Path */
             result_path: string;
         };
+        /** DigestionCleavageMap */
+        DigestionCleavageMap: {
+            /** Length */
+            length: number;
+            /** Pathway */
+            pathway: string;
+            /**
+             * Sites
+             * @description The cut sites after the last stage of the pathway.
+             */
+            sites: components["schemas"]["DigestionSite"][];
+            /** Substrate Id */
+            substrate_id: string;
+        };
+        /** DigestionEnzyme */
+        DigestionEnzyme: {
+            /** Description */
+            description: string;
+            /** Name */
+            name: string;
+            /**
+             * Pattern
+             * @description The rule as a regular expression on the P1 residue (Expasy PeptideCutter, as encoded in pyteomics).
+             */
+            pattern: string;
+            /** Ph Range */
+            ph_range: [
+                number,
+                number
+            ];
+            /** Source */
+            source: string;
+            /**
+             * Validation
+             * @description What the protease benchmark says about the rule; see docs/validation/food/protease_validation.md.
+             */
+            validation: string;
+        };
+        /** DigestionOrigin */
+        DigestionOrigin: {
+            /** C Term */
+            c_term: string;
+            /** End In Precursor */
+            end_in_precursor: number;
+            /** End In Product */
+            end_in_product: number;
+            /** Enzymes */
+            enzymes: string[];
+            /** Is Limit Product */
+            is_limit_product: boolean;
+            /** Missed Cleavages Final */
+            missed_cleavages_final: number;
+            /** N Term */
+            n_term: string;
+            /** Pathway */
+            pathway: string;
+            /** Ph */
+            ph?: number | null;
+            /** Stage */
+            stage: string;
+            /** Start In Precursor */
+            start_in_precursor: number;
+            /** Start In Product */
+            start_in_product: number;
+            /** Substrate Id */
+            substrate_id: string;
+        };
+        /** DigestionPeptide */
+        DigestionPeptide: {
+            /** Avg Mass */
+            avg_mass: number;
+            /** Chemistry Notes */
+            chemistry_notes: string;
+            /**
+             * Is Limit Product
+             * @description True if some pathway releases it with no further cleavage site inside it.
+             */
+            is_limit_product: boolean;
+            /** Length */
+            length: number;
+            /** Mono Mass */
+            mono_mass: number;
+            /** N Origins */
+            n_origins: number;
+            /** Origins */
+            origins: components["schemas"]["DigestionOrigin"][];
+            /** Parents */
+            parents: string[];
+            /** Pathways */
+            pathways: string[];
+            /** Peptide Id */
+            peptide_id: string;
+            /** Sequence */
+            sequence: string;
+        };
+        /** DigestionRequest */
+        DigestionRequest: {
+            /**
+             * Fasta
+             * @description Upload mode: the proteins as FASTA text.
+             */
+            fasta?: string | null;
+            /**
+             * Library Proteins
+             * @description Library mode: substrate ids from GET /api/v1/food/library/proteins.
+             */
+            library_proteins?: string[] | null;
+            /**
+             * Limit
+             * @description Peptides returned per page.
+             * @default 500
+             */
+            limit: number;
+            /** Max Length */
+            max_length?: number | null;
+            /**
+             * Max Missed Cleavages
+             * @description Cleavage sites a fragment may contain; the default settings use 2.
+             */
+            max_missed_cleavages?: number | null;
+            /** Min Length */
+            min_length?: number | null;
+            /**
+             * Offset
+             * @default 0
+             */
+            offset: number;
+            /**
+             * Pathways
+             * @description Pathway ids from GET /api/v1/food/digestion/settings; all of them when omitted.
+             */
+            pathways?: string[] | null;
+        };
+        /** DigestionResponse */
+        DigestionResponse: {
+            /** Cleavage Map */
+            cleavage_map: components["schemas"]["DigestionCleavageMap"][];
+            /**
+             * Evidence Class
+             * @default THEORETICAL
+             * @constant
+             */
+            evidence_class: "THEORETICAL";
+            /** Limit */
+            limit: number;
+            /** Limitations */
+            limitations: string[];
+            /** N Origins */
+            n_origins: number;
+            /**
+             * N Peptides
+             * @description Unique peptides over all proteins and pathways.
+             */
+            n_peptides: number;
+            /** N Proteins */
+            n_proteins: number;
+            /** Offset */
+            offset: number;
+            /** Peptides */
+            peptides: components["schemas"]["DigestionPeptide"][];
+            /** Rule Validation */
+            rule_validation: {
+                [key: string]: string;
+            };
+            /** Settings */
+            settings: {
+                [key: string]: unknown;
+            };
+            /** Settings Warnings */
+            settings_warnings: string[];
+            /**
+             * Truncated
+             * @description True when more peptides exist than this page returns.
+             */
+            truncated: boolean;
+        };
+        /** DigestionSettingsResponse */
+        DigestionSettingsResponse: {
+            /** Enzymes */
+            enzymes: components["schemas"]["DigestionEnzyme"][];
+            /** Limitations */
+            limitations: string[];
+            /** Limits */
+            limits: {
+                [key: string]: unknown;
+            };
+            /**
+             * Settings
+             * @description The default digestion settings: pathways with their stages, enzymes and pH, and the length and missed-cleavage limits.
+             */
+            settings: {
+                [key: string]: unknown;
+            };
+        };
+        /** DigestionSite */
+        DigestionSite: {
+            /**
+             * Cleaved By
+             * @description stage:enzyme labels of the rules that cut here.
+             */
+            cleaved_by: string[];
+            /**
+             * P1 Position
+             * @description 1-based position of the residue before the cut.
+             */
+            p1_position: number;
+            /** P1 Residue */
+            p1_residue: string;
+            /** P1P Residue */
+            p1p_residue: string;
+        };
         /**
          * E2ERequest
          * @description The public e2e job request shape: each client-configurable stage's params flattened with its `enabled` flag; s02, s03 and s11 are absent because e2e_config.py overrides them.
@@ -723,6 +1201,459 @@ export interface components {
             s07_structure_mechanism: components["schemas"]["Stage7Request"];
             s08_safety_developability: components["schemas"]["Stage8Request"];
             s09_synthesis_cmc: components["schemas"]["Stage9Request"];
+        };
+        /** FoodCreateRequest */
+        FoodCreateRequest: {
+            /**
+             * Allergen Source
+             * @description Upload mode: whether the food source is a known allergen source, for proteins the library does not match; null when not established.
+             */
+            allergen_source?: boolean | null;
+            /**
+             * Fasta
+             * @description Upload mode: the proteins as FASTA text. Every record is checked; a record that fails is reported in `rejected`. A record that is exactly a library protein gets the library's family and allergen-source flag.
+             */
+            fasta?: string | null;
+            /**
+             * Food Source
+             * @description Upload mode: food source of the proteins whose header carries no FS=.
+             */
+            food_source?: string | null;
+            /**
+             * Library Proteins
+             * @description Library mode: substrate ids from GET /api/v1/food/library/proteins to run instead of a FASTA. Their family, allergen-source flag and release come from the library.
+             */
+            library_proteins?: string[] | null;
+            /**
+             * Request Id
+             * @description Caller's name for the run.
+             */
+            request_id: string;
+        };
+        /** FoodCreateResponse */
+        FoodCreateResponse: {
+            /**
+             * Accepted
+             * @description Protein records that passed QC and enter the run.
+             */
+            accepted: number;
+            /**
+             * Input Mode
+             * @default upload
+             * @enum {string}
+             */
+            input_mode: "upload" | "library";
+            /** Job Id */
+            job_id: string;
+            /**
+             * Library Matches
+             * @description Upload mode: each record against the library. A record that is not in the library is not rejected; it is reported here as not_in_library.
+             */
+            library_matches?: components["schemas"]["FoodLibraryMatch"][];
+            /**
+             * Rejected
+             * @description QC issues: errors skip a record, warnings keep it.
+             */
+            rejected?: components["schemas"]["FoodRejection"][];
+            /** Request Id */
+            request_id: string;
+            /** Result Path */
+            result_path: string;
+        };
+        /** FoodDossier */
+        FoodDossier: {
+            /** Assay Plan */
+            assay_plan?: {
+                [key: string]: unknown;
+            };
+            /**
+             * Chemistry
+             * @description Mass and terminal state, the predicted liabilities with their residue positions, and what is not measured. Predicted liabilities, measured chemical stability and protease susceptibility are separate.
+             */
+            chemistry?: {
+                [key: string]: unknown;
+            };
+            /**
+             * Comparison Materials
+             * @description Parent proteins, the hydrolysates they define, and reference peptides to compare with.
+             */
+            comparison_materials?: {
+                [key: string]: unknown;
+            };
+            /**
+             * Controls
+             * @description Reference positive and negative controls proposed by rule.
+             */
+            controls?: {
+                [key: string]: unknown;
+            }[];
+            /**
+             * Digestion
+             * @description Whether it is predicted or observed, and whether it is a final or an intermediate digestion product.
+             */
+            digestion?: {
+                [key: string]: unknown;
+            };
+            /**
+             * Evidence
+             * @description The evidence for the candidate and, for a designed peptide, for its template, each with its type and source; the evidence gate.
+             */
+            evidence?: {
+                [key: string]: unknown;
+            };
+            /** Evidence Class */
+            evidence_class: string;
+            /** Gut Stability */
+            gut_stability?: {
+                [key: string]: unknown;
+            };
+            /** Length */
+            length: number;
+            /**
+             * Limitations
+             * @default
+             */
+            limitations: string;
+            /**
+             * Material Class
+             * @default peptide
+             */
+            material_class: string;
+            /** Not Established */
+            not_established?: string[];
+            /** Origin Type */
+            origin_type: string;
+            /** Peptide Id */
+            peptide_id: string;
+            /** Properties */
+            properties?: {
+                [key: string]: unknown;
+            };
+            /**
+             * Provenance
+             * @description Parents, digestion path, clusters, and the template and guide of a designed peptide.
+             */
+            provenance?: {
+                [key: string]: unknown;
+            };
+            /** Rank */
+            rank: number;
+            /**
+             * Ranking
+             * @description Computational rank, Pareto front and shortlist position kept apart, with the peptide's value on each objective the run used.
+             */
+            ranking?: {
+                [key: string]: unknown;
+            };
+            /**
+             * Ranking Summary
+             * @description How the run narrowed its candidates (the same for every peptide of a run): see the results route.
+             */
+            ranking_summary?: {
+                [key: string]: unknown;
+            };
+            /**
+             * Review
+             * @description The biology lead's decision and reason; empty until they decide.
+             */
+            review?: {
+                [key: string]: unknown;
+            };
+            /**
+             * Safety Screening
+             * @description Predicted IgE binding as its own risk, the other safety models, sequence liabilities, missing predictions and applicability limits.
+             */
+            safety_screening?: {
+                [key: string]: unknown;
+            };
+            /**
+             * Screening
+             * @description Per model: score, label, applicability, detail; the safety and developability objectives and their basis.
+             */
+            screening?: {
+                [key: string]: unknown;
+            };
+            /** Sequence */
+            sequence: string;
+            /** Shortlist Position */
+            shortlist_position?: number | null;
+            /**
+             * Status
+             * @default proposed: biology lead must approve the shortlist, assay concentrations and controls
+             */
+            status: string;
+            /**
+             * Summary
+             * @description Why the peptide ranks where it does.
+             */
+            summary: string;
+        };
+        /** FoodJobResultsResponse */
+        FoodJobResultsResponse: {
+            /**
+             * Clusters
+             * @description How each protein's cluster was assigned: notes and the number of proteins per source.
+             */
+            clusters?: {
+                [key: string]: unknown;
+            };
+            /**
+             * Controls
+             * @description Reference positive and negative controls proposed by rule; the biology lead finalizes them.
+             */
+            controls?: {
+                [key: string]: unknown;
+            }[];
+            /**
+             * Digestion Warnings
+             * @description Where the digestion run again disagrees with a recorded origin of a ranked peptide; a warning only, it never fails a run.
+             */
+            digestion_warnings?: {
+                [key: string]: unknown;
+            }[];
+            /** Facts */
+            facts?: {
+                [key: string]: unknown;
+            };
+            /**
+             * Gate
+             * @description Evidence gate and diversity report of the selection, including any shortfall.
+             */
+            gate?: {
+                [key: string]: unknown;
+            };
+            /** Job Id */
+            job_id: string;
+            /**
+             * Library
+             * @description How the proteins relate to the food protein library: the mode (upload or library), the library release, and for an upload each record's match (exact_sequence, accession_sequence_differs or not_in_library).
+             */
+            library?: {
+                [key: string]: unknown;
+            };
+            /** N Final */
+            n_final?: number | null;
+            /**
+             * Peptides
+             * @description Ranked peptides, best first.
+             */
+            peptides?: components["schemas"]["FoodRankedPeptide"][];
+            /**
+             * Pipeline
+             * @default food
+             * @constant
+             */
+            pipeline: "food";
+            /**
+             * Protein Qc
+             * @description FASTA records that were skipped or warned about.
+             */
+            protein_qc?: {
+                [key: string]: unknown;
+            }[];
+            /**
+             * Provenance
+             * @description Outcome of the provenance check of the final peptides: how many were checked and any issue. A run with an issue fails, so it is normally empty.
+             */
+            provenance?: {
+                [key: string]: unknown;
+            };
+            /**
+             * Ranking Summary
+             * @description How the run narrowed its candidates: the stage counts, the hard rules and what they removed, the objectives, the selection and tie-break rules, the evidence gate and the caps, with the peptides each dropped. A value an older run did not record is null.
+             */
+            ranking_summary?: {
+                [key: string]: unknown;
+            };
+            /**
+             * Review Gate
+             * @description The biological approval gate: its status, the approved, on-hold, rejected and pending shortlisted peptides, and the rule that ranks are never changed by the review.
+             */
+            review_gate?: {
+                [key: string]: unknown;
+            };
+            /** Run Id */
+            run_id: string;
+            /**
+             * Shortlist
+             * @description The ranked peptides on the biology shortlist, in shortlist order.
+             */
+            shortlist?: components["schemas"]["FoodRankedPeptide"][];
+            /** Status */
+            status: string;
+        };
+        /** FoodLibraryMatch */
+        FoodLibraryMatch: {
+            /** Allergen Source */
+            allergen_source?: boolean | null;
+            /**
+             * Id
+             * @description The uploaded record's id.
+             */
+            id: string;
+            /** Library Substrate Id */
+            library_substrate_id?: string | null;
+            /**
+             * Message
+             * @default
+             */
+            message: string;
+            /** Protein Family */
+            protein_family?: string | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "exact_sequence" | "accession_sequence_differs" | "not_in_library";
+        };
+        /** FoodRankedPeptide */
+        FoodRankedPeptide: {
+            /**
+             * Any Parent Allergen Source
+             * @description True if a parent is an allergen source, false if none is, null if unknown.
+             */
+            any_parent_allergen_source?: boolean | null;
+            /**
+             * Applicability
+             * @description Per dimension and overall, worst case; read before the scores.
+             */
+            applicability?: {
+                [key: string]: unknown;
+            };
+            /**
+             * Cleavage
+             * @description Cut sites per protease from the Expasy rules: counts, the predicted positions per protease, the uncut-bond fraction and a statement of what it does not measure.
+             */
+            cleavage?: {
+                [key: string]: unknown;
+            };
+            /**
+             * Digestion Product Type
+             * @description FINAL_PRODUCT or INTERMEDIATE_PRODUCT for a digestion-derived peptide; null for a designed peptide.
+             */
+            digestion_product_type?: string | null;
+            /**
+             * Evidence
+             * @description Evidence for the candidate: evidence_type (EXACT_SEQUENCE, CONTAINS_REFERENCE, CONTAINED_IN_REFERENCE, SEQUENCE_SIMILARITY or NO_EVIDENCE), the evidence peptide and its source, and whether the evidence gate passed; for a designed peptide the template's evidence under template_* keys, never transferred to the candidate.
+             */
+            evidence?: {
+                [key: string]: unknown;
+            };
+            /** Evidence Class */
+            evidence_class: string;
+            /** Glp1 Classifier Status */
+            glp1_classifier_status?: string | null;
+            /** Id */
+            id: string;
+            /**
+             * Limitations
+             * @default
+             */
+            limitations: string;
+            /**
+             * Models
+             * @description Per screening model: score, label, applicability, detail. A model that did not run is absent and named in `predictions_not_run`.
+             */
+            models?: {
+                [key: string]: unknown;
+            };
+            /**
+             * Objective Values
+             * @description The peptide's value on each objective the run used (0 to 1, higher is the favourable outcome; for a model it is the ranking value, not the model's own output). Empty when the run did not record its objectives.
+             */
+            objective_values?: {
+                [key: string]: number | null;
+            };
+            /** Origin Type */
+            origin_type: string;
+            /** Parent Clusters */
+            parent_clusters?: string[];
+            /**
+             * Parents
+             * @description Every protein the peptide comes from, with position, pathway, enzymes and pH.
+             */
+            parents?: {
+                [key: string]: unknown;
+            }[];
+            /**
+             * Pareto Front
+             * @description Pareto front of the peptide in the model-stage pool (1: no pooled peptide beats it on every objective). Separate from rank and shortlist_position.
+             */
+            pareto_front?: number | null;
+            /** Predictions Not Run */
+            predictions_not_run?: string[];
+            /** Rank */
+            rank: number;
+            /**
+             * Rationale
+             * @default
+             */
+            rationale: string;
+            /**
+             * Review
+             * @description The biology lead's current decision on this peptide (decision, reason, reviewer, decided_at); null until they decide. It never changes the rank.
+             */
+            review?: {
+                [key: string]: unknown;
+            } | null;
+            /**
+             * Scores
+             * @description Objectives the ranking compared: safety (the safety models other than IgE binding), developability, digestion_plausibility, uncut_bond_fraction, evidence, coverage. uncut_bond_fraction does not measure survival in the gut.
+             */
+            scores?: {
+                [key: string]: unknown;
+            };
+            /** Sequence */
+            sequence: string;
+            /**
+             * Shortlist Position
+             * @description Position in the biology shortlist; null when the peptide is not on it.
+             */
+            shortlist_position?: number | null;
+            /**
+             * Shortlist Reason
+             * @description Why the peptide is on the shortlist or not: not eligible (its evidence), left off (a model calls it unfavourable), skipped (same family or designed-peptide limit) or not needed (list full).
+             */
+            shortlist_reason?: string | null;
+        };
+        /** FoodRejection */
+        FoodRejection: {
+            /** Code */
+            code: string;
+            /** Id */
+            id: string;
+            /** Message */
+            message: string;
+            /** Severity */
+            severity: string;
+        };
+        /** FoodReviewLogResponse */
+        FoodReviewLogResponse: {
+            /**
+             * Decisions
+             * @description The current decision on each reviewed peptide.
+             */
+            decisions: components["schemas"]["ReviewRecord"][];
+            /**
+             * Gate
+             * @description The biological approval gate: status, approved, on-hold, rejected and pending shortlisted peptides, and the rule that ranks are never changed by the review.
+             */
+            gate: {
+                [key: string]: unknown;
+            };
+            /**
+             * History
+             * @description Every decision ever saved, oldest first. Nothing is overwritten.
+             */
+            history: components["schemas"]["ReviewRecord"][];
+        };
+        /** FoodReviewSavedResponse */
+        FoodReviewSavedResponse: {
+            /** Gate */
+            gate: {
+                [key: string]: unknown;
+            };
+            record: components["schemas"]["ReviewRecord"];
         };
         /** HTTPValidationError */
         HTTPValidationError: {
@@ -896,6 +1827,81 @@ export interface components {
             status: string;
             /** Vertex State */
             vertex_state: string;
+        };
+        /** LibraryProteinInfo */
+        LibraryProteinInfo: {
+            /** Accession */
+            accession: string;
+            /**
+             * Allergen Source
+             * @description The library's flag for the source protein; not a clinical finding.
+             */
+            allergen_source?: boolean | null;
+            /**
+             * C Terminus
+             * @description State of the chain's C-terminal end: PROPEP_CLEAVED, CHAIN_JUNCTION, SEQ_END or UNANNOTATED (same codes as n_terminus).
+             */
+            c_terminus?: string | null;
+            /** Food Source */
+            food_source: string;
+            /** Kind */
+            kind: string;
+            /** Length */
+            length: number;
+            /**
+             * N Terminus
+             * @description State of the chain's N-terminal end: SIGNAL_CLEAVED, PROPEP_CLEAVED, TRANSIT_CLEAVED, INIT_MET_CLEAVED, CHAIN_JUNCTION, SEQ_START or UNANNOTATED.
+             */
+            n_terminus?: string | null;
+            /** Name */
+            name: string;
+            /** Organism */
+            organism?: string | null;
+            /** Protein Family */
+            protein_family?: string | null;
+            /** Retrieved At */
+            retrieved_at?: string | null;
+            /** Sequence Version */
+            sequence_version?: string | null;
+            /** Substrate Id */
+            substrate_id: string;
+            /** Uniprot Release */
+            uniprot_release?: string | null;
+        };
+        /** LibraryProteinsResponse */
+        LibraryProteinsResponse: {
+            /** Limit */
+            limit: number;
+            /** Offset */
+            offset: number;
+            /** Proteins */
+            proteins: components["schemas"]["LibraryProteinInfo"][];
+            /**
+             * Total
+             * @description Proteins matching the filters.
+             */
+            total: number;
+        };
+        /** LibrarySummaryResponse */
+        LibrarySummaryResponse: {
+            /** Allergen Source Flags */
+            allergen_source_flags: {
+                [key: string]: number;
+            };
+            /** By Food Source */
+            by_food_source: {
+                [key: string]: number;
+            };
+            /** Families */
+            families: {
+                [key: string]: unknown;
+            }[];
+            /** Manifest */
+            manifest: {
+                [key: string]: unknown;
+            };
+            /** Total */
+            total: number;
         };
         /**
          * MetabolicBrief
@@ -1209,6 +2215,52 @@ export interface components {
             reasons?: {
                 [key: string]: number;
             };
+        };
+        /** ReviewRecord */
+        ReviewRecord: {
+            /**
+             * Decided At
+             * @description UTC time the server saved the decision, ISO 8601.
+             */
+            decided_at: string;
+            /**
+             * Decision
+             * @enum {string}
+             */
+            decision: "approve" | "hold" | "reject";
+            /** Peptide Id */
+            peptide_id: string;
+            /**
+             * Reason
+             * @default
+             */
+            reason: string;
+            /** Reviewer */
+            reviewer: string;
+            /** Sequence */
+            sequence: string;
+        };
+        /**
+         * ReviewRequest
+         * @description One decision of the biology lead on one ranked peptide.
+         */
+        ReviewRequest: {
+            /**
+             * Decision
+             * @enum {string}
+             */
+            decision: "approve" | "hold" | "reject";
+            /**
+             * Reason
+             * @description Why. Shown in the dossier and written to the experiment sheet.
+             * @default
+             */
+            reason: string;
+            /**
+             * Reviewer
+             * @description Who decided. Free text: there is no sign-in yet.
+             */
+            reviewer: string;
         };
         /** RouteAConstraintConfig */
         RouteAConstraintConfig: {
@@ -2362,6 +3414,114 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    run_food_digestion_api_v1_food_digestion_run_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DigestionRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DigestionResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    food_digestion_settings_api_v1_food_digestion_settings_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DigestionSettingsResponse"];
+                };
+            };
+        };
+    };
+    food_library_proteins_api_v1_food_library_proteins_get: {
+        parameters: {
+            query?: {
+                food_source?: string | null;
+                family?: string | null;
+                q?: string | null;
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LibraryProteinsResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    food_library_summary_api_v1_food_library_summary_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LibrarySummaryResponse"];
+                };
+            };
+        };
+    };
     immunomodulation_models_api_v1_immunomodulation_models_get: {
         parameters: {
             query?: never;
@@ -2402,6 +3562,295 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["CreateJobResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_food_job_api_v1_jobs_food_create_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FoodCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FoodCreateResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    cancel_food_job_api_v1_jobs_food__job_id__cancel_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                job_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CancelJobResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_food_dossier_api_v1_jobs_food__job_id__dossiers__peptide_id__get: {
+        parameters: {
+            query?: {
+                format?: "json" | "html" | "pdf";
+            };
+            header?: never;
+            path: {
+                job_id: string;
+                peptide_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FoodDossier"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_food_experiment_sheet_api_v1_jobs_food__job_id__experiment_sheet_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                job_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_food_job_results_api_v1_jobs_food__job_id__results_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                job_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FoodJobResultsResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_food_review_api_v1_jobs_food__job_id__review_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                job_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FoodReviewLogResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    put_food_review_api_v1_jobs_food__job_id__review__peptide_id__put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                job_id: string;
+                peptide_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReviewRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FoodReviewSavedResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_food_shortlist_dossiers_pdf_api_v1_jobs_food__job_id__shortlist_dossiers_pdf_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                job_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_food_job_status_api_v1_jobs_food__job_id__status_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                job_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JobStatusResponse"];
                 };
             };
             /** @description Validation Error */

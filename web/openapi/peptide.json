@@ -1242,6 +1242,511 @@
         "title": "CreateJobResponse",
         "type": "object"
       },
+      "DigestionCleavageMap": {
+        "properties": {
+          "length": {
+            "title": "Length",
+            "type": "integer"
+          },
+          "pathway": {
+            "title": "Pathway",
+            "type": "string"
+          },
+          "sites": {
+            "description": "The cut sites after the last stage of the pathway.",
+            "items": {
+              "$ref": "#/components/schemas/DigestionSite"
+            },
+            "title": "Sites",
+            "type": "array"
+          },
+          "substrate_id": {
+            "title": "Substrate Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "substrate_id",
+          "pathway",
+          "length",
+          "sites"
+        ],
+        "title": "DigestionCleavageMap",
+        "type": "object"
+      },
+      "DigestionEnzyme": {
+        "properties": {
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "pattern": {
+            "description": "The rule as a regular expression on the P1 residue (Expasy PeptideCutter, as encoded in pyteomics).",
+            "title": "Pattern",
+            "type": "string"
+          },
+          "ph_range": {
+            "maxItems": 2,
+            "minItems": 2,
+            "prefixItems": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "number"
+              }
+            ],
+            "title": "Ph Range",
+            "type": "array"
+          },
+          "source": {
+            "title": "Source",
+            "type": "string"
+          },
+          "validation": {
+            "description": "What the protease benchmark says about the rule; see docs/validation/food/protease_validation.md.",
+            "title": "Validation",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "pattern",
+          "ph_range",
+          "source",
+          "description",
+          "validation"
+        ],
+        "title": "DigestionEnzyme",
+        "type": "object"
+      },
+      "DigestionOrigin": {
+        "properties": {
+          "c_term": {
+            "title": "C Term",
+            "type": "string"
+          },
+          "end_in_precursor": {
+            "title": "End In Precursor",
+            "type": "integer"
+          },
+          "end_in_product": {
+            "title": "End In Product",
+            "type": "integer"
+          },
+          "enzymes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Enzymes",
+            "type": "array"
+          },
+          "is_limit_product": {
+            "title": "Is Limit Product",
+            "type": "boolean"
+          },
+          "missed_cleavages_final": {
+            "title": "Missed Cleavages Final",
+            "type": "integer"
+          },
+          "n_term": {
+            "title": "N Term",
+            "type": "string"
+          },
+          "pathway": {
+            "title": "Pathway",
+            "type": "string"
+          },
+          "ph": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ph"
+          },
+          "stage": {
+            "title": "Stage",
+            "type": "string"
+          },
+          "start_in_precursor": {
+            "title": "Start In Precursor",
+            "type": "integer"
+          },
+          "start_in_product": {
+            "title": "Start In Product",
+            "type": "integer"
+          },
+          "substrate_id": {
+            "title": "Substrate Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "substrate_id",
+          "pathway",
+          "stage",
+          "enzymes",
+          "start_in_product",
+          "end_in_product",
+          "start_in_precursor",
+          "end_in_precursor",
+          "missed_cleavages_final",
+          "n_term",
+          "c_term",
+          "is_limit_product"
+        ],
+        "title": "DigestionOrigin",
+        "type": "object"
+      },
+      "DigestionPeptide": {
+        "properties": {
+          "avg_mass": {
+            "title": "Avg Mass",
+            "type": "number"
+          },
+          "chemistry_notes": {
+            "title": "Chemistry Notes",
+            "type": "string"
+          },
+          "is_limit_product": {
+            "description": "True if some pathway releases it with no further cleavage site inside it.",
+            "title": "Is Limit Product",
+            "type": "boolean"
+          },
+          "length": {
+            "title": "Length",
+            "type": "integer"
+          },
+          "mono_mass": {
+            "title": "Mono Mass",
+            "type": "number"
+          },
+          "n_origins": {
+            "title": "N Origins",
+            "type": "integer"
+          },
+          "origins": {
+            "items": {
+              "$ref": "#/components/schemas/DigestionOrigin"
+            },
+            "title": "Origins",
+            "type": "array"
+          },
+          "parents": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Parents",
+            "type": "array"
+          },
+          "pathways": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Pathways",
+            "type": "array"
+          },
+          "peptide_id": {
+            "title": "Peptide Id",
+            "type": "string"
+          },
+          "sequence": {
+            "title": "Sequence",
+            "type": "string"
+          }
+        },
+        "required": [
+          "peptide_id",
+          "sequence",
+          "length",
+          "mono_mass",
+          "avg_mass",
+          "pathways",
+          "n_origins",
+          "parents",
+          "is_limit_product",
+          "chemistry_notes",
+          "origins"
+        ],
+        "title": "DigestionPeptide",
+        "type": "object"
+      },
+      "DigestionRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "fasta": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Upload mode: the proteins as FASTA text.",
+            "title": "Fasta"
+          },
+          "library_proteins": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "minItems": 1,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Library mode: substrate ids from GET /api/v1/food/library/proteins.",
+            "title": "Library Proteins"
+          },
+          "limit": {
+            "default": 500,
+            "description": "Peptides returned per page.",
+            "maximum": 2000.0,
+            "minimum": 1.0,
+            "title": "Limit",
+            "type": "integer"
+          },
+          "max_length": {
+            "anyOf": [
+              {
+                "maximum": 60.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Length"
+          },
+          "max_missed_cleavages": {
+            "anyOf": [
+              {
+                "maximum": 4.0,
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Cleavage sites a fragment may contain; the default settings use 2.",
+            "title": "Max Missed Cleavages"
+          },
+          "min_length": {
+            "anyOf": [
+              {
+                "maximum": 60.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Min Length"
+          },
+          "offset": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Offset",
+            "type": "integer"
+          },
+          "pathways": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "minItems": 1,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Pathway ids from GET /api/v1/food/digestion/settings; all of them when omitted.",
+            "title": "Pathways"
+          }
+        },
+        "title": "DigestionRequest",
+        "type": "object"
+      },
+      "DigestionResponse": {
+        "properties": {
+          "cleavage_map": {
+            "items": {
+              "$ref": "#/components/schemas/DigestionCleavageMap"
+            },
+            "title": "Cleavage Map",
+            "type": "array"
+          },
+          "evidence_class": {
+            "const": "THEORETICAL",
+            "default": "THEORETICAL",
+            "title": "Evidence Class",
+            "type": "string"
+          },
+          "limit": {
+            "title": "Limit",
+            "type": "integer"
+          },
+          "limitations": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Limitations",
+            "type": "array"
+          },
+          "n_origins": {
+            "title": "N Origins",
+            "type": "integer"
+          },
+          "n_peptides": {
+            "description": "Unique peptides over all proteins and pathways.",
+            "title": "N Peptides",
+            "type": "integer"
+          },
+          "n_proteins": {
+            "title": "N Proteins",
+            "type": "integer"
+          },
+          "offset": {
+            "title": "Offset",
+            "type": "integer"
+          },
+          "peptides": {
+            "items": {
+              "$ref": "#/components/schemas/DigestionPeptide"
+            },
+            "title": "Peptides",
+            "type": "array"
+          },
+          "rule_validation": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Rule Validation",
+            "type": "object"
+          },
+          "settings": {
+            "additionalProperties": true,
+            "title": "Settings",
+            "type": "object"
+          },
+          "settings_warnings": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Settings Warnings",
+            "type": "array"
+          },
+          "truncated": {
+            "description": "True when more peptides exist than this page returns.",
+            "title": "Truncated",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "settings",
+          "settings_warnings",
+          "rule_validation",
+          "n_proteins",
+          "n_peptides",
+          "n_origins",
+          "offset",
+          "limit",
+          "truncated",
+          "peptides",
+          "cleavage_map",
+          "limitations"
+        ],
+        "title": "DigestionResponse",
+        "type": "object"
+      },
+      "DigestionSettingsResponse": {
+        "properties": {
+          "enzymes": {
+            "items": {
+              "$ref": "#/components/schemas/DigestionEnzyme"
+            },
+            "title": "Enzymes",
+            "type": "array"
+          },
+          "limitations": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Limitations",
+            "type": "array"
+          },
+          "limits": {
+            "additionalProperties": true,
+            "title": "Limits",
+            "type": "object"
+          },
+          "settings": {
+            "additionalProperties": true,
+            "description": "The default digestion settings: pathways with their stages, enzymes and pH, and the length and missed-cleavage limits.",
+            "title": "Settings",
+            "type": "object"
+          }
+        },
+        "required": [
+          "settings",
+          "enzymes",
+          "limits",
+          "limitations"
+        ],
+        "title": "DigestionSettingsResponse",
+        "type": "object"
+      },
+      "DigestionSite": {
+        "properties": {
+          "cleaved_by": {
+            "description": "stage:enzyme labels of the rules that cut here.",
+            "items": {
+              "type": "string"
+            },
+            "title": "Cleaved By",
+            "type": "array"
+          },
+          "p1_position": {
+            "description": "1-based position of the residue before the cut.",
+            "title": "P1 Position",
+            "type": "integer"
+          },
+          "p1_residue": {
+            "title": "P1 Residue",
+            "type": "string"
+          },
+          "p1p_residue": {
+            "title": "P1P Residue",
+            "type": "string"
+          }
+        },
+        "required": [
+          "p1_position",
+          "p1_residue",
+          "p1p_residue",
+          "cleaved_by"
+        ],
+        "title": "DigestionSite",
+        "type": "object"
+      },
       "E2ERequest": {
         "additionalProperties": false,
         "description": "The public e2e job request shape: each client-configurable stage's params flattened with its `enabled` flag; s02, s03 and s11 are absent because e2e_config.py overrides them.",
@@ -1278,6 +1783,751 @@
           "s09_synthesis_cmc"
         ],
         "title": "E2ERequest",
+        "type": "object"
+      },
+      "FoodCreateRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "allergen_source": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Upload mode: whether the food source is a known allergen source, for proteins the library does not match; null when not established.",
+            "title": "Allergen Source"
+          },
+          "fasta": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Upload mode: the proteins as FASTA text. Every record is checked; a record that fails is reported in `rejected`. A record that is exactly a library protein gets the library's family and allergen-source flag.",
+            "title": "Fasta"
+          },
+          "food_source": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Upload mode: food source of the proteins whose header carries no FS=.",
+            "title": "Food Source"
+          },
+          "library_proteins": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "minItems": 1,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Library mode: substrate ids from GET /api/v1/food/library/proteins to run instead of a FASTA. Their family, allergen-source flag and release come from the library.",
+            "title": "Library Proteins"
+          },
+          "request_id": {
+            "description": "Caller's name for the run.",
+            "minLength": 1,
+            "title": "Request Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "request_id"
+        ],
+        "title": "FoodCreateRequest",
+        "type": "object"
+      },
+      "FoodCreateResponse": {
+        "properties": {
+          "accepted": {
+            "description": "Protein records that passed QC and enter the run.",
+            "title": "Accepted",
+            "type": "integer"
+          },
+          "input_mode": {
+            "default": "upload",
+            "enum": [
+              "upload",
+              "library"
+            ],
+            "title": "Input Mode",
+            "type": "string"
+          },
+          "job_id": {
+            "title": "Job Id",
+            "type": "string"
+          },
+          "library_matches": {
+            "description": "Upload mode: each record against the library. A record that is not in the library is not rejected; it is reported here as not_in_library.",
+            "items": {
+              "$ref": "#/components/schemas/FoodLibraryMatch"
+            },
+            "title": "Library Matches",
+            "type": "array"
+          },
+          "rejected": {
+            "description": "QC issues: errors skip a record, warnings keep it.",
+            "items": {
+              "$ref": "#/components/schemas/FoodRejection"
+            },
+            "title": "Rejected",
+            "type": "array"
+          },
+          "request_id": {
+            "title": "Request Id",
+            "type": "string"
+          },
+          "result_path": {
+            "title": "Result Path",
+            "type": "string"
+          }
+        },
+        "required": [
+          "request_id",
+          "job_id",
+          "result_path",
+          "accepted"
+        ],
+        "title": "FoodCreateResponse",
+        "type": "object"
+      },
+      "FoodDossier": {
+        "properties": {
+          "assay_plan": {
+            "additionalProperties": true,
+            "title": "Assay Plan",
+            "type": "object"
+          },
+          "chemistry": {
+            "additionalProperties": true,
+            "description": "Mass and terminal state, the predicted liabilities with their residue positions, and what is not measured. Predicted liabilities, measured chemical stability and protease susceptibility are separate.",
+            "title": "Chemistry",
+            "type": "object"
+          },
+          "comparison_materials": {
+            "additionalProperties": true,
+            "description": "Parent proteins, the hydrolysates they define, and reference peptides to compare with.",
+            "title": "Comparison Materials",
+            "type": "object"
+          },
+          "controls": {
+            "description": "Reference positive and negative controls proposed by rule.",
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Controls",
+            "type": "array"
+          },
+          "digestion": {
+            "additionalProperties": true,
+            "description": "Whether it is predicted or observed, and whether it is a final or an intermediate digestion product.",
+            "title": "Digestion",
+            "type": "object"
+          },
+          "evidence": {
+            "additionalProperties": true,
+            "description": "The evidence for the candidate and, for a designed peptide, for its template, each with its type and source; the evidence gate.",
+            "title": "Evidence",
+            "type": "object"
+          },
+          "evidence_class": {
+            "title": "Evidence Class",
+            "type": "string"
+          },
+          "gut_stability": {
+            "additionalProperties": true,
+            "title": "Gut Stability",
+            "type": "object"
+          },
+          "length": {
+            "title": "Length",
+            "type": "integer"
+          },
+          "limitations": {
+            "default": "",
+            "title": "Limitations",
+            "type": "string"
+          },
+          "material_class": {
+            "default": "peptide",
+            "title": "Material Class",
+            "type": "string"
+          },
+          "not_established": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Not Established",
+            "type": "array"
+          },
+          "origin_type": {
+            "title": "Origin Type",
+            "type": "string"
+          },
+          "peptide_id": {
+            "title": "Peptide Id",
+            "type": "string"
+          },
+          "properties": {
+            "additionalProperties": true,
+            "title": "Properties",
+            "type": "object"
+          },
+          "provenance": {
+            "additionalProperties": true,
+            "description": "Parents, digestion path, clusters, and the template and guide of a designed peptide.",
+            "title": "Provenance",
+            "type": "object"
+          },
+          "rank": {
+            "title": "Rank",
+            "type": "integer"
+          },
+          "ranking": {
+            "additionalProperties": true,
+            "description": "Computational rank, Pareto front and shortlist position kept apart, with the peptide's value on each objective the run used.",
+            "title": "Ranking",
+            "type": "object"
+          },
+          "ranking_summary": {
+            "additionalProperties": true,
+            "description": "How the run narrowed its candidates (the same for every peptide of a run): see the results route.",
+            "title": "Ranking Summary",
+            "type": "object"
+          },
+          "review": {
+            "additionalProperties": true,
+            "description": "The biology lead's decision and reason; empty until they decide.",
+            "title": "Review",
+            "type": "object"
+          },
+          "safety_screening": {
+            "additionalProperties": true,
+            "description": "Predicted IgE binding as its own risk, the other safety models, sequence liabilities, missing predictions and applicability limits.",
+            "title": "Safety Screening",
+            "type": "object"
+          },
+          "screening": {
+            "additionalProperties": true,
+            "description": "Per model: score, label, applicability, detail; the safety and developability objectives and their basis.",
+            "title": "Screening",
+            "type": "object"
+          },
+          "sequence": {
+            "title": "Sequence",
+            "type": "string"
+          },
+          "shortlist_position": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Shortlist Position"
+          },
+          "status": {
+            "default": "proposed: biology lead must approve the shortlist, assay concentrations and controls",
+            "title": "Status",
+            "type": "string"
+          },
+          "summary": {
+            "description": "Why the peptide ranks where it does.",
+            "title": "Summary",
+            "type": "string"
+          }
+        },
+        "required": [
+          "peptide_id",
+          "sequence",
+          "length",
+          "rank",
+          "origin_type",
+          "evidence_class",
+          "summary"
+        ],
+        "title": "FoodDossier",
+        "type": "object"
+      },
+      "FoodJobResultsResponse": {
+        "properties": {
+          "clusters": {
+            "additionalProperties": true,
+            "description": "How each protein's cluster was assigned: notes and the number of proteins per source.",
+            "title": "Clusters",
+            "type": "object"
+          },
+          "controls": {
+            "description": "Reference positive and negative controls proposed by rule; the biology lead finalizes them.",
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Controls",
+            "type": "array"
+          },
+          "digestion_warnings": {
+            "description": "Where the digestion run again disagrees with a recorded origin of a ranked peptide; a warning only, it never fails a run.",
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Digestion Warnings",
+            "type": "array"
+          },
+          "facts": {
+            "additionalProperties": true,
+            "title": "Facts",
+            "type": "object"
+          },
+          "gate": {
+            "additionalProperties": true,
+            "description": "Evidence gate and diversity report of the selection, including any shortfall.",
+            "title": "Gate",
+            "type": "object"
+          },
+          "job_id": {
+            "title": "Job Id",
+            "type": "string"
+          },
+          "library": {
+            "additionalProperties": true,
+            "description": "How the proteins relate to the food protein library: the mode (upload or library), the library release, and for an upload each record's match (exact_sequence, accession_sequence_differs or not_in_library).",
+            "title": "Library",
+            "type": "object"
+          },
+          "n_final": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "N Final"
+          },
+          "peptides": {
+            "description": "Ranked peptides, best first.",
+            "items": {
+              "$ref": "#/components/schemas/FoodRankedPeptide"
+            },
+            "title": "Peptides",
+            "type": "array"
+          },
+          "pipeline": {
+            "const": "food",
+            "default": "food",
+            "title": "Pipeline",
+            "type": "string"
+          },
+          "protein_qc": {
+            "description": "FASTA records that were skipped or warned about.",
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Protein Qc",
+            "type": "array"
+          },
+          "provenance": {
+            "additionalProperties": true,
+            "description": "Outcome of the provenance check of the final peptides: how many were checked and any issue. A run with an issue fails, so it is normally empty.",
+            "title": "Provenance",
+            "type": "object"
+          },
+          "ranking_summary": {
+            "additionalProperties": true,
+            "description": "How the run narrowed its candidates: the stage counts, the hard rules and what they removed, the objectives, the selection and tie-break rules, the evidence gate and the caps, with the peptides each dropped. A value an older run did not record is null.",
+            "title": "Ranking Summary",
+            "type": "object"
+          },
+          "review_gate": {
+            "additionalProperties": true,
+            "description": "The biological approval gate: its status, the approved, on-hold, rejected and pending shortlisted peptides, and the rule that ranks are never changed by the review.",
+            "title": "Review Gate",
+            "type": "object"
+          },
+          "run_id": {
+            "title": "Run Id",
+            "type": "string"
+          },
+          "shortlist": {
+            "description": "The ranked peptides on the biology shortlist, in shortlist order.",
+            "items": {
+              "$ref": "#/components/schemas/FoodRankedPeptide"
+            },
+            "title": "Shortlist",
+            "type": "array"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "job_id",
+          "run_id",
+          "status"
+        ],
+        "title": "FoodJobResultsResponse",
+        "type": "object"
+      },
+      "FoodLibraryMatch": {
+        "properties": {
+          "allergen_source": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Allergen Source"
+          },
+          "id": {
+            "description": "The uploaded record's id.",
+            "title": "Id",
+            "type": "string"
+          },
+          "library_substrate_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Library Substrate Id"
+          },
+          "message": {
+            "default": "",
+            "title": "Message",
+            "type": "string"
+          },
+          "protein_family": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Protein Family"
+          },
+          "status": {
+            "enum": [
+              "exact_sequence",
+              "accession_sequence_differs",
+              "not_in_library"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "status"
+        ],
+        "title": "FoodLibraryMatch",
+        "type": "object"
+      },
+      "FoodRankedPeptide": {
+        "properties": {
+          "any_parent_allergen_source": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "True if a parent is an allergen source, false if none is, null if unknown.",
+            "title": "Any Parent Allergen Source"
+          },
+          "applicability": {
+            "additionalProperties": true,
+            "description": "Per dimension and overall, worst case; read before the scores.",
+            "title": "Applicability",
+            "type": "object"
+          },
+          "cleavage": {
+            "additionalProperties": true,
+            "description": "Cut sites per protease from the Expasy rules: counts, the predicted positions per protease, the uncut-bond fraction and a statement of what it does not measure.",
+            "title": "Cleavage",
+            "type": "object"
+          },
+          "digestion_product_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "FINAL_PRODUCT or INTERMEDIATE_PRODUCT for a digestion-derived peptide; null for a designed peptide.",
+            "title": "Digestion Product Type"
+          },
+          "evidence": {
+            "additionalProperties": true,
+            "description": "Evidence for the candidate: evidence_type (EXACT_SEQUENCE, CONTAINS_REFERENCE, CONTAINED_IN_REFERENCE, SEQUENCE_SIMILARITY or NO_EVIDENCE), the evidence peptide and its source, and whether the evidence gate passed; for a designed peptide the template's evidence under template_* keys, never transferred to the candidate.",
+            "title": "Evidence",
+            "type": "object"
+          },
+          "evidence_class": {
+            "title": "Evidence Class",
+            "type": "string"
+          },
+          "glp1_classifier_status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Glp1 Classifier Status"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "limitations": {
+            "default": "",
+            "title": "Limitations",
+            "type": "string"
+          },
+          "models": {
+            "additionalProperties": true,
+            "description": "Per screening model: score, label, applicability, detail. A model that did not run is absent and named in `predictions_not_run`.",
+            "title": "Models",
+            "type": "object"
+          },
+          "objective_values": {
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "description": "The peptide's value on each objective the run used (0 to 1, higher is the favourable outcome; for a model it is the ranking value, not the model's own output). Empty when the run did not record its objectives.",
+            "title": "Objective Values",
+            "type": "object"
+          },
+          "origin_type": {
+            "title": "Origin Type",
+            "type": "string"
+          },
+          "parent_clusters": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Parent Clusters",
+            "type": "array"
+          },
+          "parents": {
+            "description": "Every protein the peptide comes from, with position, pathway, enzymes and pH.",
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Parents",
+            "type": "array"
+          },
+          "pareto_front": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Pareto front of the peptide in the model-stage pool (1: no pooled peptide beats it on every objective). Separate from rank and shortlist_position.",
+            "title": "Pareto Front"
+          },
+          "predictions_not_run": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Predictions Not Run",
+            "type": "array"
+          },
+          "rank": {
+            "title": "Rank",
+            "type": "integer"
+          },
+          "rationale": {
+            "default": "",
+            "title": "Rationale",
+            "type": "string"
+          },
+          "review": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The biology lead's current decision on this peptide (decision, reason, reviewer, decided_at); null until they decide. It never changes the rank.",
+            "title": "Review"
+          },
+          "scores": {
+            "additionalProperties": true,
+            "description": "Objectives the ranking compared: safety (the safety models other than IgE binding), developability, digestion_plausibility, uncut_bond_fraction, evidence, coverage. uncut_bond_fraction does not measure survival in the gut.",
+            "title": "Scores",
+            "type": "object"
+          },
+          "sequence": {
+            "title": "Sequence",
+            "type": "string"
+          },
+          "shortlist_position": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Position in the biology shortlist; null when the peptide is not on it.",
+            "title": "Shortlist Position"
+          },
+          "shortlist_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Why the peptide is on the shortlist or not: not eligible (its evidence), left off (a model calls it unfavourable), skipped (same family or designed-peptide limit) or not needed (list full).",
+            "title": "Shortlist Reason"
+          }
+        },
+        "required": [
+          "id",
+          "sequence",
+          "rank",
+          "origin_type",
+          "evidence_class"
+        ],
+        "title": "FoodRankedPeptide",
+        "type": "object"
+      },
+      "FoodRejection": {
+        "properties": {
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "severity": {
+            "title": "Severity",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "severity",
+          "code",
+          "message"
+        ],
+        "title": "FoodRejection",
+        "type": "object"
+      },
+      "FoodReviewLogResponse": {
+        "properties": {
+          "decisions": {
+            "description": "The current decision on each reviewed peptide.",
+            "items": {
+              "$ref": "#/components/schemas/ReviewRecord"
+            },
+            "title": "Decisions",
+            "type": "array"
+          },
+          "gate": {
+            "additionalProperties": true,
+            "description": "The biological approval gate: status, approved, on-hold, rejected and pending shortlisted peptides, and the rule that ranks are never changed by the review.",
+            "title": "Gate",
+            "type": "object"
+          },
+          "history": {
+            "description": "Every decision ever saved, oldest first. Nothing is overwritten.",
+            "items": {
+              "$ref": "#/components/schemas/ReviewRecord"
+            },
+            "title": "History",
+            "type": "array"
+          }
+        },
+        "required": [
+          "gate",
+          "decisions",
+          "history"
+        ],
+        "title": "FoodReviewLogResponse",
+        "type": "object"
+      },
+      "FoodReviewSavedResponse": {
+        "properties": {
+          "gate": {
+            "additionalProperties": true,
+            "title": "Gate",
+            "type": "object"
+          },
+          "record": {
+            "$ref": "#/components/schemas/ReviewRecord"
+          }
+        },
+        "required": [
+          "record",
+          "gate"
+        ],
+        "title": "FoodReviewSavedResponse",
         "type": "object"
       },
       "HTTPValidationError": {
@@ -1711,6 +2961,211 @@
           "vertex_state"
         ],
         "title": "JobStatusResponse",
+        "type": "object"
+      },
+      "LibraryProteinInfo": {
+        "properties": {
+          "accession": {
+            "title": "Accession",
+            "type": "string"
+          },
+          "allergen_source": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The library's flag for the source protein; not a clinical finding.",
+            "title": "Allergen Source"
+          },
+          "c_terminus": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "State of the chain's C-terminal end: PROPEP_CLEAVED, CHAIN_JUNCTION, SEQ_END or UNANNOTATED (same codes as n_terminus).",
+            "title": "C Terminus"
+          },
+          "food_source": {
+            "title": "Food Source",
+            "type": "string"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "length": {
+            "title": "Length",
+            "type": "integer"
+          },
+          "n_terminus": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "State of the chain's N-terminal end: SIGNAL_CLEAVED, PROPEP_CLEAVED, TRANSIT_CLEAVED, INIT_MET_CLEAVED, CHAIN_JUNCTION, SEQ_START or UNANNOTATED.",
+            "title": "N Terminus"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "organism": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Organism"
+          },
+          "protein_family": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Protein Family"
+          },
+          "retrieved_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Retrieved At"
+          },
+          "sequence_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sequence Version"
+          },
+          "substrate_id": {
+            "title": "Substrate Id",
+            "type": "string"
+          },
+          "uniprot_release": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Uniprot Release"
+          }
+        },
+        "required": [
+          "substrate_id",
+          "accession",
+          "name",
+          "food_source",
+          "kind",
+          "length"
+        ],
+        "title": "LibraryProteinInfo",
+        "type": "object"
+      },
+      "LibraryProteinsResponse": {
+        "properties": {
+          "limit": {
+            "title": "Limit",
+            "type": "integer"
+          },
+          "offset": {
+            "title": "Offset",
+            "type": "integer"
+          },
+          "proteins": {
+            "items": {
+              "$ref": "#/components/schemas/LibraryProteinInfo"
+            },
+            "title": "Proteins",
+            "type": "array"
+          },
+          "total": {
+            "description": "Proteins matching the filters.",
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "total",
+          "offset",
+          "limit",
+          "proteins"
+        ],
+        "title": "LibraryProteinsResponse",
+        "type": "object"
+      },
+      "LibrarySummaryResponse": {
+        "properties": {
+          "allergen_source_flags": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Allergen Source Flags",
+            "type": "object"
+          },
+          "by_food_source": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "By Food Source",
+            "type": "object"
+          },
+          "families": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Families",
+            "type": "array"
+          },
+          "manifest": {
+            "additionalProperties": true,
+            "title": "Manifest",
+            "type": "object"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "manifest",
+          "total",
+          "by_food_source",
+          "families",
+          "allergen_source_flags"
+        ],
+        "title": "LibrarySummaryResponse",
         "type": "object"
       },
       "MetabolicBrief": {
@@ -2512,6 +3967,82 @@
           "n_removed"
         ],
         "title": "RejectionSummary",
+        "type": "object"
+      },
+      "ReviewRecord": {
+        "properties": {
+          "decided_at": {
+            "description": "UTC time the server saved the decision, ISO 8601.",
+            "title": "Decided At",
+            "type": "string"
+          },
+          "decision": {
+            "enum": [
+              "approve",
+              "hold",
+              "reject"
+            ],
+            "title": "Decision",
+            "type": "string"
+          },
+          "peptide_id": {
+            "title": "Peptide Id",
+            "type": "string"
+          },
+          "reason": {
+            "default": "",
+            "title": "Reason",
+            "type": "string"
+          },
+          "reviewer": {
+            "title": "Reviewer",
+            "type": "string"
+          },
+          "sequence": {
+            "title": "Sequence",
+            "type": "string"
+          }
+        },
+        "required": [
+          "peptide_id",
+          "sequence",
+          "decision",
+          "reviewer",
+          "decided_at"
+        ],
+        "title": "ReviewRecord",
+        "type": "object"
+      },
+      "ReviewRequest": {
+        "description": "One decision of the biology lead on one ranked peptide.",
+        "properties": {
+          "decision": {
+            "enum": [
+              "approve",
+              "hold",
+              "reject"
+            ],
+            "title": "Decision",
+            "type": "string"
+          },
+          "reason": {
+            "default": "",
+            "description": "Why. Shown in the dossier and written to the experiment sheet.",
+            "title": "Reason",
+            "type": "string"
+          },
+          "reviewer": {
+            "description": "Who decided. Free text: there is no sign-in yet.",
+            "minLength": 1,
+            "title": "Reviewer",
+            "type": "string"
+          }
+        },
+        "required": [
+          "decision",
+          "reviewer"
+        ],
+        "title": "ReviewRequest",
         "type": "object"
       },
       "RouteAConstraintConfig": {
@@ -4171,6 +5702,185 @@
   },
   "openapi": "3.1.0",
   "paths": {
+    "/api/v1/food/digestion/run": {
+      "post": {
+        "description": "Run the digestion engine now, on uploaded or library proteins, and return the theoretical fragments with their positions plus a cleavage map. It is the same engine and default\nsettings as stage s03 of the food pipeline, so these fragments are the ones a pipeline run starts from. Synchronous: at most 50 proteins and 30,000 residues.",
+        "operationId": "run_food_digestion_api_v1_food_digestion_run_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DigestionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DigestionResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Run Food Digestion"
+      }
+    },
+    "/api/v1/food/digestion/settings": {
+      "get": {
+        "description": "The digestion rules, pathways and limits, with what the benchmark says about each rule. The run endpoint accepts a subset of these pathways.",
+        "operationId": "food_digestion_settings_api_v1_food_digestion_settings_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DigestionSettingsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Food Digestion Settings"
+      }
+    },
+    "/api/v1/food/library/proteins": {
+      "get": {
+        "description": "Browse the library. `q` matches accession, substrate id, protein name or family. Pass the `substrate_id` values to `food/create` as `library_proteins`.",
+        "operationId": "food_library_proteins_api_v1_food_library_proteins_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "food_source",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Food Source"
+            }
+          },
+          {
+            "in": "query",
+            "name": "family",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Family"
+            }
+          },
+          {
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Q"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LibraryProteinsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Food Library Proteins"
+      }
+    },
+    "/api/v1/food/library/summary": {
+      "get": {
+        "description": "What the food protein library holds: its release, the proteins per food source and family, and the allergen-source flags.",
+        "operationId": "food_library_summary_api_v1_food_library_summary_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LibrarySummaryResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Food Library Summary"
+      }
+    },
     "/api/v1/immunomodulation/models": {
       "get": {
         "description": "What the studio's six cytokine models are: version and checksum from the model registry, performance and limits from each model card, and the per-length applicability ranges from the weights' info.json.",
@@ -4226,6 +5936,404 @@
           }
         },
         "summary": "Create Job"
+      }
+    },
+    "/api/v1/jobs/food/create": {
+      "post": {
+        "description": "Start a food-peptide run: digestion, generation, screening, gut stability, ranking and a provenance check.\n\nTwo input modes. **Upload**: send `fasta` and `food_source`; every record is checked (a record that fails is reported in `rejected`, and a FASTA with no usable record is a 422),\nand each record is compared with the food protein library: a protein that is not in the library is not rejected, it is reported as `not_in_library` and keeps what you supplied.\n**Library**: send `library_proteins` (substrate ids from `GET /api/v1/food/library/proteins`); their family, allergen-source flag and release come from the library.\nWith DEV_MODE the job runs as a local process on local weights, otherwise as a Vertex AI Custom Job.",
+        "operationId": "create_food_job_api_v1_jobs_food_create_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FoodCreateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FoodCreateResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Food Job"
+      }
+    },
+    "/api/v1/jobs/food/{job_id}/cancel": {
+      "post": {
+        "description": "Stop a running food job. `cancelling` while it winds down, `failed` when it had already ended; the status route then reads `cancelled`.",
+        "operationId": "cancel_food_job_api_v1_jobs_food__job_id__cancel_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "title": "Job Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CancelJobResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Cancel Food Job"
+      }
+    },
+    "/api/v1/jobs/food/{job_id}/dossiers/{peptide_id}": {
+      "get": {
+        "description": "The review dossier of one ranked peptide: provenance, evidence, screening with applicability, gut stability, limitations, controls and an empty assay plan. `format=html` returns a readable page, `format=pdf` a PDF: an overview page, the shared-information page, then one page for the peptide.",
+        "operationId": "get_food_dossier_api_v1_jobs_food__job_id__dossiers__peptide_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "title": "Job Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "peptide_id",
+            "required": true,
+            "schema": {
+              "title": "Peptide Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "format",
+            "required": false,
+            "schema": {
+              "default": "json",
+              "enum": [
+                "json",
+                "html",
+                "pdf"
+              ],
+              "title": "Format",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FoodDossier"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Food Dossier"
+      }
+    },
+    "/api/v1/jobs/food/{job_id}/experiment-sheet": {
+      "get": {
+        "description": "CSV for the biology review: the shortlisted peptides in shortlist order, then the reference controls. Assay design, decision, reviewer and comments are left empty.",
+        "operationId": "get_food_experiment_sheet_api_v1_jobs_food__job_id__experiment_sheet_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "title": "Job Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Food Experiment Sheet"
+      }
+    },
+    "/api/v1/jobs/food/{job_id}/results": {
+      "get": {
+        "description": "The ranked peptides of a finished food run with their traceability, applicability and limitations, the shortlist and the controls. Empty until the job has succeeded.",
+        "operationId": "get_food_job_results_api_v1_jobs_food__job_id__results_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "title": "Job Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FoodJobResultsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Food Job Results"
+      }
+    },
+    "/api/v1/jobs/food/{job_id}/review": {
+      "get": {
+        "description": "The biological approval gate of a finished run: where it stands, the current decision on each reviewed peptide, and the full history of decisions.",
+        "operationId": "get_food_review_api_v1_jobs_food__job_id__review_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "title": "Job Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FoodReviewLogResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Food Review"
+      }
+    },
+    "/api/v1/jobs/food/{job_id}/review/{peptide_id}": {
+      "put": {
+        "description": "Save the biology lead's decision (approve, hold or reject), the reason and the reviewer for one ranked peptide. The decision is appended to the run's review log; earlier decisions stay\nin the history and the latest one is current. The ranking is never changed by a review. There is no sign-in yet, so the reviewer is the name sent.",
+        "operationId": "put_food_review_api_v1_jobs_food__job_id__review__peptide_id__put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "title": "Job Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "peptide_id",
+            "required": true,
+            "schema": {
+              "title": "Peptide Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReviewRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FoodReviewSavedResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Put Food Review"
+      }
+    },
+    "/api/v1/jobs/food/{job_id}/shortlist-dossiers.pdf": {
+      "get": {
+        "description": "One PDF for the biology lead: an overview page of the shortlisted peptides, a page with what is the same for every peptide (controls, assay-plan cells, shared limitations), then one page per shortlisted peptide, in shortlist order.",
+        "operationId": "get_food_shortlist_dossiers_pdf_api_v1_jobs_food__job_id__shortlist_dossiers_pdf_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "title": "Job Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Food Shortlist Dossiers Pdf"
+      }
+    },
+    "/api/v1/jobs/food/{job_id}/status": {
+      "get": {
+        "description": "Same envelope as the pipeline status route; `stage` names the food stage that is running.",
+        "operationId": "get_food_job_status_api_v1_jobs_food__job_id__status_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "title": "Job Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobStatusResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Food Job Status"
       }
     },
     "/api/v1/jobs/immunomodulation/create": {

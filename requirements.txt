@@ -14,6 +14,7 @@ google-cloud-storage>=3.16.0,<4
 numpy>=2.4.6,<3
 pandas>=3.0.6,<4
 scikit-learn>=1.9.1,<2
+scipy>=1.15,<2
 xgboost>=3.2.0,<4
 transformers==5.18.0
 peft>=0.21.2,<1
@@ -21,7 +22,9 @@ accelerate>=1,<2
 bitsandbytes>=0.50.2,<1
 joblib>=1.6.0,<2
 tqdm>=4.70.1,<5
+reportlab>=4.4.10,<6  # PDF of the review dossiers (BSD); the job API needs it too
 biopython>=1.85,<2
+pymmseqs==1.2.0; sys_platform != "win32"  # protein clustering for the food pipeline (MIT; runs MMseqs2, MIT). Linux and macOS wheels only
 rdkit>=2025.9.1,<2027
 modlamp>=4.3.3,<5
 freesasa>=2.2.1,<3

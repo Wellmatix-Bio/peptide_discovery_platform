@@ -1,0 +1,693 @@
+{
+ "rules": {
+  "trypsin": {
+   "pattern": "([KR](?=[^P]))|((?<=W)K(?=P))|((?<=M)R(?=P))",
+   "ph_range": [
+    6.5,
+    9.0
+   ]
+  },
+  "chymotrypsin_high": {
+   "pattern": "([FY](?=[^P]))|(W(?=[^MP]))",
+   "ph_range": [
+    6.5,
+    9.0
+   ]
+  },
+  "chymotrypsin_low": {
+   "pattern": "([FLY](?=[^P]))|(W(?=[^MP]))|(M(?=[^PY]))|(H(?=[^DMPW]))",
+   "ph_range": [
+    6.5,
+    9.0
+   ]
+  },
+  "pepsin_ph1.3": {
+   "pattern": "((?<=[^HKR][^P])[^R](?=[FL][^P]))|((?<=[^HKR][^P])[FL](?=\\w[^P]))",
+   "ph_range": [
+    1.0,
+    2.0
+   ]
+  },
+  "pepsin_ph2.0": {
+   "pattern": "((?<=[^HKR][^P])[^R](?=[FLWY][^P]))|((?<=[^HKR][^P])[FLWY](?=\\w[^P]))",
+   "ph_range": [
+    2.0,
+    4.0
+   ]
+  }
+ },
+ "merops": {
+  "trypsin 1 | trypsin | strict": {
+   "substrates": 1441,
+   "sites": 7525,
+   "residues": 1110285,
+   "sensitivity": 0.9793,
+   "specificity": 0.8919,
+   "precision": 0.0582,
+   "balanced_accuracy": 0.9356,
+   "mcc": 0.2249,
+   "prevalence": 0.0068,
+   "cut_density": 0.114,
+   "sensitivity_ci95": [
+    0.9744,
+    0.983
+   ],
+   "specificity_ci95": [
+    0.8898,
+    0.8939
+   ],
+   "precision_ci95": [
+    0.0507,
+    0.0658
+   ],
+   "balanced_accuracy_ci95": [
+    0.9329,
+    0.9378
+   ],
+   "mcc_ci95": [
+    0.2095,
+    0.2396
+   ],
+   "skipped_sites": {
+    "no_sequence": 0,
+    "site_outside_sequence": 0,
+    "window_mismatch": 0
+   }
+  },
+  "trypsin 1 | trypsin | all": {
+   "substrates": 1673,
+   "sites": 8153,
+   "residues": 1199521,
+   "sensitivity": 0.9777,
+   "specificity": 0.8913,
+   "precision": 0.058,
+   "balanced_accuracy": 0.9345,
+   "mcc": 0.2241,
+   "prevalence": 0.0068,
+   "cut_density": 0.1146,
+   "sensitivity_ci95": [
+    0.9726,
+    0.9817
+   ],
+   "specificity_ci95": [
+    0.8892,
+    0.8932
+   ],
+   "precision_ci95": [
+    0.0513,
+    0.0646
+   ],
+   "balanced_accuracy_ci95": [
+    0.9316,
+    0.9368
+   ],
+   "mcc_ci95": [
+    0.2102,
+    0.2368
+   ],
+   "skipped_sites": {
+    "no_sequence": 0,
+    "site_outside_sequence": 0,
+    "window_mismatch": 0
+   }
+  },
+  "chymotrypsin A | chymotrypsin_high | strict": {
+   "substrates": 82,
+   "sites": 150,
+   "residues": 47460,
+   "sensitivity": 0.62,
+   "specificity": 0.9401,
+   "precision": 0.0318,
+   "balanced_accuracy": 0.78,
+   "mcc": 0.1306,
+   "prevalence": 0.0032,
+   "cut_density": 0.0617,
+   "sensitivity_ci95": [
+    0.5339,
+    0.6979
+   ],
+   "specificity_ci95": [
+    0.9334,
+    0.9468
+   ],
+   "precision_ci95": [
+    0.0189,
+    0.0513
+   ],
+   "balanced_accuracy_ci95": [
+    0.7368,
+    0.8185
+   ],
+   "mcc_ci95": [
+    0.0945,
+    0.1701
+   ],
+   "skipped_sites": {
+    "no_sequence": 0,
+    "site_outside_sequence": 0,
+    "window_mismatch": 0
+   }
+  },
+  "chymotrypsin A | chymotrypsin_low | strict": {
+   "substrates": 82,
+   "sites": 150,
+   "residues": 47460,
+   "sensitivity": 0.9733,
+   "specificity": 0.8201,
+   "precision": 0.0169,
+   "balanced_accuracy": 0.8967,
+   "mcc": 0.1153,
+   "prevalence": 0.0032,
+   "cut_density": 0.1824,
+   "sensitivity_ci95": [
+    0.95,
+    1.0
+   ],
+   "specificity_ci95": [
+    0.8122,
+    0.8289
+   ],
+   "precision_ci95": [
+    0.0104,
+    0.028
+   ],
+   "balanced_accuracy_ci95": [
+    0.8842,
+    0.9098
+   ],
+   "mcc_ci95": [
+    0.0908,
+    0.1485
+   ],
+   "skipped_sites": {
+    "no_sequence": 0,
+    "site_outside_sequence": 0,
+    "window_mismatch": 0
+   }
+  },
+  "chymotrypsin A | chymotrypsin_high | all": {
+   "substrates": 249,
+   "sites": 571,
+   "residues": 108163,
+   "sensitivity": 0.606,
+   "specificity": 0.9364,
+   "precision": 0.0481,
+   "balanced_accuracy": 0.7712,
+   "mcc": 0.1578,
+   "prevalence": 0.0053,
+   "cut_density": 0.0664,
+   "sensitivity_ci95": [
+    0.5631,
+    0.6533
+   ],
+   "specificity_ci95": [
+    0.9327,
+    0.9404
+   ],
+   "precision_ci95": [
+    0.0374,
+    0.0609
+   ],
+   "balanced_accuracy_ci95": [
+    0.7498,
+    0.795
+   ],
+   "mcc_ci95": [
+    0.1387,
+    0.1763
+   ],
+   "skipped_sites": {
+    "no_sequence": 0,
+    "site_outside_sequence": 0,
+    "window_mismatch": 0
+   }
+  },
+  "chymotrypsin A | chymotrypsin_low | all": {
+   "substrates": 249,
+   "sites": 571,
+   "residues": 108163,
+   "sensitivity": 0.9475,
+   "specificity": 0.8202,
+   "precision": 0.0272,
+   "balanced_accuracy": 0.8838,
+   "mcc": 0.1436,
+   "prevalence": 0.0053,
+   "cut_density": 0.1838,
+   "sensitivity_ci95": [
+    0.9303,
+    0.9652
+   ],
+   "specificity_ci95": [
+    0.8146,
+    0.8272
+   ],
+   "precision_ci95": [
+    0.0205,
+    0.0356
+   ],
+   "balanced_accuracy_ci95": [
+    0.8744,
+    0.8933
+   ],
+   "mcc_ci95": [
+    0.1251,
+    0.1644
+   ],
+   "skipped_sites": {
+    "no_sequence": 0,
+    "site_outside_sequence": 0,
+    "window_mismatch": 0
+   }
+  },
+  "pepsin A | pepsin_ph1.3 | strict": {
+   "substrates": 4,
+   "sites": 74,
+   "residues": 5960,
+   "sensitivity": 0.3649,
+   "specificity": 0.8809,
+   "precision": 0.0371,
+   "balanced_accuracy": 0.6229,
+   "mcc": 0.0831,
+   "prevalence": 0.0124,
+   "cut_density": 0.1221,
+   "sensitivity_ci95": [
+    0.3571,
+    0.5
+   ],
+   "specificity_ci95": [
+    0.8297,
+    0.937
+   ],
+   "precision_ci95": [
+    0.0084,
+    0.0541
+   ],
+   "balanced_accuracy_ci95": [
+    0.596,
+    0.6917
+   ],
+   "mcc_ci95": [
+    0.0477,
+    0.0941
+   ],
+   "skipped_sites": {
+    "no_sequence": 0,
+    "site_outside_sequence": 0,
+    "window_mismatch": 0
+   }
+  },
+  "pepsin A | pepsin_ph2.0 | strict": {
+   "substrates": 4,
+   "sites": 74,
+   "residues": 5960,
+   "sensitivity": 0.5135,
+   "specificity": 0.8607,
+   "precision": 0.0443,
+   "balanced_accuracy": 0.6871,
+   "mcc": 0.118,
+   "prevalence": 0.0124,
+   "cut_density": 0.144,
+   "sensitivity_ci95": [
+    0.4928,
+    0.875
+   ],
+   "specificity_ci95": [
+    0.807,
+    0.9195
+   ],
+   "precision_ci95": [
+    0.0105,
+    0.0651
+   ],
+   "balanced_accuracy_ci95": [
+    0.6572,
+    0.8445
+   ],
+   "mcc_ci95": [
+    0.0677,
+    0.135
+   ],
+   "skipped_sites": {
+    "no_sequence": 0,
+    "site_outside_sequence": 0,
+    "window_mismatch": 0
+   }
+  },
+  "pepsin A | pepsin_ph1.3 | all": {
+   "substrates": 5,
+   "sites": 78,
+   "residues": 6667,
+   "sensitivity": 0.3846,
+   "specificity": 0.8719,
+   "precision": 0.0343,
+   "balanced_accuracy": 0.6283,
+   "mcc": 0.0817,
+   "prevalence": 0.0117,
+   "cut_density": 0.1311,
+   "sensitivity_ci95": [
+    0.359,
+    0.6429
+   ],
+   "specificity_ci95": [
+    0.815,
+    0.9221
+   ],
+   "precision_ci95": [
+    0.0095,
+    0.0508
+   ],
+   "balanced_accuracy_ci95": [
+    0.6003,
+    0.7568
+   ],
+   "mcc_ci95": [
+    0.0514,
+    0.0929
+   ],
+   "skipped_sites": {
+    "no_sequence": 0,
+    "site_outside_sequence": 0,
+    "window_mismatch": 0
+   }
+  },
+  "pepsin A | pepsin_ph2.0 | all": {
+   "substrates": 5,
+   "sites": 78,
+   "residues": 6667,
+   "sensitivity": 0.5256,
+   "specificity": 0.8476,
+   "precision": 0.0392,
+   "balanced_accuracy": 0.6866,
+   "mcc": 0.1104,
+   "prevalence": 0.0117,
+   "cut_density": 0.1567,
+   "sensitivity_ci95": [
+    0.4965,
+    0.8182
+   ],
+   "specificity_ci95": [
+    0.7802,
+    0.9023
+   ],
+   "precision_ci95": [
+    0.0112,
+    0.061
+   ],
+   "balanced_accuracy_ci95": [
+    0.657,
+    0.8277
+   ],
+   "mcc_ci95": [
+    0.075,
+    0.1314
+   ],
+   "skipped_sites": {
+    "no_sequence": 0,
+    "site_outside_sequence": 0,
+    "window_mismatch": 0
+   }
+  }
+ },
+ "yeast_pepsin": {
+  "pepsin A yeast primary | pepsin_ph1.3": {
+   "substrates": 663,
+   "sites": 2741,
+   "residues": 31468,
+   "sensitivity": 0.5648,
+   "specificity": 0.8574,
+   "precision": 0.2743,
+   "balanced_accuracy": 0.7111,
+   "mcc": 0.3103,
+   "prevalence": 0.0871,
+   "cut_density": 0.1794,
+   "sensitivity_ci95": [
+    0.5404,
+    0.5908
+   ],
+   "specificity_ci95": [
+    0.8507,
+    0.8635
+   ],
+   "precision_ci95": [
+    0.2523,
+    0.2937
+   ],
+   "balanced_accuracy_ci95": [
+    0.7,
+    0.7233
+   ],
+   "mcc_ci95": [
+    0.2936,
+    0.3253
+   ]
+  },
+  "pepsin A yeast primary | pepsin_ph2.0": {
+   "substrates": 663,
+   "sites": 2741,
+   "residues": 31468,
+   "sensitivity": 0.6582,
+   "specificity": 0.8204,
+   "precision": 0.259,
+   "balanced_accuracy": 0.7393,
+   "mcc": 0.3251,
+   "prevalence": 0.0871,
+   "cut_density": 0.2213,
+   "sensitivity_ci95": [
+    0.6357,
+    0.6832
+   ],
+   "specificity_ci95": [
+    0.8135,
+    0.8269
+   ],
+   "precision_ci95": [
+    0.2391,
+    0.2787
+   ],
+   "balanced_accuracy_ci95": [
+    0.7284,
+    0.751
+   ],
+   "mcc_ci95": [
+    0.3091,
+    0.3393
+   ]
+  },
+  "pepsin A yeast secondary | pepsin_ph1.3": {
+   "substrates": 667,
+   "sites": 4840,
+   "residues": 328508,
+   "sensitivity": 0.5221,
+   "specificity": 0.815,
+   "precision": 0.0405,
+   "balanced_accuracy": 0.6685,
+   "mcc": 0.1035,
+   "prevalence": 0.0147,
+   "cut_density": 0.19,
+   "sensitivity_ci95": [
+    0.5039,
+    0.5415
+   ],
+   "specificity_ci95": [
+    0.8105,
+    0.819
+   ],
+   "precision_ci95": [
+    0.0349,
+    0.0462
+   ],
+   "balanced_accuracy_ci95": [
+    0.6588,
+    0.6784
+   ],
+   "mcc_ci95": [
+    0.0941,
+    0.1123
+   ]
+  },
+  "pepsin A yeast secondary | pepsin_ph2.0": {
+   "substrates": 667,
+   "sites": 4840,
+   "residues": 328508,
+   "sensitivity": 0.6099,
+   "specificity": 0.7635,
+   "precision": 0.0371,
+   "balanced_accuracy": 0.6867,
+   "mcc": 0.105,
+   "prevalence": 0.0147,
+   "cut_density": 0.242,
+   "sensitivity_ci95": [
+    0.591,
+    0.6293
+   ],
+   "specificity_ci95": [
+    0.7582,
+    0.7685
+   ],
+   "precision_ci95": [
+    0.032,
+    0.0423
+   ],
+   "balanced_accuracy_ci95": [
+    0.6766,
+    0.6963
+   ],
+   "mcc_ci95": [
+    0.0957,
+    0.1143
+   ]
+  }
+ },
+ "terminal_context": {
+  "trypsin": {
+   "4": {
+    "cuttable_bonds": 3,
+    "internal_bonds": 3
+   },
+   "6": {
+    "cuttable_bonds": 5,
+    "internal_bonds": 5
+   },
+   "8": {
+    "cuttable_bonds": 7,
+    "internal_bonds": 7
+   },
+   "10": {
+    "cuttable_bonds": 9,
+    "internal_bonds": 9
+   },
+   "15": {
+    "cuttable_bonds": 14,
+    "internal_bonds": 14
+   },
+   "20": {
+    "cuttable_bonds": 19,
+    "internal_bonds": 19
+   },
+   "40": {
+    "cuttable_bonds": 39,
+    "internal_bonds": 39
+   }
+  },
+  "chymotrypsin_high": {
+   "4": {
+    "cuttable_bonds": 3,
+    "internal_bonds": 3
+   },
+   "6": {
+    "cuttable_bonds": 5,
+    "internal_bonds": 5
+   },
+   "8": {
+    "cuttable_bonds": 7,
+    "internal_bonds": 7
+   },
+   "10": {
+    "cuttable_bonds": 9,
+    "internal_bonds": 9
+   },
+   "15": {
+    "cuttable_bonds": 14,
+    "internal_bonds": 14
+   },
+   "20": {
+    "cuttable_bonds": 19,
+    "internal_bonds": 19
+   },
+   "40": {
+    "cuttable_bonds": 39,
+    "internal_bonds": 39
+   }
+  },
+  "chymotrypsin_low": {
+   "4": {
+    "cuttable_bonds": 3,
+    "internal_bonds": 3
+   },
+   "6": {
+    "cuttable_bonds": 5,
+    "internal_bonds": 5
+   },
+   "8": {
+    "cuttable_bonds": 7,
+    "internal_bonds": 7
+   },
+   "10": {
+    "cuttable_bonds": 9,
+    "internal_bonds": 9
+   },
+   "15": {
+    "cuttable_bonds": 14,
+    "internal_bonds": 14
+   },
+   "20": {
+    "cuttable_bonds": 19,
+    "internal_bonds": 19
+   },
+   "40": {
+    "cuttable_bonds": 39,
+    "internal_bonds": 39
+   }
+  },
+  "pepsin_ph1.3": {
+   "4": {
+    "cuttable_bonds": 0,
+    "internal_bonds": 3
+   },
+   "6": {
+    "cuttable_bonds": 2,
+    "internal_bonds": 5
+   },
+   "8": {
+    "cuttable_bonds": 4,
+    "internal_bonds": 7
+   },
+   "10": {
+    "cuttable_bonds": 6,
+    "internal_bonds": 9
+   },
+   "15": {
+    "cuttable_bonds": 11,
+    "internal_bonds": 14
+   },
+   "20": {
+    "cuttable_bonds": 16,
+    "internal_bonds": 19
+   },
+   "40": {
+    "cuttable_bonds": 36,
+    "internal_bonds": 39
+   }
+  },
+  "pepsin_ph2.0": {
+   "4": {
+    "cuttable_bonds": 0,
+    "internal_bonds": 3
+   },
+   "6": {
+    "cuttable_bonds": 2,
+    "internal_bonds": 5
+   },
+   "8": {
+    "cuttable_bonds": 4,
+    "internal_bonds": 7
+   },
+   "10": {
+    "cuttable_bonds": 6,
+    "internal_bonds": 9
+   },
+   "15": {
+    "cuttable_bonds": 11,
+    "internal_bonds": 14
+   },
+   "20": {
+    "cuttable_bonds": 16,
+    "internal_bonds": 19
+   },
+   "40": {
+    "cuttable_bonds": 36,
+    "internal_bonds": 39
+   }
+  }
+ }
+}

@@ -19,6 +19,8 @@ dependencies = [
     "numpy>=2.4.6",
     "pandas>=3.0.6",
     "scikit-learn>=1.9.1",
+    "scipy>=1.15",
+    "pymmseqs==1.2.0; sys_platform != 'win32'",  # protein clustering for the food pipeline (MIT; Linux and macOS wheels only)
     "xgboost>=3.2.0",
     "transformers>=5.18.0",
     "peft>=0.21.2",
@@ -26,6 +28,7 @@ dependencies = [
     "bitsandbytes>=0.50.2",
     "joblib>=1.6.0",
     "tqdm>=4.70.1",
+    "reportlab>=4.4.10",  # PDF of the food review dossiers (BSD)
     # Sequence / structure biology
     "biopython>=1.88",
     "modlamp>=4.3.3",
@@ -42,6 +45,7 @@ dependencies = [
 [project.optional-dependencies]
 dev = [
     "pytest>=9.1.1",
+    "pypdf>=6,<7",  # reads the dossier PDF back in its tests (BSD)
 ]
 # COPYLEFT, and deliberately not a default. This project is Apache-2.0 and requires neither of
 # these; the pipeline reports the screens they enable as not run when they are absent, never as

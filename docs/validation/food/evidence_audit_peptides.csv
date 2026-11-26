@@ -1,0 +1,82 @@
+sequence,rows,pos_rows,neg_rows,studies,n_studies,study_kinds,distinct_doses,rows_with_all_conditions,has_control_record,has_doi,label_in_shipped_table,direction_in_shipped_table
+AEKTKIP,1,0,1,EP3916006A1,1,patent,1,0,False,False,0,negative
+AGPQGPIGPR,2,0,2,PMID33396793,1,paper,1,1,True,True,0,negative
+AIRGCRL,1,1,0,PMID:40528814,1,paper,0,0,False,False,1,positive
+ANVST,1,1,0,BIOPEP 9331,1,database,0,0,False,False,1,positive
+APDSGNFR,7,7,0,PMID40509480,1,paper,3,6,True,True,1,positive
+ASCNGVCSPFEMPPCGSSACRCIPVGLVVGYCRHPSG,1,1,0,PMID40550800,1,paper,0,0,False,True,1,positive
+DLVDK,2,0,2,PMID33396793,1,paper,1,1,True,True,0,negative
+DSKPGSL,2,0,2,PMID33396793,1,paper,1,1,True,True,0,negative
+DVSGGYDE,2,0,2,PMID33396793,1,paper,1,1,True,True,0,negative
+EAPLNPK,2,0,2,PMID33396793,1,paper,1,1,True,True,0,negative
+ELLK,2,0,2,PMID33396793,1,paper,1,1,True,True,0,negative
+EQRLGNQWAVGHLM,1,1,0,PMID:31984675; PMCID:PMC6983481; DOI:10.14814/phy2.14352,1,paper,1,1,False,False,1,positive
+EVLSQ,2,0,2,PMID33396793,1,paper,1,1,True,True,0,negative
+FFPALLSL,1,1,0,BIOPEP 11464,1,database,0,0,False,False,1,positive
+FRTATGAV,1,0,1,PMID32516710,1,paper,1,1,True,True,0,negative
+GATGPAGAV,2,0,2,PMID33396793,1,paper,1,1,True,True,0,negative
+GPFPLPD,7,7,0,PMID40509480,1,paper,3,6,True,True,1,positive
+HIHVNGA,2,0,2,PMID33396793,1,paper,1,1,True,True,0,negative
+HSDAVFTDNYTRLRKQMAVKKYLNSILN,1,0,1,PMID:31984675; PMCID:PMC6983481; DOI:10.14814/phy2.14352,1,paper,1,1,False,False,0,negative
+IL,1,0,1,PMID28326005,1,paper,0,0,False,True,0,negative
+IPAVFK,1,1,0,EP3916006A1,1,patent,0,0,False,False,1,positive
+KAAVT,1,1,0,BIOPEP 9333,1,database,0,0,False,False,1,positive
+KQGDVIALPA,1,1,0,CN121045334B / HK40128519B,1,patent,0,0,False,False,1,positive
+LAHMGPY,1,1,0,BIOPEP 11627,1,database,0,0,False,False,1,positive
+LEL,2,0,2,PMID33396793,1,paper,1,1,True,True,0,negative
+LGME,2,0,2,PMID33396793,1,paper,1,1,True,True,0,negative
+LGVDE,2,0,2,PMID33396793,1,paper,1,1,True,True,0,negative
+LI,1,0,1,PMID28326005,1,paper,0,0,False,True,0,negative
+LIVTQTM,1,1,0,EP3916006A1,1,patent,0,0,False,False,1,positive
+LKLKLL,1,1,0,PMID:42473065,1,paper,0,0,False,False,1,positive
+LKPT,3,3,0,BIOPEP 9934;PMID33396793,2,database;paper,1,1,True,True,1,positive
+LLMMK,2,0,2,PMID33396793,1,paper,1,1,True,True,0,negative
+LLP,1,0,1,PMID32516710,1,paper,1,1,True,True,0,negative
+LPPLQPAVMVPF,1,1,0,BIOPEP 11462,1,database,0,0,False,False,1,positive
+LQAFEPLR,1,1,0,CN122167528A,1,patent,0,0,False,False,1,positive
+LTDY,2,0,2,PMID33396793,1,paper,1,1,True,True,0,negative
+LTLL,1,1,0,WO2021083958A1,1,patent,0,0,False,False,1,positive
+LV,1,0,1,PMID28326005,1,paper,0,0,False,True,0,negative
+MAADIISTIGDLVKWIIDTVNKFKK,1,1,0,PMID:32188864,1,paper,1,0,False,False,1,positive
+MLPYPLPFCW,1,1,0,BIOPEP 11463,1,database,0,0,False,False,1,positive
+NDQRGEII,1,1,0,CN121045334B / HK40128519B,1,patent,0,0,False,False,1,positive
+NWYYPPQ,1,1,0,BIOPEP 11461,1,database,0,0,False,False,1,positive
+PAAVRSPAQILQ,1,1,0,EP3916006A1,1,patent,0,0,False,False,1,positive
+PEEHPT,2,0,2,PMID33396793,1,paper,1,1,True,True,0,negative
+PFL,1,1,0,PMID32516710,1,paper,1,1,True,True,1,positive
+PFVQQQQ,1,1,0,CN121045334B / HK40128519B,1,patent,0,0,False,False,1,positive
+PPPWQ,1,1,0,BIOPEP 11459,1,database,0,0,False,False,1,positive
+PQLAPF,1,1,0,BIOPEP 11466,1,database,0,0,False,False,1,positive
+PSEQYQPYPEQQEPFVQ,1,1,0,CN121045334B / HK40128519B,1,patent,0,0,False,False,1,positive
+PSLVH,2,0,2,PMID33396793,1,paper,1,1,True,True,0,negative
+PYPILP,1,1,0,BIOPEP 11460,1,database,0,0,False,False,1,positive
+QLLQPQLQ,1,1,0,CN122167528A,1,patent,0,0,False,False,1,positive
+RADHPFL,1,0,1,PMID32516710,1,paper,1,1,True,True,0,negative
+RADTYNPR,1,1,0,CN122167528A,1,patent,0,0,False,False,1,positive
+RYLG,1,1,0,EP3916006A1,1,patent,0,0,False,False,1,positive
+RYLGY,1,1,0,EP3916006A1,1,patent,0,0,False,False,1,positive
+RYLGYLE,1,1,0,EP3916006A1,1,patent,0,0,False,False,1,positive
+SAGPQGPIGPR,1,0,1,PMID33396793,1,paper,1,1,True,True,0,negative
+SRYPS,1,1,0,EP3916006A1,1,patent,0,0,False,False,1,positive
+TAGWNIPMGL,1,1,0,BIOPEP 11465,1,database,0,0,False,False,1,positive
+TKAVEH,1,1,0,BIOPEP 9332,1,database,0,0,False,False,1,positive
+VAHPAPYF,1,1,0,BIOPEP 11626,1,database,0,0,False,False,1,positive
+VAPEEHPT,2,0,2,PMID33396793,1,paper,1,1,True,True,0,negative
+VAWRNRCKGTD,1,1,0,EP3916006A1,1,patent,0,0,False,False,1,positive
+VDGL,1,1,0,WO2021083958A1,1,patent,0,0,False,False,1,positive
+VL,1,0,1,PMID28326005,1,paper,0,0,False,True,0,negative
+VLLPD,1,0,1,PMID32516710,1,paper,1,1,True,True,0,negative
+VLLPDEVSGL,1,0,1,PMID32516710,1,paper,1,1,True,True,0,negative
+VLPL,1,1,0,WO2021083958A1,1,patent,0,0,False,False,1,positive
+VPIDVDKTKVHNVEPVESARIEPPDTGLYYDEYLKQVIEVLETDPHFREKLQKADIEEIRSGRLSQELDLVSHKVRTRLDEL,1,1,0,PMID:25930999; DOI:10.1016/j.bbrc.2015.04.100,1,paper,1,1,False,False,1,positive
+VPLM,1,1,0,WO2021083958A1,1,patent,0,0,False,False,1,positive
+VPSIHDLF,1,1,0,BIOPEP 11628,1,database,0,0,False,False,1,positive
+VVEP,2,0,2,PMID33396793,1,paper,1,1,True,True,0,negative
+WARGCRL,1,1,0,PMID:40528814,1,paper,0,0,False,False,1,positive
+WIAGCRL,1,1,0,PMID:40528814,1,paper,0,0,False,False,1,positive
+WIRACRL,1,1,0,PMID:40528814,1,paper,0,0,False,False,1,positive
+WIRGARL,1,1,0,PMID:40528814,1,paper,0,0,False,False,1,positive
+WIRGCRA,1,1,0,PMID:40528814,1,paper,0,0,False,False,1,positive
+WIRGCRL,8,4,4,PMID40528814,1,paper,1,7,True,True,1,mixed
+WRNRCKGTD,1,1,0,EP3916006A1,1,patent,0,0,False,False,1,positive
+YAEGTFISDYSIAMDKIRQQDFVNWLLAQKGKKNDWKHNLTQ,1,1,0,PMID:31984675; PMCID:PMC6983481; DOI:10.14814/phy2.14352,1,paper,1,1,False,False,1,positive

@@ -1,6 +1,7 @@
 """Start and inspect complete-pipeline Vertex AI Custom Jobs."""
 
 import hashlib
+import dataclasses
 import json
 import os
 import re
@@ -8,11 +9,14 @@ import statistics
 import logging
 import subprocess
 import sys
+import tempfile
 import time
+from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
 from typing import Annotated, Literal, Union
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Query
+from fastapi.responses import HTMLResponse, Response
 from google.api_core.exceptions import GoogleAPICallError, NotFound
 from google.auth.exceptions import GoogleAuthError
 from pydantic import (
@@ -24,6 +28,12 @@ from pydantic import (
     model_validator,
 )
 from common import storage
+from common.food_digestion.engine import run as run_digestion
+from common.food_digestion.rules import build_registry as digestion_registry
+from common.food_digestion.settings import DEFAULT_SETTINGS as DIGESTION_DEFAULT_SETTINGS
+from common.food_digestion.validation import LIMITATIONS as DIGESTION_LIMITATIONS, RULE_VALIDATION
+from common.food_library import Match as LibraryMatchResult, UnknownLibraryProteins, library as food_library
+from common.protein_fasta import read_fasta as read_protein_fasta
 
 # Imported for its side effect: common/env.py loads .env into os.environ; do not remove as unused.
 from common import env  # noqa: F401
@@ -34,6 +44,9 @@ from common.applicability import NOT_CHECKED, ReferenceProfile
 from common.sequence_utils import parse_sequence_items
 from schemas.brief import Brief, CosmeticBrief, MetabolicBrief
 from schemas.e2e_config import validate_job_config
+from schemas.food_run_config import FOOD_REQUIRED_WEIGHT_FILES, FoodRunConfig
+from schemas.food_dossier import (FoodDossier, ReviewRecord, ReviewRequest, build_dossier, dossier_html, experiment_sheet_csv, gate_summary, latest, new_record, parse_log, ranking_summary)
+from schemas.food_dossier_pdf import dossier_pdf
 from schemas.immuno_config import CYTOKINE_MODELS, DEFAULT_BATCH_SIZE, IMMUNO_MAX_PEPTIDES, REQUIRED_WEIGHT_FILES, ImmunoRunConfig
 from schemas.stage_configs import CosmeticE2ERequest, E2ERequest, MetabolicE2ERequest, resolve_params
 
@@ -369,6 +382,7 @@ class ImmunoCreateResponse(CreateJobResponse):
 LOCAL_JOB_PREFIX = "projects/local/locations/local/customJobs/"
 _REPO = Path(__file__).resolve().parents[3]
 _local_processes: dict[str, subprocess.Popen] = {}
+_local_cancelled: set[str] = set()  # run ids a client cancelled: their status reads cancelled, not failed
 
 
 def _local_artifacts() -> str:
@@ -632,6 +646,8 @@ def _local_immunomodulation_status(name: str) -> JobStatusResponse:
         vertex_state = "JOB_STATE_FAILED"
     else:
         vertex_state = "JOB_STATE_RUNNING"  # unknown: no process handle and no verdict from the worker
+    if run_id in _local_cancelled:
+        vertex_state = "JOB_STATE_CANCELLED"  # a client asked for it to stop; the process may still be winding down
     return JobStatusResponse(
         job_id=name,
         status=worker_status or "pending",
@@ -712,8 +728,730 @@ def cancel_immunomodulation_job(job_id: str):
         if process is None or process.poll() is not None:
             return {"job_id": name, "status": "failed"}  # not started by this API process, or already over
         process.terminate()
+        _local_cancelled.add(_run_id_from_job_id(name))
         return {"job_id": name, "status": "cancelling"}
     return cancel_job(job_id)
+
+
+class FoodCreateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    request_id: str = Field(min_length=1, description="Caller's name for the run.")
+    fasta: str | None = Field(
+        default=None, min_length=1,
+        description="Upload mode: the proteins as FASTA text. Every record is checked; a record that fails is reported in `rejected`. A record that is exactly a library protein gets the library's family and allergen-source flag.",
+    )
+    library_proteins: list[str] | None = Field(
+        default=None, min_length=1,
+        description="Library mode: substrate ids from GET /api/v1/food/library/proteins to run instead of a FASTA. Their family, allergen-source flag and release come from the library.",
+    )
+    food_source: str | None = Field(default=None, min_length=1, description="Upload mode: food source of the proteins whose header carries no FS=.")
+    allergen_source: bool | None = Field(
+        default=None, description="Upload mode: whether the food source is a known allergen source, for proteins the library does not match; null when not established."
+    )
+
+    @model_validator(mode="after")
+    def _one_input(self):
+        if (self.fasta is None) == (self.library_proteins is None):
+            raise ValueError("send either fasta (upload mode) or library_proteins (library mode), not both and not neither")
+        if self.fasta is not None and not self.food_source:
+            raise ValueError("food_source is required with a fasta")
+        if self.library_proteins is not None and (self.food_source or self.allergen_source is not None):
+            raise ValueError("with library_proteins, food source and allergen status come from the library; do not send them")
+        return self
+
+
+class FoodRejection(BaseModel):
+    id: str
+    severity: str
+    code: str
+    message: str
+
+
+class FoodLibraryMatch(BaseModel):
+    id: str = Field(description="The uploaded record's id.")
+    status: Literal["exact_sequence", "accession_sequence_differs", "not_in_library"]
+    library_substrate_id: str | None = None
+    protein_family: str | None = None
+    allergen_source: bool | None = None
+    message: str = ""
+
+
+class FoodCreateResponse(CreateJobResponse):
+    accepted: int = Field(description="Protein records that passed QC and enter the run.")
+    rejected: list[FoodRejection] = Field(default_factory=list, description="QC issues: errors skip a record, warnings keep it.")
+    input_mode: Literal["upload", "library"] = "upload"
+    library_matches: list[FoodLibraryMatch] = Field(
+        default_factory=list, description="Upload mode: each record against the library. A record that is not in the library is not rejected; it is reported here as not_in_library."
+    )
+
+
+class LibraryProteinInfo(BaseModel):
+    substrate_id: str
+    accession: str
+    name: str
+    food_source: str
+    kind: str
+    length: int
+    protein_family: str | None = None
+    organism: str | None = None
+    allergen_source: bool | None = Field(default=None, description="The library's flag for the source protein; not a clinical finding.")
+    sequence_version: str | None = None
+    uniprot_release: str | None = None
+    retrieved_at: str | None = None
+    n_terminus: str | None = Field(default=None, description="State of the chain's N-terminal end: SIGNAL_CLEAVED, PROPEP_CLEAVED, TRANSIT_CLEAVED, INIT_MET_CLEAVED, CHAIN_JUNCTION, SEQ_START or UNANNOTATED.")
+    c_terminus: str | None = Field(default=None, description="State of the chain's C-terminal end: PROPEP_CLEAVED, CHAIN_JUNCTION, SEQ_END or UNANNOTATED (same codes as n_terminus).")
+
+
+class LibraryProteinsResponse(BaseModel):
+    total: int = Field(description="Proteins matching the filters.")
+    offset: int
+    limit: int
+    proteins: list[LibraryProteinInfo]
+
+
+class LibrarySummaryResponse(BaseModel):
+    manifest: dict
+    total: int
+    by_food_source: dict[str, int]
+    families: list[dict]
+    allergen_source_flags: dict[str, int]
+
+
+DIGESTION_MAX_PROTEINS, DIGESTION_MAX_RESIDUES = 50, 30000
+
+
+class DigestionRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    fasta: str | None = Field(default=None, min_length=1, description="Upload mode: the proteins as FASTA text.")
+    library_proteins: list[str] | None = Field(default=None, min_length=1, description="Library mode: substrate ids from GET /api/v1/food/library/proteins.")
+    pathways: list[str] | None = Field(default=None, min_length=1, description="Pathway ids from GET /api/v1/food/digestion/settings; all of them when omitted.")
+    max_missed_cleavages: int | None = Field(default=None, ge=0, le=4, description="Cleavage sites a fragment may contain; the default settings use 2.")
+    min_length: int | None = Field(default=None, ge=1, le=60)
+    max_length: int | None = Field(default=None, ge=1, le=60)
+    limit: int = Field(default=500, ge=1, le=2000, description="Peptides returned per page.")
+    offset: int = Field(default=0, ge=0)
+
+    @model_validator(mode="after")
+    def _one_input(self):
+        if (self.fasta is None) == (self.library_proteins is None):
+            raise ValueError("send either fasta or library_proteins, not both and not neither")
+        return self
+
+
+class DigestionEnzyme(BaseModel):
+    name: str
+    pattern: str = Field(description="The rule as a regular expression on the P1 residue (Expasy PeptideCutter, as encoded in pyteomics).")
+    ph_range: tuple[float, float]
+    source: str
+    description: str
+    validation: str = Field(description="What the protease benchmark says about the rule; see docs/validation/food/protease_validation.md.")
+
+
+class DigestionSettingsResponse(BaseModel):
+    settings: dict = Field(description="The default digestion settings: pathways with their stages, enzymes and pH, and the length and missed-cleavage limits.")
+    enzymes: list[DigestionEnzyme]
+    limits: dict
+    limitations: list[str]
+
+
+class DigestionOrigin(BaseModel):
+    substrate_id: str
+    pathway: str
+    stage: str
+    enzymes: list[str]
+    ph: float | None = None
+    start_in_product: int
+    end_in_product: int
+    start_in_precursor: int
+    end_in_precursor: int
+    missed_cleavages_final: int
+    n_term: str
+    c_term: str
+    is_limit_product: bool
+
+
+class DigestionPeptide(BaseModel):
+    peptide_id: str
+    sequence: str
+    length: int
+    mono_mass: float
+    avg_mass: float
+    pathways: list[str]
+    n_origins: int
+    parents: list[str]
+    is_limit_product: bool = Field(description="True if some pathway releases it with no further cleavage site inside it.")
+    chemistry_notes: str
+    origins: list[DigestionOrigin]
+
+
+class DigestionSite(BaseModel):
+    p1_position: int = Field(description="1-based position of the residue before the cut.")
+    p1_residue: str
+    p1p_residue: str
+    cleaved_by: list[str] = Field(description="stage:enzyme labels of the rules that cut here.")
+
+
+class DigestionCleavageMap(BaseModel):
+    substrate_id: str
+    pathway: str
+    length: int
+    sites: list[DigestionSite] = Field(description="The cut sites after the last stage of the pathway.")
+
+
+class DigestionResponse(BaseModel):
+    evidence_class: Literal["THEORETICAL"] = "THEORETICAL"
+    settings: dict
+    settings_warnings: list[str]
+    rule_validation: dict[str, str]
+    n_proteins: int
+    n_peptides: int = Field(description="Unique peptides over all proteins and pathways.")
+    n_origins: int
+    offset: int
+    limit: int
+    truncated: bool = Field(description="True when more peptides exist than this page returns.")
+    peptides: list[DigestionPeptide]
+    cleavage_map: list[DigestionCleavageMap]
+    limitations: list[str]
+
+
+@app.get("/api/v1/food/digestion/settings", response_model=DigestionSettingsResponse)
+def food_digestion_settings():
+    """The digestion rules, pathways and limits, with what the benchmark says about each rule. The run endpoint accepts a subset of these pathways."""
+    enzymes = [
+        DigestionEnzyme(name=e.name, pattern=e.pattern, ph_range=e.ph_range, source=e.source, description=e.description, validation=RULE_VALIDATION.get(e.name, "not benchmarked"))
+        for e in digestion_registry().values()
+    ]
+    return DigestionSettingsResponse(
+        settings=DIGESTION_DEFAULT_SETTINGS.to_dict(), enzymes=enzymes, limitations=DIGESTION_LIMITATIONS,
+        limits={"max_proteins": DIGESTION_MAX_PROTEINS, "max_residues": DIGESTION_MAX_RESIDUES, "max_peptides_per_page": 2000},
+    )
+
+
+@app.post("/api/v1/food/digestion/run", response_model=DigestionResponse)
+def run_food_digestion(request: DigestionRequest):
+    """Run the digestion engine now, on uploaded or library proteins, and return the theoretical fragments with their positions plus a cleavage map. It is the same engine and default
+    settings as stage s03 of the food pipeline, so these fragments are the ones a pipeline run starts from. Synchronous: at most 50 proteins and 30,000 residues."""
+    library = food_library()
+    if request.library_proteins is not None:
+        try:
+            substrates = library.substrates(library.resolve(request.library_proteins))
+        except UnknownLibraryProteins as exc:
+            raise HTTPException(422, {"message": str(exc), "missing": exc.missing}) from exc
+    else:
+        with tempfile.TemporaryDirectory() as tmp:
+            fasta = Path(tmp) / "proteins.fasta"
+            fasta.write_text(request.fasta, encoding="utf-8")
+            try:
+                substrates, issues = read_protein_fasta(fasta)
+            except ValueError as exc:
+                raise HTTPException(422, str(exc)) from exc
+        if not substrates:
+            raise HTTPException(422, {"message": "No usable protein records in the FASTA", "rejected": [{"id": i.substrate_id, "code": i.code, "message": i.message} for i in issues]})
+    if len(substrates) > DIGESTION_MAX_PROTEINS or sum(len(s.sequence) for s in substrates) > DIGESTION_MAX_RESIDUES:
+        raise HTTPException(422, f"At most {DIGESTION_MAX_PROTEINS} proteins and {DIGESTION_MAX_RESIDUES} residues per digestion run")
+    base = DIGESTION_DEFAULT_SETTINGS
+    known = {p.id: p for p in base.pathways}
+    unknown = [i for i in (request.pathways or []) if i not in known]
+    if unknown:
+        raise HTTPException(422, f"Unknown pathway {', '.join(unknown)}; available: {', '.join(known)}")
+    try:
+        settings = dataclasses.replace(
+            base, pathways=tuple(known[i] for i in dict.fromkeys(request.pathways)) if request.pathways else base.pathways,
+            max_missed_cleavages=base.max_missed_cleavages if request.max_missed_cleavages is None else request.max_missed_cleavages,
+            min_length=request.min_length or base.min_length, max_length=request.max_length or base.max_length,
+        )
+        settings.validate()
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    origins, peptides, cleavage_map = run_digestion(substrates, settings)
+    page = peptides[request.offset:request.offset + request.limit]
+    by_peptide: dict[str, list[dict]] = {}
+    for o in origins:
+        by_peptide.setdefault(o["peptide_id"], []).append(o)
+    stages = {(sub.substrate_id, pw.id): len(pw.stages) for sub in substrates for pw in settings.pathways}
+    sites: dict[tuple[str, str], list[DigestionSite]] = {}
+    for row in cleavage_map:
+        if row["stage_index"] == stages[(row["substrate_id"], row["pathway"])]:
+            sites.setdefault((row["substrate_id"], row["pathway"]), []).append(DigestionSite(
+                p1_position=row["p1_position"], p1_residue=row["p1_residue"], p1p_residue=row["p1p_residue"], cleaved_by=row["cleaved_by"].split(";")))
+    lengths = {s.substrate_id: len(s.sequence) for s in substrates}
+    return DigestionResponse(
+        settings=settings.to_dict(), settings_warnings=settings.ph_warnings(),
+        rule_validation={e: RULE_VALIDATION.get(e, "not benchmarked") for e in sorted({e for pw in settings.pathways for st in pw.stages for e in st.enzymes})},
+        n_proteins=len(substrates), n_peptides=len(peptides), n_origins=len(origins), offset=request.offset, limit=request.limit,
+        truncated=request.offset + request.limit < len(peptides),
+        peptides=[
+            DigestionPeptide(
+                peptide_id=p["peptide_id"], sequence=p["sequence"], length=p["length"], mono_mass=p["mono_mass"], avg_mass=p["avg_mass"], pathways=p["pathways"].split(";"),
+                n_origins=p["n_origins"], parents=p["parent_substrates"].split(";"), is_limit_product=p["is_limit_product_any"], chemistry_notes=p["chemistry_notes"],
+                origins=[DigestionOrigin(
+                    substrate_id=o["substrate_id"], pathway=o["pathway"], stage=o["stage"], enzymes=o["stage_enzymes"].split("+"), ph=None if o["stage_ph"] == "" else float(o["stage_ph"]),
+                    start_in_product=o["start_in_product"], end_in_product=o["end_in_product"], start_in_precursor=o["start_in_precursor"], end_in_precursor=o["end_in_precursor"],
+                    missed_cleavages_final=o["missed_cleavages_final"], n_term=o["n_term"], c_term=o["c_term"], is_limit_product=o["is_limit_product"]) for o in by_peptide[p["peptide_id"]]],
+            )
+            for p in page
+        ],
+        cleavage_map=[DigestionCleavageMap(substrate_id=s.substrate_id, pathway=pw.id, length=lengths[s.substrate_id], sites=sites.get((s.substrate_id, pw.id), []))
+                      for s in substrates for pw in settings.pathways],
+        limitations=DIGESTION_LIMITATIONS,
+    )
+
+
+@app.get("/api/v1/food/library/summary", response_model=LibrarySummaryResponse)
+def food_library_summary():
+    """What the food protein library holds: its release, the proteins per food source and family, and the allergen-source flags."""
+    return food_library().summary()
+
+
+@app.get("/api/v1/food/library/proteins", response_model=LibraryProteinsResponse)
+def food_library_proteins(food_source: str | None = None, family: str | None = None, q: str | None = None, limit: int = Query(50, ge=1, le=500), offset: int = Query(0, ge=0)):
+    """Browse the library. `q` matches accession, substrate id, protein name or family. Pass the `substrate_id` values to `food/create` as `library_proteins`."""
+    total, page = food_library().search(food_source, family, q, limit, offset)
+    return {"total": total, "offset": offset, "limit": limit, "proteins": [p.info() for p in page]}
+
+
+@dataclass
+class FoodInput:
+    fasta: str
+    records_csv: str | None  # source records the library supplies for these proteins
+    accepted: int
+    rejected: list[FoodRejection]
+    mode: str
+    matches: list[LibraryMatchResult]
+    library_proteins: list[str]
+
+
+def _prepare_food_input(request: FoodCreateRequest) -> FoodInput:
+    """Library mode: the chosen proteins and their records. Upload mode: QC with the reader the worker uses (422 when no record is usable), then each record against the library.
+    Standard library only, so the API does not import the pipeline."""
+    library = food_library()
+    if request.library_proteins is not None:
+        try:
+            chosen = library.resolve(request.library_proteins)
+        except UnknownLibraryProteins as exc:
+            raise HTTPException(422, {"message": str(exc), "missing": exc.missing}) from exc
+        return FoodInput(library.fasta_text(chosen), library.records_csv(chosen), len(chosen), [], "library", [], [p.substrate_id for p in chosen])
+    with tempfile.TemporaryDirectory() as tmp:
+        fasta = Path(tmp) / "proteins.fasta"
+        fasta.write_text(request.fasta, encoding="utf-8")
+        try:
+            proteins, issues = read_protein_fasta(fasta)
+        except ValueError as exc:
+            raise HTTPException(422, str(exc)) from exc
+    rejected = [FoodRejection(id=i.substrate_id, severity=i.severity, code=i.code, message=i.message) for i in issues]
+    if not proteins:
+        raise HTTPException(422, {"message": "No usable protein records in the FASTA", "rejected": [r.model_dump() for r in rejected]})
+    matches = library.match_upload(proteins)
+    return FoodInput(request.fasta, library.matched_records_csv(proteins, matches), len(proteins), rejected, "upload", matches, [])
+
+
+def _store_food_input(run_dir: str, fi: FoodInput, request: FoodCreateRequest) -> FoodRunConfig:
+    """Write the FASTA, the library's source records and the library match record into the run folder; return the run config that points at them."""
+    library = food_library()
+    storage.write_text(storage.join(run_dir, "proteins.fasta"), fi.fasta)
+    records_path = ""
+    if fi.records_csv:
+        records_path = storage.join(run_dir, "source_records.csv")
+        storage.write_text(records_path, fi.records_csv)
+    storage.write_text(
+        storage.join(run_dir, "library_match.json"),
+        json.dumps({"mode": fi.mode, "library": {k: library.manifest[k] for k in ("name", "uniprot_release", "retrieved_at")}, "library_proteins": fi.library_proteins,
+                    "matches": [m.__dict__ for m in fi.matches]}),
+    )
+    return FoodRunConfig(fasta_path=storage.join(run_dir, "proteins.fasta"), source_records_path=records_path, food_source=request.food_source or "",
+                         allergen_source=request.allergen_source, run_id="", artifacts_dir="", model_store="", stages={})
+
+
+def _food_response(request: FoodCreateRequest, fi: FoodInput, job_id: str, result_path: str) -> FoodCreateResponse:
+    return FoodCreateResponse(request_id=request.request_id, job_id=job_id, result_path=result_path, accepted=fi.accepted, rejected=fi.rejected, input_mode=fi.mode,
+                              library_matches=[FoodLibraryMatch(**m.__dict__) for m in fi.matches])
+
+
+def _create_local_food_job(request: FoodCreateRequest, fi: FoodInput) -> FoodCreateResponse:
+    """DEV_MODE: run the food worker as a subprocess with local weights; its output goes to <run dir>/worker.log."""
+    artifacts = _local_artifacts()
+    run_id = str(time.time_ns() // 1_000_000)
+    run_dir = storage.join(artifacts, "runs", run_id)
+    config = _store_food_input(run_dir, fi, request).model_copy(update={"run_id": run_id, "artifacts_dir": artifacts, "model_store": "model_store"})
+    config_path = storage.join(run_dir, "config.json")
+    storage.write_text(config_path, config.model_dump_json(indent=2))
+    env = {**os.environ, "DEV_MODE": "true", "PYTHONPATH": os.pathsep.join([str(_REPO / "src"), str(_REPO), os.environ.get("PYTHONPATH", "")])}
+    with open(Path(run_dir) / "worker.log", "ab") as log:
+        _local_processes[run_id] = subprocess.Popen(
+            [sys.executable, "-m", "backend.worker_food.worker", "--config", config_path],
+            cwd=str(_REPO),
+            env=env,
+            stdout=log,
+            stderr=subprocess.STDOUT,
+        )
+    return _food_response(request, fi, LOCAL_JOB_PREFIX + run_id, run_dir)
+
+
+def _create_vertex_food_job(request: FoodCreateRequest, fi: FoodInput) -> FoodCreateResponse:
+    """Submit the food worker as a Vertex AI Custom Job. The input and the run config go to the run folder; the worker waits for its staging config."""
+    parent = f"projects/{required('VERTEX_CLOUD_PROJECT')}/locations/{required('VERTEX_LOCATION')}"
+    artifacts = required("VERTEX_ARTIFACTS_DIR")
+    models = required("VERTEX_MODEL_STORE")
+    image = required("WORKER_FOOD_IMAGE_URI")
+    service_account = required("WORKER_SERVICE_ACCOUNT")
+    machine_type = required("MACHINE_TYPE")
+    accelerator_type = required("ACCELERATOR_TYPE")
+    accelerator_count = int(required("ACCELERATOR_COUNT"))
+    if not all(storage.is_gcs_path(p) for p in (artifacts, models)):
+        raise HTTPException(503, "Artifacts and model store must use gs:// paths")
+    # The worker runs with DEV_MODE=false, so it downloads every model from this bucket: refuse now, not minutes into a GPU job.
+    if "TODO-bucket" in models:
+        raise HTTPException(503, "VERTEX_MODEL_STORE is still the placeholder; set it to the bucket that holds the model weights")
+    missing = [f for f in FOOD_REQUIRED_WEIGHT_FILES if not storage.exists(storage.join(models, f))]
+    if missing:
+        raise HTTPException(503, f"Model weights missing from {models}: {', '.join(missing)}")
+
+    # Its own staging folder, so a request_id shared with another pipeline cannot return that pipeline's job.
+    staging_config_path = storage.join(artifacts, "requests", "food", request.request_id, "config.json")
+
+    # A retry returns the job the first attempt started rather than submitting a second one; see create_job for why.
+    if storage.exists(staging_config_path):
+        try:
+            run_id = json.loads(storage.read_text(staging_config_path))["run_id"]
+        except Exception:
+            logging.exception("Staging config %s exists but could not be read; treating %s as new", staging_config_path, request.request_id)
+        else:
+            return _food_response(request, fi, f"{parent}/customJobs/{run_id}", storage.join(artifacts, "runs", run_id))
+
+    custom_job = {
+        "display_name": f"ai-peptide-discovery-food-{request.request_id[:12]}",
+        "labels": {"service": "battery-ai", "pipeline": "food", "request-id": _label_value(request.request_id)},
+        "job_spec": {
+            "service_account": service_account,
+            "worker_pool_specs": [
+                {
+                    "replica_count": 1,
+                    "machine_spec": {"machine_type": machine_type, "accelerator_type": accelerator_type, "accelerator_count": accelerator_count},
+                    "disk_spec": {"boot_disk_type": "pd-ssd", "boot_disk_size_gb": 200},
+                    "container_spec": {
+                        "image_uri": image,
+                        "args": ["--config", staging_config_path, "--wait-for-config", "120"],
+                        "env": [{"name": "DEV_MODE", "value": "false"}, {"name": "VERTEX_MODEL_STORE", "value": models}],
+                    },
+                }
+            ],
+        },
+    }
+    try:
+        client = job_client()
+        job = client.create_custom_job(parent=parent, custom_job=custom_job)
+        job_id = job.name.rsplit("/", 1)[-1]
+        result_path = storage.join(artifacts, "runs", job_id)
+        try:
+            config = _store_food_input(result_path, fi, request).model_copy(update={"run_id": job_id, "artifacts_dir": artifacts, "model_store": models})
+            body = config.model_dump_json(indent=2)
+            storage.write_text(storage.join(result_path, "config.json"), body)
+            storage.write_text(staging_config_path, body)
+        except Exception as exc:
+            try:
+                client.cancel_custom_job(name=job.name, timeout=30)
+            except Exception:
+                logging.exception("Could not cancel job %s after config upload failed", job.name)
+            raise HTTPException(502, f"Config upload failed for {job.name}; cancellation requested") from exc
+    except GoogleAuthError as exc:
+        raise HTTPException(503, "Google credentials are unavailable") from exc
+    except GoogleAPICallError as exc:
+        raise HTTPException(502, str(exc)) from exc
+    return _food_response(request, fi, job.name, result_path)
+
+
+@app.post("/api/v1/jobs/food/create", response_model=FoodCreateResponse, status_code=202)
+def create_food_job(request: FoodCreateRequest):
+    """Start a food-peptide run: digestion, generation, screening, gut stability, ranking and a provenance check.
+
+    Two input modes. **Upload**: send `fasta` and `food_source`; every record is checked (a record that fails is reported in `rejected`, and a FASTA with no usable record is a 422),
+    and each record is compared with the food protein library: a protein that is not in the library is not rejected, it is reported as `not_in_library` and keeps what you supplied.
+    **Library**: send `library_proteins` (substrate ids from `GET /api/v1/food/library/proteins`); their family, allergen-source flag and release come from the library.
+    With DEV_MODE the job runs as a local process on local weights, otherwise as a Vertex AI Custom Job."""
+    fi = _prepare_food_input(request)
+    return _create_local_food_job(request, fi) if DEV_MODE else _create_vertex_food_job(request, fi)
+
+
+@app.post("/api/v1/jobs/food/{job_id:path}/cancel", response_model=CancelJobResponse)
+def cancel_food_job(job_id: str):
+    """Stop a running food job. `cancelling` while it winds down, `failed` when it had already ended; the status route then reads `cancelled`."""
+    if DEV_MODE and job_id.startswith(LOCAL_JOB_PREFIX):
+        name = job_name(job_id)
+        run_id = _run_id_from_job_id(name)
+        process = _local_processes.get(run_id)
+        if process is None or process.poll() is not None:
+            return {"job_id": name, "status": "failed"}  # not started by this API process, or already over
+        process.terminate()
+        _local_cancelled.add(run_id)
+        return {"job_id": name, "status": "cancelling"}
+    return cancel_job(job_id)
+
+
+# Declared before the generic /{job_id:path}/status route below, as the immunomodulation route is.
+@app.get("/api/v1/jobs/food/{job_id:path}/status", response_model=JobStatusResponse)
+def get_food_job_status(job_id: str):
+    """Same envelope as the pipeline status route; `stage` names the food stage that is running."""
+    if DEV_MODE and job_id.startswith(LOCAL_JOB_PREFIX):
+        return _local_immunomodulation_status(job_name(job_id))
+    return get_job_status(job_id)
+
+
+class FoodRankedPeptide(BaseModel):
+    id: str
+    sequence: str
+    rank: int
+    origin_type: str
+    evidence_class: str
+    shortlist_position: int | None = Field(default=None, description="Position in the biology shortlist; null when the peptide is not on it.")
+    pareto_front: int | None = Field(default=None, description="Pareto front of the peptide in the model-stage pool (1: no pooled peptide beats it on every objective). Separate from rank and shortlist_position.")
+    objective_values: dict[str, float | None] = Field(default_factory=dict, description="The peptide's value on each objective the run used (0 to 1, higher is the favourable outcome; for a model it is the ranking value, not the model's own output). Empty when the run did not record its objectives.")
+    shortlist_reason: str | None = Field(default=None, description="Why the peptide is on the shortlist or not: not eligible (its evidence), left off (a model calls it unfavourable), skipped (same family or designed-peptide limit) or not needed (list full).")
+    parents: list[dict] = Field(default_factory=list, description="Every protein the peptide comes from, with position, pathway, enzymes and pH.")
+    parent_clusters: list[str] = Field(default_factory=list)
+    any_parent_allergen_source: bool | None = Field(default=None, description="True if a parent is an allergen source, false if none is, null if unknown.")
+    digestion_product_type: str | None = Field(default=None, description="FINAL_PRODUCT or INTERMEDIATE_PRODUCT for a digestion-derived peptide; null for a designed peptide.")
+    scores: dict = Field(default_factory=dict, description="Objectives the ranking compared: safety (the safety models other than IgE binding), developability, digestion_plausibility, uncut_bond_fraction, evidence, coverage. uncut_bond_fraction does not measure survival in the gut.")
+    models: dict = Field(default_factory=dict, description="Per screening model: score, label, applicability, detail. A model that did not run is absent and named in `predictions_not_run`.")
+    applicability: dict = Field(default_factory=dict, description="Per dimension and overall, worst case; read before the scores.")
+    cleavage: dict = Field(default_factory=dict, description="Cut sites per protease from the Expasy rules: counts, the predicted positions per protease, the uncut-bond fraction and a statement of what it does not measure.")
+    evidence: dict = Field(default_factory=dict, description="Evidence for the candidate: evidence_type (EXACT_SEQUENCE, CONTAINS_REFERENCE, CONTAINED_IN_REFERENCE, SEQUENCE_SIMILARITY or NO_EVIDENCE), the evidence peptide and its source, and whether the evidence gate passed; for a designed peptide the template's evidence under template_* keys, never transferred to the candidate.")
+    predictions_not_run: list[str] = Field(default_factory=list)
+    glp1_classifier_status: str | None = None
+    rationale: str = ""
+    limitations: str = ""
+    review: dict | None = Field(default=None, description="The biology lead's current decision on this peptide (decision, reason, reviewer, decided_at); null until they decide. It never changes the rank.")
+
+
+class FoodJobResultsResponse(BaseModel):
+    pipeline: Literal["food"] = "food"
+    job_id: str
+    run_id: str
+    status: str
+    n_final: int | None = None
+    peptides: list[FoodRankedPeptide] = Field(default_factory=list, description="Ranked peptides, best first.")
+    shortlist: list[FoodRankedPeptide] = Field(default_factory=list, description="The ranked peptides on the biology shortlist, in shortlist order.")
+    controls: list[dict] = Field(default_factory=list, description="Reference positive and negative controls proposed by rule; the biology lead finalizes them.")
+    gate: dict = Field(default_factory=dict, description="Evidence gate and diversity report of the selection, including any shortfall.")
+    facts: dict = Field(default_factory=dict)
+    protein_qc: list[dict] = Field(default_factory=list, description="FASTA records that were skipped or warned about.")
+    clusters: dict = Field(default_factory=dict, description="How each protein's cluster was assigned: notes and the number of proteins per source.")
+    library: dict = Field(default_factory=dict, description="How the proteins relate to the food protein library: the mode (upload or library), the library release, and for an upload each record's match (exact_sequence, accession_sequence_differs or not_in_library).")
+    ranking_summary: dict = Field(default_factory=dict, description="How the run narrowed its candidates: the stage counts, the hard rules and what they removed, the objectives, the selection and tie-break rules, the evidence gate and the caps, with the peptides each dropped. A value an older run did not record is null.")
+    digestion_warnings: list[dict] = Field(default_factory=list, description="Where the digestion run again disagrees with a recorded origin of a ranked peptide; a warning only, it never fails a run.")
+    review_gate: dict = Field(default_factory=dict, description="The biological approval gate: its status, the approved, on-hold, rejected and pending shortlisted peptides, and the rule that ranks are never changed by the review.")
+    provenance: dict = Field(default_factory=dict, description="Outcome of the provenance check of the final peptides: how many were checked and any issue. A run with an issue fails, so it is normally empty.")
+
+
+_FOOD_SCORE_KEYS = ("safety", "developability", "digestion_plausibility", "uncut_bond_fraction", "evidence", "coverage", "pareto_front", "cluster")
+_FOOD_EVIDENCE_KEYS = ("evidence_type", "evidence_gate_passed", "evidence_applies_to", "evidence_direction", "evidence_peptide", "evidence_similarity", "evidence_study", "evidence_assay",
+                       "evidence_food_derivation", "evidence_tier", "nearest_positive", "nearest_positive_sim", "nearest_negative", "nearest_negative_sim", "prior_art_alert",
+                       "template_evidence_applies_to", "template_evidence_type", "template_evidence_direction", "template_evidence_peptide", "template_evidence_similarity",
+                       "template_evidence_study", "template_evidence_assay", "template_evidence_food_derivation", "template_evidence_tier")
+
+
+def _food_peptide(candidate: dict, review: dict | None = None, objectives: list[str] | None = None) -> FoodRankedPeptide:
+    preds = candidate.get("predictions") or {}
+    ranking, screening, cleavage = preds.get("ranking") or {}, preds.get("screening") or {}, preds.get("cleavage") or {}
+    return FoodRankedPeptide(
+        id=candidate["id"],
+        sequence=candidate["sequence"],
+        rank=ranking["rank"],
+        origin_type=candidate["origin_type"],
+        evidence_class=candidate["evidence_class"],
+        digestion_product_type=candidate.get("digestion_product_type"),
+        shortlist_position=ranking.get("shortlist_position"),
+        pareto_front=ranking.get("pareto_front"),
+        objective_values={o: ranking.get(o, screening.get(o)) for o in objectives or []},
+        shortlist_reason=ranking.get("shortlist_reason"),
+        parents=candidate.get("parents") or [],
+        parent_clusters=candidate.get("parent_clusters") or [],
+        any_parent_allergen_source=candidate.get("any_parent_allergen_source"),
+        scores={k: ranking.get(k, cleavage.get(k)) for k in _FOOD_SCORE_KEYS if ranking.get(k, cleavage.get(k)) is not None},
+        models=preds.get("models") or {},
+        applicability={k.removeprefix("applicability_"): v for k, v in ranking.items() if k.startswith("applicability_")},
+        cleavage=cleavage,
+        evidence={k: ranking.get(k, screening.get(k)) for k in _FOOD_EVIDENCE_KEYS if ranking.get(k, screening.get(k)) is not None},
+        predictions_not_run=[n for n in (ranking.get("predictions_not_run") or "").split(";") if n],
+        glp1_classifier_status=ranking.get("glp1_classifier_status"),
+        rationale=ranking.get("rationale", ""),
+        limitations=ranking.get("limitations", ""),
+        review=review,
+    )
+
+
+def _nan_to_none(value):
+    """Run files are written with NaN for a missing number; the response must be valid JSON, so those become null."""
+    if isinstance(value, float) and value != value:
+        return None
+    if isinstance(value, dict):
+        return {k: _nan_to_none(v) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_nan_to_none(v) for v in value]
+    return value
+
+
+def _read_json_if_present(path: str, default):
+    return _nan_to_none(json.loads(storage.read_text(path))) if storage.exists(path) else default
+
+
+# Declared before the generic /{job_id:path}/... routes, as the status route above.
+@app.get("/api/v1/jobs/food/{job_id:path}/results", response_model=FoodJobResultsResponse)
+def get_food_job_results(job_id: str):
+    """The ranked peptides of a finished food run with their traceability, applicability and limitations, the shortlist and the controls. Empty until the job has succeeded."""
+    name = job_name(job_id)
+    run_id = _run_id_from_job_id(name)
+    artifacts = _local_artifacts() if DEV_MODE and name.startswith(LOCAL_JOB_PREFIX) else required("VERTEX_ARTIFACTS_DIR")
+    run_dir = storage.join(artifacts, "runs", run_id)
+    status_path = storage.join(run_dir, "results.json")
+    if not storage.exists(status_path):
+        raise HTTPException(404, "Job results not found")
+    status_payload = json.loads(storage.read_text(status_path))
+    status = status_payload.get("status", "unknown")
+    response = FoodJobResultsResponse(job_id=name, run_id=run_id, status=status, n_final=status_payload.get("n_final"))
+    if status != "success":
+        return response
+    ranked_path = storage.join(run_dir, "candidates", "s07_food_ranking_decision.jsonl")
+    if not storage.exists(ranked_path):
+        raise HTTPException(404, "Job reported success but the ranked candidates are missing")
+    current = latest(_food_review_log(run_dir))
+    report = _read_json_if_present(storage.join(run_dir, "ranking_report.json"), {})
+    objectives = (report.get("facts") or {}).get("objectives_used")
+    peptides = [_food_peptide(c, current.get(c["id"]), objectives) for c in (_nan_to_none(json.loads(line)) for line in storage.read_text(ranked_path).splitlines() if line.strip())]
+    clusters = _read_json_if_present(storage.join(run_dir, "protein_clusters.json"), {})
+    sources: dict[str, int] = {}
+    for assigned in (clusters.get("clusters") or {}).values():
+        sources[assigned["source"]] = sources.get(assigned["source"], 0) + 1
+    response.peptides = peptides
+    response.shortlist = sorted((p for p in peptides if p.shortlist_position is not None), key=lambda p: p.shortlist_position)
+    response.review_gate = gate_summary([p.id for p in response.shortlist], current)
+    response.controls, response.gate, response.facts = report.get("controls", []), report.get("gate", {}), report.get("facts", {})
+    response.protein_qc = _read_json_if_present(storage.join(run_dir, "protein_qc.json"), [])
+    response.clusters = {"notes": clusters.get("notes", []), "proteins_per_source": sources}
+    response.provenance = _read_json_if_present(storage.join(run_dir, "provenance_check.json"), {})
+    response.ranking_summary = _food_run_summary(run_dir, len(response.shortlist))
+    response.digestion_warnings = report.get("digestion_warnings", [])
+    response.library = _read_json_if_present(storage.join(run_dir, "library_match.json"), {})
+    return response
+
+
+def _food_run_summary(run_dir: str, n_shortlisted: int | None = None) -> dict:
+    audit_path = storage.join(run_dir, "audit_log.jsonl")
+    audit = [json.loads(line) for line in storage.read_text(audit_path).splitlines() if line.strip()] if storage.exists(audit_path) else []
+    return ranking_summary(_read_json_if_present(storage.join(run_dir, "ranking_report.json"), {}), audit, n_shortlisted)
+
+
+def _finished_food_run(job_id: str) -> tuple[str, str]:
+    """(job name, run directory) of a food run that succeeded; 404 when the run is unknown or not finished."""
+    name = job_name(job_id)
+    run_id = _run_id_from_job_id(name)
+    artifacts = _local_artifacts() if DEV_MODE and name.startswith(LOCAL_JOB_PREFIX) else required("VERTEX_ARTIFACTS_DIR")
+    run_dir = storage.join(artifacts, "runs", run_id)
+    status_path = storage.join(run_dir, "results.json")
+    if not storage.exists(status_path):
+        raise HTTPException(404, "Job results not found")
+    if json.loads(storage.read_text(status_path)).get("status") != "success":
+        raise HTTPException(404, "The job has not succeeded; there is no dossier yet")
+    return name, run_dir
+
+
+def _food_ranked_candidates(run_dir: str) -> list[dict]:
+    ranked_path = storage.join(run_dir, "candidates", "s07_food_ranking_decision.jsonl")
+    if not storage.exists(ranked_path):
+        raise HTTPException(404, "Job reported success but the ranked candidates are missing")
+    return [_nan_to_none(json.loads(line)) for line in storage.read_text(ranked_path).splitlines() if line.strip()]
+
+
+def _food_controls(run_dir: str) -> list[dict]:
+    return _read_json_if_present(storage.join(run_dir, "ranking_report.json"), {}).get("controls", [])
+
+
+def _food_review_log(run_dir: str) -> list[ReviewRecord]:
+    path = storage.join(run_dir, "review", "decisions.jsonl")
+    return parse_log(storage.read_text(path)) if storage.exists(path) else []
+
+
+def _food_reviews(run_dir: str) -> dict[str, dict]:
+    """The biology lead's current decision on each peptide, by peptide id."""
+    return latest(_food_review_log(run_dir))
+
+
+# Declared before the generic /{job_id:path}/... routes, as the status route above.
+@app.get("/api/v1/jobs/food/{job_id:path}/dossiers/{peptide_id}", response_model=FoodDossier)
+def get_food_dossier(job_id: str, peptide_id: str, format: Literal["json", "html", "pdf"] = "json"):
+    """The review dossier of one ranked peptide: provenance, evidence, screening with applicability, gut stability, limitations, controls and an empty assay plan. `format=html` returns a readable page, `format=pdf` a PDF: an overview page, the shared-information page, then one page for the peptide."""
+    _, run_dir = _finished_food_run(job_id)
+    candidate = next((c for c in _food_ranked_candidates(run_dir) if c["id"] == peptide_id), None)
+    if candidate is None:
+        raise HTTPException(404, f"{peptide_id} is not among the ranked peptides of this run")
+    dossier = build_dossier(candidate, _food_controls(run_dir), _food_reviews(run_dir).get(peptide_id), _food_run_summary(run_dir))
+    if format == "pdf":
+        return _pdf_response(dossier_pdf([dossier]), f"dossier_{dossier.sequence}_{dossier.peptide_id}.pdf")
+    return HTMLResponse(dossier_html(dossier)) if format == "html" else dossier
+
+
+def _pdf_response(body: bytes, filename: str) -> Response:
+    return Response(body, media_type="application/pdf", headers={"Content-Disposition": f'attachment; filename="{filename}"'})
+
+
+@app.get("/api/v1/jobs/food/{job_id:path}/shortlist-dossiers.pdf")
+def get_food_shortlist_dossiers_pdf(job_id: str):
+    """One PDF for the biology lead: an overview page of the shortlisted peptides, a page with what is the same for every peptide (controls, assay-plan cells, shared limitations), then one page per shortlisted peptide, in shortlist order."""
+    name, run_dir = _finished_food_run(job_id)
+    controls = _food_controls(run_dir)
+    shortlisted = sorted((c for c in _food_ranked_candidates(run_dir) if c["predictions"]["ranking"].get("shortlist_position") is not None),
+                         key=lambda c: c["predictions"]["ranking"]["shortlist_position"])
+    if not shortlisted:
+        raise HTTPException(404, "This run has no shortlisted peptides")
+    reviews, summary = _food_reviews(run_dir), _food_run_summary(run_dir, len(shortlisted))
+    return _pdf_response(dossier_pdf([build_dossier(c, controls, reviews.get(c["id"]), summary) for c in shortlisted]), f"shortlist_dossiers_{_run_id_from_job_id(name)}.pdf")
+
+
+@app.get("/api/v1/jobs/food/{job_id:path}/experiment-sheet")
+def get_food_experiment_sheet(job_id: str):
+    """CSV for the biology review: the shortlisted peptides in shortlist order, then the reference controls. Assay design, decision, reviewer and comments are left empty."""
+    name, run_dir = _finished_food_run(job_id)
+    body = experiment_sheet_csv(_food_ranked_candidates(run_dir), _food_controls(run_dir), _food_reviews(run_dir))
+    return Response(body, media_type="text/csv", headers={"Content-Disposition": f'attachment; filename="experiment_sheet_{_run_id_from_job_id(name)}.csv"'})
+
+
+class FoodReviewLogResponse(BaseModel):
+    gate: dict = Field(description="The biological approval gate: status, approved, on-hold, rejected and pending shortlisted peptides, and the rule that ranks are never changed by the review.")
+    decisions: list[ReviewRecord] = Field(description="The current decision on each reviewed peptide.")
+    history: list[ReviewRecord] = Field(description="Every decision ever saved, oldest first. Nothing is overwritten.")
+
+
+class FoodReviewSavedResponse(BaseModel):
+    record: ReviewRecord
+    gate: dict
+
+
+def _food_shortlisted_ids(candidates: list[dict]) -> list[str]:
+    ranked = [c for c in candidates if (c.get("predictions") or {}).get("ranking", {}).get("shortlist_position") is not None]
+    return [c["id"] for c in sorted(ranked, key=lambda c: c["predictions"]["ranking"]["shortlist_position"])]
+
+
+@app.get("/api/v1/jobs/food/{job_id:path}/review", response_model=FoodReviewLogResponse)
+def get_food_review(job_id: str):
+    """The biological approval gate of a finished run: where it stands, the current decision on each reviewed peptide, and the full history of decisions."""
+    _, run_dir = _finished_food_run(job_id)
+    records = _food_review_log(run_dir)
+    return FoodReviewLogResponse(gate=gate_summary(_food_shortlisted_ids(_food_ranked_candidates(run_dir)), latest(records)),
+                                 decisions=[ReviewRecord(**r) for r in latest(records).values()], history=records)
+
+
+@app.put("/api/v1/jobs/food/{job_id:path}/review/{peptide_id}", response_model=FoodReviewSavedResponse)
+def put_food_review(job_id: str, peptide_id: str, request: ReviewRequest):
+    """Save the biology lead's decision (approve, hold or reject), the reason and the reviewer for one ranked peptide. The decision is appended to the run's review log; earlier decisions stay
+    in the history and the latest one is current. The ranking is never changed by a review. There is no sign-in yet, so the reviewer is the name sent."""
+    _, run_dir = _finished_food_run(job_id)
+    candidates = _food_ranked_candidates(run_dir)
+    candidate = next((c for c in candidates if c["id"] == peptide_id), None)
+    if candidate is None:
+        raise HTTPException(404, f"{peptide_id} is not among the ranked peptides of this run")
+    record = new_record(peptide_id, candidate["sequence"], request)
+    storage.ensure_dir(storage.join(run_dir, "review"))
+    storage.append_text(storage.join(run_dir, "review", "decisions.jsonl"), record.model_dump_json() + "\n")
+    return FoodReviewSavedResponse(record=record, gate=gate_summary(_food_shortlisted_ids(candidates), _food_reviews(run_dir)))
 
 
 def run_state(worker_status: str | None, vertex_state: str | None) -> str:
@@ -1518,6 +2256,7 @@ PIPELINE_SETTINGS: dict[str, tuple[str, ...]] = {
     "metabolic": ("WORKER_METABOLIC_IMAGE_URI", "SEED_CANDIDATES_FILE_METABOLIC"),
     "cosmetic": ("WORKER_COSMETIC_IMAGE_URI", "SEED_CANDIDATES_FILE_COSMETIC"),
     "immunomodulation": ("WORKER_IMMUNO_IMAGE_URI",),  # takes peptides in the request, so no seed file
+    "food": ("WORKER_FOOD_IMAGE_URI",),  # takes its proteins in the request, so no seed file
 }
 
 

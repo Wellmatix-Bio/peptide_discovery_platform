@@ -1,0 +1,135 @@
+{
+ "substrates": 524,
+ "families": 21,
+ "family_sizes": {
+  "Wheat: LMW Glutenins": 177,
+  "Whey: Immunoglobulins": 56,
+  "Wheat: HMW Glutenins": 46,
+  "Wheat: Other storage proteins": 42,
+  "Wheat: γ-Gliadins": 40,
+  "Soy: Glycinin (11S)": 30,
+  "Pea: Legumin (11S)": 27,
+  "Pea: Other seed storage proteins": 23,
+  "Soy: Other seed storage proteins": 14,
+  "Soy: β-Conglycinin (7S)": 13,
+  "Casein: αS1-Casein": 11,
+  "Wheat: α/β-Gliadins": 9,
+  "Pea: Vicilin (7S)": 8,
+  "Whey: β-Lactoglobulin": 5,
+  "Casein: αS2-Casein": 4,
+  "Casein: β-Casein": 4,
+  "Casein: κ-Casein": 4,
+  "Whey: Lactoferrin": 4,
+  "Whey: Serum Albumin": 3,
+  "Pea: Convicilin": 2,
+  "Whey: α-Lactalbumin": 2
+ },
+ "platform_identity": 0.7,
+ "levels": {
+  "100": {
+   "clusters": 486,
+   "parser_matches_table_column": true,
+   "homogeneity": 0.998,
+   "completeness": 0.38,
+   "adjusted_rand_index": 0.003,
+   "families_in_one_cluster": 0,
+   "median_clusters_per_family": 9.0,
+   "max_clusters_per_family": 165,
+   "largest_family_clusters": {
+    "Wheat: LMW Glutenins": 165
+   },
+   "slots_one_family_could_take": 25,
+   "families_that_could_fill_all_slots": 12
+  },
+  "95": {
+   "clusters": 222,
+   "parser_matches_table_column": true,
+   "homogeneity": 0.993,
+   "completeness": 0.469,
+   "adjusted_rand_index": 0.106,
+   "families_in_one_cluster": 4,
+   "median_clusters_per_family": 4.0,
+   "max_clusters_per_family": 46,
+   "largest_family_clusters": {
+    "Whey: Immunoglobulins": 46
+   },
+   "slots_one_family_could_take": 25,
+   "families_that_could_fill_all_slots": 8
+  },
+  "90": {
+   "clusters": 160,
+   "parser_matches_table_column": true,
+   "homogeneity": 0.989,
+   "completeness": 0.51,
+   "adjusted_rand_index": 0.167,
+   "families_in_one_cluster": 5,
+   "median_clusters_per_family": 3.0,
+   "max_clusters_per_family": 33,
+   "largest_family_clusters": {
+    "Whey: Immunoglobulins": 33
+   },
+   "slots_one_family_could_take": 25,
+   "families_that_could_fill_all_slots": 6
+  },
+  "80": {
+   "clusters": 92,
+   "parser_matches_table_column": true,
+   "homogeneity": 0.986,
+   "completeness": 0.599,
+   "adjusted_rand_index": 0.342,
+   "families_in_one_cluster": 6,
+   "median_clusters_per_family": 3.0,
+   "max_clusters_per_family": 18,
+   "largest_family_clusters": {
+    "Whey: Immunoglobulins": 18
+   },
+   "slots_one_family_could_take": 25,
+   "families_that_could_fill_all_slots": 2
+  },
+  "70": {
+   "clusters": 63,
+   "parser_matches_table_column": true,
+   "homogeneity": 0.984,
+   "completeness": 0.742,
+   "adjusted_rand_index": 0.855,
+   "families_in_one_cluster": 10,
+   "median_clusters_per_family": 2.0,
+   "max_clusters_per_family": 12,
+   "largest_family_clusters": {
+    "Whey: Immunoglobulins": 12
+   },
+   "slots_one_family_could_take": 25,
+   "families_that_could_fill_all_slots": 1
+  },
+  "60": {
+   "clusters": 46,
+   "parser_matches_table_column": true,
+   "homogeneity": 0.951,
+   "completeness": 0.774,
+   "adjusted_rand_index": 0.872,
+   "families_in_one_cluster": 10,
+   "median_clusters_per_family": 2.0,
+   "max_clusters_per_family": 7,
+   "largest_family_clusters": {
+    "Pea: Legumin (11S)": 7
+   },
+   "slots_one_family_could_take": 21,
+   "families_that_could_fill_all_slots": 0
+  },
+  "50": {
+   "clusters": 41,
+   "parser_matches_table_column": true,
+   "homogeneity": 0.928,
+   "completeness": 0.783,
+   "adjusted_rand_index": 0.87,
+   "families_in_one_cluster": 10,
+   "median_clusters_per_family": 2.0,
+   "max_clusters_per_family": 8,
+   "largest_family_clusters": {
+    "Soy: Glycinin (11S)": 8
+   },
+   "slots_one_family_could_take": 24,
+   "families_that_could_fill_all_slots": 0
+  }
+ }
+}

@@ -221,9 +221,6 @@ scripts/smoke/
 structure_benchmark_out/
 tests/benchmark/
 tests/fixtures/
-deploy/run-food-local.ps1
-deploy/run-local.ps1
-deploy/run-local.ps1
 docs/FOOD_DEVELOPMENT_PLAN.md
 docs/FOOD_PIPELINE_PLAN.md
 src/pipeline/food/evidence/data/labeled_peptides_v1.csv

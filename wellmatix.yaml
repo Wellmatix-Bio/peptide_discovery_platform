@@ -1,0 +1,58 @@
+# Wellmatix Control Hub config for peptide_discovery_platform. No credentials belong here.
+schema_version: 1
+project_id: peptide-discovery
+name: Peptide Discovery Platform
+owner: ajitwellmatix
+backup_reviewer: ajitwellmatix
+engineers:
+  - ajitwellmatix
+runtime: other
+components:
+  - name: models
+    paths: ["model_store/**"]
+    risk: high
+  - name: pipeline
+    paths: ["src/pipeline/**", "src/runner.py", "src/registry.py", "configs/**"]
+    risk: high
+  - name: deploy
+    paths: ["deploy/**", ".github/**"]
+    risk: medium
+  - name: backend
+    paths: ["src/backend/**", "src/common/**", "src/schemas/**", "main.py", "services/**", "openapi.yaml"]
+    risk: medium
+  - name: data
+    paths: ["data/**", "*.csv"]
+    risk: medium
+  - name: web
+    paths: ["web/**"]
+    risk: low
+  - name: docs-tests
+    paths: ["docs/**", "*.md", "tests/**", "scripts/**"]
+    risk: low
+# CI jobs in .github/workflows/ci.yml: python (lint, tests), web (build), images (container scan)
+required_checks:
+  lint: python
+  unit: python
+  security: images
+  integration: web
+  scientific: python
+artifacts:
+  image: example.invalid/peptide-discovery
+  model_id: peptide-models
+  dataset_id: peptide-data
+environments:
+  staging:
+    url: https://staging.peptide.example.invalid
+    health_endpoint: /healthz
+    version_endpoint: /version
+  production:
+    url: https://peptide.example.invalid
+    health_endpoint: /healthz
+    version_endpoint: /version
+deploy_workflow: deploy.yml
+notification_routes:
+  check_failed: [owner]
+  deploy: [owner]
+  drift: [owner]
+rollback_policy:
+  destructive_migrations: false

@@ -3,7 +3,10 @@
   Start the job API on this computer so the food dashboard's "Run" button runs the pipeline locally (no Vertex, no bucket, no image).
 
   It links the model weights the food pipeline needs into model_store/model_weights/, starts the API with DEV_MODE=true on
-  http://localhost:8000, and removes the links when you stop it (Ctrl+C). Run it from anywhere.
+  http://localhost:8000, writes the dashboard's config.js, and removes the links when you stop it (Ctrl+C). Run it from anywhere.
+
+  The dashboard is a static page and cannot read environment variables, so it learns the API address from config.js beside it.
+  This script writes that file from the WMX_API_BASE_URL environment variable (default http://localhost:<Port>).
 
 .EXAMPLE
   powershell -ExecutionPolicy Bypass -File deploy/run-food-local.ps1
@@ -12,12 +15,15 @@
 param(
     [string]$WeightsDir = 'D:\AI Peptide Discovery Platform\Models\model_weights',
     [int]$Port = 8000,
+    [string]$DashboardDir = '',  # where Wellmatix_Food_to_Product_Workable_Dashboard.html is; default: the folder above the repository
     [string]$Python = 'python'  # must be the environment with requirements.txt installed
 )
 
 $ErrorActionPreference = 'Stop'
 $Repo = Resolve-Path (Join-Path $PSScriptRoot '..')
 $Target = Join-Path $Repo 'model_store/model_weights'
+if (-not $DashboardDir) { $DashboardDir = Split-Path $Repo -Parent }
+$ApiUrl = if ($env:WMX_API_BASE_URL) { $env:WMX_API_BASE_URL } else { "http://localhost:$Port" }
 # The folders the food pipeline reads (see FOOD_REQUIRED_WEIGHT_FILES in src/schemas/food_run_config.py).
 $Needed = @('esm2_t30_150M', 'allergenicity_predictor_v1', 'cytotoxicity_predictor_v1', 'solubility_predictor_v1', 'aggregation_predictor_v1', 'synthesis_feasibility_predictor_v1', 'bitterness_predictor_v1')
 
@@ -44,6 +50,10 @@ foreach ($name in $Needed) {
     $linked += $dest
 }
 Write-Host "Linked $($linked.Count) weight folder(s); starting the API on http://localhost:$Port (Ctrl+C to stop)" -ForegroundColor Green
+
+$config = Join-Path $DashboardDir 'config.js'
+Set-Content -Path $config -Encoding UTF8 -Value "window.WMX_CONFIG = { apiBase: $($ApiUrl | ConvertTo-Json) };"
+Write-Host "Dashboard API address: $ApiUrl (written to $config)" -ForegroundColor Green
 
 $env:DEV_MODE = 'true'
 $env:PYTHONPATH = "$Repo\src;$Repo"

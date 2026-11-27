@@ -99,6 +99,26 @@ def test_status_follows_the_process_then_the_worker(local):
     assert (status["run_state"], status["stage"]) == ("running", "s05_food_screening")
 
 
+def test_the_stage_is_finished_once_the_worker_reports_success_whether_or_not_it_wrote_a_stage(local):
+    client, tmp_path = local
+    body = create(client).json()
+    results = tmp_path / "runs" / body["job_id"].rsplit("/", 1)[-1] / "results.json"
+    for written in ({"status": "success", "stage": None}, {"status": "success"}, {"status": "success", "stage": "finished"}):  # a worker of any age
+        results.write_text(json.dumps(written))
+        status = client.get(f"/api/v1/jobs/food/{body['job_id']}/status").json()
+        assert (status["status"], status["stage"], status["run_state"]) == ("success", "finished", "succeeded")
+    results.write_text(json.dumps({"status": "failed", "stage": None, "error": "x"}))
+    assert client.get(f"/api/v1/jobs/food/{body['job_id']}/status").json()["stage"] == "pending"  # only a success is finished
+
+
+def test_the_food_worker_writes_stage_finished_on_success():
+    from pathlib import Path
+
+    from backend.worker_food import worker
+
+    assert '"stage": "finished"' in Path(worker.__file__).read_text(encoding="utf-8")
+
+
 # --- the worker's run loop, with the runner faked ------------------------------------------------------------
 
 def write_config(tmp_path, fasta):

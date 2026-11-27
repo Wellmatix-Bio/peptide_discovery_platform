@@ -34,7 +34,7 @@ export interface paths {
         };
         /**
          * Food Digestion Settings
-         * @description The digestion rules, pathways and limits, with what the benchmark says about each rule. The run endpoint accepts a subset of these pathways.
+         * @description The digestion rules, pathways and limits, with what the benchmark says about each rule. The run endpoint accepts a subset of these pathways, or a choice of proteases.
          */
         get: operations["food_digestion_settings_api_v1_food_digestion_settings_get"];
         put?: never;
@@ -1107,9 +1107,14 @@ export interface components {
             offset: number;
             /**
              * Pathways
-             * @description Pathway ids from GET /api/v1/food/digestion/settings; all of them when omitted.
+             * @description Pathway ids from GET /api/v1/food/digestion/settings; all of them when omitted. Not together with proteases.
              */
             pathways?: string[] | null;
+            /**
+             * Proteases
+             * @description Run only these proteases: each alone and, when two or more are chosen, together in digestion order (gastric, then intestinal). Not together with pathways.
+             */
+            proteases?: ("pepsin" | "trypsin" | "chymotrypsin")[] | null;
         };
         /** DigestionResponse */
         DigestionResponse: {
@@ -1163,6 +1168,13 @@ export interface components {
             /** Limits */
             limits: {
                 [key: string]: unknown;
+            };
+            /**
+             * Proteases
+             * @description The proteases a run can be limited to (the proteases field of the run request), each with the id of its single-enzyme pathway in settings.
+             */
+            proteases: {
+                [key: string]: string;
             };
             /**
              * Settings

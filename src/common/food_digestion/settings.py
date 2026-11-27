@@ -133,3 +133,26 @@ DEFAULT_SETTINGS = Settings(
     ),
 )
 DEFAULT_SETTINGS.validate()
+
+
+# The proteases a run can be limited to, each as the single-enzyme pathway of the default settings (its rule, stage and pH).
+PROTEASE_PATHWAYS = {"pepsin": "pepsin_only", "trypsin": "trypsin_only", "chymotrypsin": "chymotrypsin_only"}
+
+
+def protease_pathways(base: Settings, proteases: list[str]) -> tuple[Pathway, ...]:
+    """Each chosen protease alone, then, when two or more are chosen, all of them together in digestion order (gastric, then intestinal)."""
+    unknown = [n for n in proteases if n not in PROTEASE_PATHWAYS]
+    if unknown:
+        raise ValueError(f"Unknown protease {', '.join(unknown)}; available: {', '.join(PROTEASE_PATHWAYS)}")
+    names = [n for n in PROTEASE_PATHWAYS if n in proteases]
+    by_id = {p.id: p for p in base.pathways}
+    singles = [by_id[PROTEASE_PATHWAYS[n]] for n in names]
+    if len(singles) < 2:
+        return tuple(singles)
+    merged: dict[str, tuple[list[str], float | None]] = {}
+    for pathway in singles:
+        for stage in pathway.stages:
+            merged.setdefault(stage.name, ([], stage.ph))[0].extend(stage.enzymes)
+    stages = tuple(Stage(name, tuple(enzymes), ph) for name, (enzymes, ph) in merged.items())
+    together_id = next((p.id for p in base.pathways if p.stages == stages), "_".join(names))  # the default pathway of the same stages, if there is one
+    return (*singles, Pathway(together_id, stages))

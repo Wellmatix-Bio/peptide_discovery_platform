@@ -258,7 +258,7 @@ slash-separated resource path; some generated clients require custom path handli
 |---|---|
 | `job_id` | Full Vertex job resource name |
 | `status` | The worker's own last word, from its `results.json` (`"pending"` if not yet written): `running`, `success`, or `failed`. **It can be stale** — see `run_state` |
-| `stage` | From `results.json`: the stage the worker was on at its last progress write, or `"pending"` if not yet written or null. Typed `string \| null` in the schema, but the handler always substitutes `"pending"`, so clients should not see null |
+| `stage` | From `results.json`: the stage the worker was on at its last progress write, or `"pending"` if not yet written or null; `"finished"` once the worker reported `success` (its last write has no stage). Typed `string \| null` in the schema, but the handler always substitutes a value, so clients should not see null |
 | `vertex_state` | Real Vertex `CustomJob.state` enum name, queried live (e.g. `JOB_STATE_RUNNING`, `JOB_STATE_SUCCEEDED`, `JOB_STATE_FAILED`) |
 | `run_state` | `status` and `vertex_state` reconciled: `submitted`, `running`, `succeeded`, `failed`, `cancelled` or `abandoned`. **This is the field to show a user** |
 | `error` | Vertex error message, or null |
@@ -457,8 +457,8 @@ A separate job that takes food proteins, either as an uploaded FASTA or chosen f
 
 | Method and path | Purpose |
 |---|---|
-| `GET /api/v1/food/digestion/settings` | The digestion rules (Expasy PeptideCutter, with pattern, pH range and what the protease benchmark says about each), the default pathways and the request limits |
-| `POST /api/v1/food/digestion/run` | Run the digestion engine now on uploaded or library proteins; returns the theoretical fragments with positions, pathways and masses, and a cleavage map. Same engine and settings as stage s03, so these are the fragments a run starts from. Synchronous, at most 50 proteins and 30,000 residues; a request can pick pathways and the length and missed-cleavage limits but cannot supply rules |
+| `GET /api/v1/food/digestion/settings` | The digestion rules (Expasy PeptideCutter, with pattern, pH range and what the protease benchmark says about each), the default pathways, the `proteases` a run can be limited to (name to single-enzyme pathway id) and the request limits |
+| `POST /api/v1/food/digestion/run` | Run the digestion engine now on uploaded or library proteins; returns the theoretical fragments with positions, pathways and masses, and a cleavage map. Same engine and settings as stage s03, so these are the fragments a run starts from. Synchronous, at most 50 proteins and 30,000 residues; a request can pick pathways (`pathways`) or proteases (`proteases`, any of `pepsin`, `trypsin`, `chymotrypsin`; not both) and the length and missed-cleavage limits but cannot supply rules. Chosen proteases run each alone, with the rule, stage and pH of its default pathway, and, when two or more are chosen, also together in digestion order (gastric stage, then intestinal stage); together uses the default pathway of the same stages when there is one (`trypsin_chymotrypsin`, `gastric_to_intestinal`), otherwise the protease names joined (`pepsin_trypsin`) |
 | `GET /api/v1/food/library/summary` | What the library holds: release, proteins per food source and family, allergen-source flags |
 | `GET /api/v1/food/library/proteins` | Browse the library: filters `food_source`, `family`, `q` (accession, name or family), `limit` (1 to 500), `offset`. No sequences are returned |
 | `POST /api/v1/jobs/food/create` | Submit a FASTA (upload mode) or library proteins (library mode) |

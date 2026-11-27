@@ -30,7 +30,7 @@ from pydantic import (
 from common import storage
 from common.food_digestion.engine import run as run_digestion
 from common.food_digestion.rules import build_registry as digestion_registry
-from common.food_digestion.settings import DEFAULT_SETTINGS as DIGESTION_DEFAULT_SETTINGS
+from common.food_digestion.settings import DEFAULT_SETTINGS as DIGESTION_DEFAULT_SETTINGS, PROTEASE_PATHWAYS, protease_pathways
 from common.food_digestion.validation import LIMITATIONS as DIGESTION_LIMITATIONS, RULE_VALIDATION
 from common.food_library import Match as LibraryMatchResult, UnknownLibraryProteins, library as food_library
 from common.protein_fasta import read_fasta as read_protein_fasta
@@ -651,7 +651,7 @@ def _local_immunomodulation_status(name: str) -> JobStatusResponse:
     return JobStatusResponse(
         job_id=name,
         status=worker_status or "pending",
-        stage=(results.get("stage") if results else None) or "pending",
+        stage=_stage_of(results, worker_status),
         vertex_state=vertex_state,
         run_state=run_state(worker_status, vertex_state),
         error=(results.get("error") if results else None),
@@ -824,7 +824,8 @@ class DigestionRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     fasta: str | None = Field(default=None, min_length=1, description="Upload mode: the proteins as FASTA text.")
     library_proteins: list[str] | None = Field(default=None, min_length=1, description="Library mode: substrate ids from GET /api/v1/food/library/proteins.")
-    pathways: list[str] | None = Field(default=None, min_length=1, description="Pathway ids from GET /api/v1/food/digestion/settings; all of them when omitted.")
+    pathways: list[str] | None = Field(default=None, min_length=1, description="Pathway ids from GET /api/v1/food/digestion/settings; all of them when omitted. Not together with proteases.")
+    proteases: list[Literal["pepsin", "trypsin", "chymotrypsin"]] | None = Field(default=None, min_length=1, description="Run only these proteases: each alone and, when two or more are chosen, together in digestion order (gastric, then intestinal). Not together with pathways.")
     max_missed_cleavages: int | None = Field(default=None, ge=0, le=4, description="Cleavage sites a fragment may contain; the default settings use 2.")
     min_length: int | None = Field(default=None, ge=1, le=60)
     max_length: int | None = Field(default=None, ge=1, le=60)
@@ -835,6 +836,8 @@ class DigestionRequest(BaseModel):
     def _one_input(self):
         if (self.fasta is None) == (self.library_proteins is None):
             raise ValueError("send either fasta or library_proteins, not both and not neither")
+        if self.pathways is not None and self.proteases is not None:
+            raise ValueError("send either pathways or proteases, not both")
         return self
 
 
@@ -850,6 +853,7 @@ class DigestionEnzyme(BaseModel):
 class DigestionSettingsResponse(BaseModel):
     settings: dict = Field(description="The default digestion settings: pathways with their stages, enzymes and pH, and the length and missed-cleavage limits.")
     enzymes: list[DigestionEnzyme]
+    proteases: dict[str, str] = Field(description="The proteases a run can be limited to (the proteases field of the run request), each with the id of its single-enzyme pathway in settings.")
     limits: dict
     limitations: list[str]
 
@@ -916,13 +920,13 @@ class DigestionResponse(BaseModel):
 
 @app.get("/api/v1/food/digestion/settings", response_model=DigestionSettingsResponse)
 def food_digestion_settings():
-    """The digestion rules, pathways and limits, with what the benchmark says about each rule. The run endpoint accepts a subset of these pathways."""
+    """The digestion rules, pathways and limits, with what the benchmark says about each rule. The run endpoint accepts a subset of these pathways, or a choice of proteases."""
     enzymes = [
         DigestionEnzyme(name=e.name, pattern=e.pattern, ph_range=e.ph_range, source=e.source, description=e.description, validation=RULE_VALIDATION.get(e.name, "not benchmarked"))
         for e in digestion_registry().values()
     ]
     return DigestionSettingsResponse(
-        settings=DIGESTION_DEFAULT_SETTINGS.to_dict(), enzymes=enzymes, limitations=DIGESTION_LIMITATIONS,
+        settings=DIGESTION_DEFAULT_SETTINGS.to_dict(), enzymes=enzymes, proteases=PROTEASE_PATHWAYS, limitations=DIGESTION_LIMITATIONS,
         limits={"max_proteins": DIGESTION_MAX_PROTEINS, "max_residues": DIGESTION_MAX_RESIDUES, "max_peptides_per_page": 2000},
     )
 
@@ -956,7 +960,7 @@ def run_food_digestion(request: DigestionRequest):
         raise HTTPException(422, f"Unknown pathway {', '.join(unknown)}; available: {', '.join(known)}")
     try:
         settings = dataclasses.replace(
-            base, pathways=tuple(known[i] for i in dict.fromkeys(request.pathways)) if request.pathways else base.pathways,
+            base, pathways=protease_pathways(base, request.proteases) if request.proteases else tuple(known[i] for i in dict.fromkeys(request.pathways)) if request.pathways else base.pathways,
             max_missed_cleavages=base.max_missed_cleavages if request.max_missed_cleavages is None else request.max_missed_cleavages,
             min_length=request.min_length or base.min_length, max_length=request.max_length or base.max_length,
         )
@@ -1454,6 +1458,14 @@ def put_food_review(job_id: str, peptide_id: str, request: ReviewRequest):
     return FoodReviewSavedResponse(record=record, gate=gate_summary(_food_shortlisted_ids(candidates), _food_reviews(run_dir)))
 
 
+def _stage_of(results: dict | None, worker_status: str | None) -> str:
+    """The stage the worker last reported; "finished" once it succeeded (even from a worker that wrote none), else "pending"."""
+    stage = results.get("stage") if results else None
+    if stage:
+        return stage
+    return "finished" if worker_status == "success" else "pending"
+
+
 def run_state(worker_status: str | None, vertex_state: str | None) -> str:
     """What the run actually is, from the worker's self-report AND the live Vertex state.
 
@@ -1518,7 +1530,7 @@ def get_job_status(job_id: str):
     return JobStatusResponse(
         job_id=job.name,
         status=worker_status or "pending",
-        stage=(results.get("stage") if results else None) or "pending",
+        stage=_stage_of(results, worker_status),
         vertex_state=vertex_state,
         run_state=run_state(worker_status, vertex_state),
         error=job.error.message or None,

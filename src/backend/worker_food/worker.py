@@ -111,7 +111,7 @@ def run_job(config_path: str, wait_seconds: float = 0, overwrite: bool = False) 
         issues = write_provenance_check(candidates, proteins, run_dir)
         if issues:  # a peptide whose lineage cannot be reproduced must not reach a report
             raise RuntimeError(f"provenance check failed for {len({i['peptide_id'] for i in issues})} peptide(s); first: {issues[0]['check']}: {issues[0]['detail']}")
-        storage.write_text(status_path, json.dumps({"run_id": config.run_id, "status": "success", "n_final": len(candidates), "progress": 1.0, "stage": None}))
+        storage.write_text(status_path, json.dumps({"run_id": config.run_id, "status": "success", "n_final": len(candidates), "progress": 1.0, "stage": "finished"}))
         return candidates
     except Exception as exc:
         try:

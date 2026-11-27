@@ -1578,8 +1578,29 @@
                 "type": "null"
               }
             ],
-            "description": "Pathway ids from GET /api/v1/food/digestion/settings; all of them when omitted.",
+            "description": "Pathway ids from GET /api/v1/food/digestion/settings; all of them when omitted. Not together with proteases.",
             "title": "Pathways"
+          },
+          "proteases": {
+            "anyOf": [
+              {
+                "items": {
+                  "enum": [
+                    "pepsin",
+                    "trypsin",
+                    "chymotrypsin"
+                  ],
+                  "type": "string"
+                },
+                "minItems": 1,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Run only these proteases: each alone and, when two or more are chosen, together in digestion order (gastric, then intestinal). Not together with pathways.",
+            "title": "Proteases"
           }
         },
         "title": "DigestionRequest",
@@ -1698,6 +1719,14 @@
             "title": "Limits",
             "type": "object"
           },
+          "proteases": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "description": "The proteases a run can be limited to (the proteases field of the run request), each with the id of its single-enzyme pathway in settings.",
+            "title": "Proteases",
+            "type": "object"
+          },
           "settings": {
             "additionalProperties": true,
             "description": "The default digestion settings: pathways with their stages, enzymes and pH, and the length and missed-cleavage limits.",
@@ -1708,6 +1737,7 @@
         "required": [
           "settings",
           "enzymes",
+          "proteases",
           "limits",
           "limitations"
         ],
@@ -5743,7 +5773,7 @@
     },
     "/api/v1/food/digestion/settings": {
       "get": {
-        "description": "The digestion rules, pathways and limits, with what the benchmark says about each rule. The run endpoint accepts a subset of these pathways.",
+        "description": "The digestion rules, pathways and limits, with what the benchmark says about each rule. The run endpoint accepts a subset of these pathways, or a choice of proteases.",
         "operationId": "food_digestion_settings_api_v1_food_digestion_settings_get",
         "responses": {
           "200": {

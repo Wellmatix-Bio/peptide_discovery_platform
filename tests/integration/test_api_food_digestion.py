@@ -114,6 +114,9 @@ def test_an_uploaded_fasta_digests_the_same_way_and_a_bad_record_is_skipped():
     {"fasta": "AAAA"},  # not FASTA
     {"library_proteins": ["NOT:1-9"]},
     {"library_proteins": ["P02754:17-178"], "pathways": ["no_such_pathway"]},
+    {"library_proteins": ["P02754:17-178"], "proteases": ["no_such_protease"]},
+    {"library_proteins": ["P02754:17-178"], "proteases": []},
+    {"library_proteins": ["P02754:17-178"], "proteases": ["trypsin"], "pathways": ["trypsin_only"]},  # one or the other
     {"library_proteins": ["P02754:17-178"], "min_length": 30, "max_length": 10},
     {"library_proteins": ["P02754:17-178"], "limit": 5000},
     {"library_proteins": ["P02754:17-178"], "max_missed_cleavages": 9},
@@ -135,3 +138,36 @@ def test_the_engine_and_the_pipeline_alias_are_one_module():
     import pipeline.food.digestion.engine as alias
 
     assert alias is __import__("common.food_digestion.engine", fromlist=["x"]) and re.match(r"PEP-[0-9A-F]{12}$", alias.peptide_id("ACDE"))
+
+
+def test_the_settings_name_the_proteases_a_run_can_be_limited_to_with_their_single_enzyme_pathways():
+    body = CLIENT.get(SETTINGS).json()
+    assert body["proteases"] == {"pepsin": "pepsin_only", "trypsin": "trypsin_only", "chymotrypsin": "chymotrypsin_only"}
+    assert set(body["proteases"].values()) <= {p["id"] for p in body["settings"]["pathways"]}
+
+
+@pytest.mark.parametrize("chosen, pathways", [
+    (["trypsin"], ["trypsin_only"]),
+    (["chymotrypsin", "trypsin"], ["trypsin_only", "chymotrypsin_only", "trypsin_chymotrypsin"]),  # together = the default pathway of the same stages
+    (["pepsin", "trypsin", "chymotrypsin"], ["pepsin_only", "trypsin_only", "chymotrypsin_only", "gastric_to_intestinal"]),
+    (["pepsin", "trypsin"], ["pepsin_only", "trypsin_only", "pepsin_trypsin"]),  # no default pathway of these stages: a new id
+])
+def test_chosen_proteases_run_each_alone_and_together_in_digestion_order(chosen, pathways):
+    body = digest(library_proteins=IDS[:1], proteases=chosen, limit=2000).json()
+    assert [p["id"] for p in body["settings"]["pathways"]] == pathways
+    together = body["settings"]["pathways"][-1]
+    if len(chosen) > 1:
+        assert [s["name"] for s in together["stages"]] == sorted({s["name"] for s in together["stages"]}, key=["gastric", "intestinal"].index)
+        assert {e for s in together["stages"] for e in s["enzymes"]} == {e for pid in pathways[:-1] for p in body["settings"]["pathways"] if p["id"] == pid for s in p["stages"] for e in s["enzymes"]}
+    assert {pw for pep in body["peptides"] for pw in pep["pathways"]} <= set(pathways)
+    assert [m["pathway"] for m in body["cleavage_map"]] == pathways
+
+
+def test_protease_pathways_are_built_from_the_default_stage_definitions_with_no_new_rule_or_ph():
+    from common.food_digestion.settings import PROTEASE_PATHWAYS, protease_pathways
+
+    defaults = {st for p in DEFAULT_SETTINGS.pathways for st in p.stages}
+    built = protease_pathways(DEFAULT_SETTINGS, list(PROTEASE_PATHWAYS))
+    assert all(st in defaults for p in built for st in p.stages)
+    with pytest.raises(ValueError):
+        protease_pathways(DEFAULT_SETTINGS, ["papain"])

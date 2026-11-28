@@ -8,8 +8,8 @@ from pathlib import Path
 import pytest
 from pypdf import PdfReader
 
-from schemas.food_dossier import build_dossier
-from schemas.food_dossier_pdf import MAX_PARENT_ROWS, MODEL, _text, cut_text, dossier_pdf, edit_text, page_scale, pathway_text, plain_text, split_outside_brackets
+from food.shared.dossier import build_dossier
+from food.shared.dossier_pdf import MAX_PARENT_ROWS, MODEL, _text, cut_text, dossier_pdf, edit_text, page_scale, pathway_text, plain_text, split_outside_brackets
 
 RUN = Path(__file__).resolve().parents[1] / "fixtures" / "food" / "run" / "s07_food_ranking_decision.jsonl"
 CONTROLS = [{"role": "positive_control", "sequence": "LKPT", "study": "PMID1", "assay": "STC-1", "n_observations": "3"},
@@ -205,7 +205,7 @@ def test_a_peptide_the_aggregation_model_skipped_shows_it_as_not_run_with_the_re
 
 
 def test_the_ranking_strengths_and_weaknesses_are_in_words_about_what_the_models_predict():
-    from schemas.food_dossier_pdf import reasons
+    from food.shared.dossier_pdf import reasons
 
     text = reasons("Pareto front 1 of 4, cluster 52; near pool-best on coverage, model_cytotoxicity_score, model_solubility_score; weak on model_allergenicity_score, model_bitterness_score, "
                    "digestion_plausibility; evidence gate: x")

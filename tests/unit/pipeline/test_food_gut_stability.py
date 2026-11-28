@@ -11,11 +11,11 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "src"))
 
-from pipeline.food import settings  # noqa: E402
-from pipeline.food.digestion.rules import BUILTIN_ENZYMES  # noqa: E402
-from pipeline.food.gut_stability.stage import FoodGutStability, cleavage_sites  # noqa: E402
-from pipeline.food.screening import checks, screening  # noqa: E402
-from schemas.food import FoodCandidate, ParentOrigin  # noqa: E402
+from food.c_discovery import settings  # noqa: E402
+from food.b_digestion.rules import BUILTIN_ENZYMES  # noqa: E402
+from food.pipeline.stages.gut_stability import FoodGutStability, cleavage_sites  # noqa: E402
+from food.c_discovery.screening import checks, screening  # noqa: E402
+from food.shared.candidate import FoodCandidate, ParentOrigin  # noqa: E402
 from schemas.run_config import StageConfig  # noqa: E402
 
 
@@ -25,7 +25,7 @@ def cand(seq: str) -> FoodCandidate:
 
 def test_pepsin_and_trypsin_use_the_digestion_rules_and_chymotrypsin_the_low_specificity_rule():
     assert set(settings.GUT_ENZYMES.values()) <= set(BUILTIN_ENZYMES)
-    from pipeline.food.digestion.settings import DEFAULT_SETTINGS
+    from food.b_digestion.settings import DEFAULT_SETTINGS
 
     used = {e for p in DEFAULT_SETTINGS.pathways for st in p.stages for e in st.enzymes}
     assert {settings.GUT_ENZYMES["pepsin"], settings.GUT_ENZYMES["trypsin"]} <= used

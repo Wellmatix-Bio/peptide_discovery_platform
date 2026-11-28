@@ -1,0 +1,27 @@
+{
+ "name": "Food protein library v1",
+ "source": "datasets/Food-Derived Metabolic Wellness Peptide/processed (the Phase 1 protein library: UniProt retrieval, family rules, digestion-eligible mature products)",
+ "uniprot_release": [
+  "2026_04"
+ ],
+ "retrieved_at": [
+  "2026-11-13"
+ ],
+ "n_substrates": 524,
+ "n_accessions": 504,
+ "n_source_records": 504,
+ "source_records_filter": "only the accessions that have a digestion substrate in digestion_substrates.fasta",
+ "food_sources": {
+  "Casein": 23,
+  "Pea": 52,
+  "Soy": 45,
+  "Wheat": 314,
+  "Whey": 70
+ },
+ "files_md5": {
+  "digestion_substrates.fasta": "093081d4ea92b61754e32810aabdd342",
+  "source_records.csv": "fd1d5e83181f486d65c081d70bc75089"
+ },
+ "note": "A substrate is one mature chain of a UniProt protein, the unit the digestion stage cuts. Family and allergen-source flag are the data foundation's, by rule; they are not clinical findings.",
+ "terminus_codes": "each FASTA header carries NTERM= and CTERM=: the end's state (a removed signal peptide, propeptide, transit peptide or starting methionine; a chain junction; the first or last residue of the UniProt sequence; or unannotated). Meanings: food/a_proteins/fasta.py TERMINUS_MEANING"
+}

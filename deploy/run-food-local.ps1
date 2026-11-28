@@ -24,7 +24,7 @@ $Repo = Resolve-Path (Join-Path $PSScriptRoot '..')
 $Target = Join-Path $Repo 'model_store/model_weights'
 if (-not $DashboardDir) { $DashboardDir = Split-Path $Repo -Parent }
 $ApiUrl = if ($env:WMX_API_BASE_URL) { $env:WMX_API_BASE_URL } else { "http://localhost:$Port" }
-# The folders the food pipeline reads (see FOOD_REQUIRED_WEIGHT_FILES in src/schemas/food_run_config.py).
+# The folders the food pipeline reads (see FOOD_REQUIRED_WEIGHT_FILES in src/food/pipeline/run_config.py).
 $Needed = @('esm2_t30_150M', 'allergenicity_predictor_v1', 'cytotoxicity_predictor_v1', 'solubility_predictor_v1', 'aggregation_predictor_v1', 'synthesis_feasibility_predictor_v1', 'bitterness_predictor_v1')
 
 # The API and the worker it starts run in this Python: stop before linking anything if it lacks what they import.

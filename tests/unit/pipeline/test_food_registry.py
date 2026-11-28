@@ -10,7 +10,7 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "src"))
 
 from pipeline.base import CandidateStage, SetupStage  # noqa: E402
-from pipeline.food import registry  # noqa: E402
+from food.pipeline import registry  # noqa: E402
 from schemas.run_config import RunConfig, StageConfig  # noqa: E402
 
 

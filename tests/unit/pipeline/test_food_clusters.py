@@ -11,10 +11,10 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "src"))
 
-from pipeline.food.digestion.stage import FoodDigestion  # noqa: E402
-from pipeline.food.protein_library import clusters  # noqa: E402
-from pipeline.food.protein_library.protein import Protein  # noqa: E402
-from pipeline.food.ranking import shortlist  # noqa: E402
+from food.pipeline.stages.digestion import FoodDigestion  # noqa: E402
+from food.a_proteins import families as clusters  # noqa: E402
+from food.a_proteins.protein import Protein  # noqa: E402
+from food.c_discovery.ranking import shortlist  # noqa: E402
 from schemas.run_config import StageConfig  # noqa: E402
 
 HAVE_PYMMSEQS = importlib.util.find_spec("pymmseqs") is not None
@@ -107,3 +107,25 @@ def test_real_mmseqs2_groups_a_close_variant_with_its_parent_and_leaves_an_unrel
     from backend.worker_food.smoke import check_clustering
 
     check_clustering()  # a 98% identical variant joins its parent; an unrelated protein does not
+
+
+def test_a_family_is_approved_only_when_none_of_its_proteins_has_a_qc_issue_not_even_a_warning():
+    from food.a_proteins.fasta import QCIssue
+
+    clean = prot("A:1-22", protein_family="beta-LG")
+    warned = prot("B:1-22", protein_family="casein")
+    rows = {r["family"]: r for r in clusters.approve_families([clean, warned], [QCIssue("B:1-22", "warning", "RANGE_LENGTH_MISMATCH", "x")])}
+    assert rows["beta-LG"]["approved"] is True
+    assert rows["casein"]["approved"] is False and "B:1-22 RANGE_LENGTH_MISMATCH" in rows["casein"]["reason"]
+
+
+def test_proteins_with_no_family_are_one_row_family_not_established_and_never_approved():
+    rows = clusters.approve_families([prot("X:1-22"), prot("Y:1-22")], [])
+    assert len(rows) == 1 and rows[0]["family"] == clusters.FAMILY_NOT_ESTABLISHED
+    assert rows[0]["approved"] is False and rows[0]["protein_ids"] == ["X:1-22", "Y:1-22"]
+
+
+def test_the_same_family_name_in_two_food_sources_is_two_families():
+    a, b = prot("A:1-22", protein_family="Other storage"), prot("B:1-22", protein_family="Other storage")
+    b.food_source = "Soy"
+    assert [r["food_source"] for r in clusters.approve_families([a, b], [])] == ["Whey", "Soy"]

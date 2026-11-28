@@ -9,9 +9,9 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "src"))
 
-from pipeline.food.digestion import DEFAULT_SETTINGS, Settings, peptide_id, read_measured_csv, reconcile, run  # noqa: E402
-from pipeline.food.digestion.masses import mono_mass  # noqa: E402
-from pipeline.food.protein_library.fasta import Substrate, read_fasta  # noqa: E402
+from food.b_digestion import DEFAULT_SETTINGS, Settings, peptide_id, read_measured_csv, reconcile, run  # noqa: E402
+from food.b_digestion.masses import mono_mass  # noqa: E402
+from food.a_proteins.fasta import Substrate, read_fasta  # noqa: E402
 
 
 def sub(seq: str, sid: str = "T1:1-0") -> Substrate:
@@ -146,7 +146,7 @@ def test_the_inline_average_mass_equals_modlamp_for_every_peptide_of_a_real_dige
     import numpy as np
     from modlamp.descriptors import GlobalDescriptor
 
-    from common.food_digestion.masses import avg_masses
+    from food.b_digestion.masses import avg_masses
 
     subs, _ = read_fasta(Path(__file__).resolve().parents[2] / "fixtures" / "food" / "phase1" / "digestion_substrates.fasta")
     seqs = sorted({o["sequence"] for o in run(subs[:6], DEFAULT_SETTINGS)[0]})[:4000] + ["A", "W" * 40, "ACDEFGHIKLMNPQRSTVWY"]

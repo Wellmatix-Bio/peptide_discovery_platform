@@ -27,7 +27,7 @@
   },
   "limitations": [
     "Trained on 3-49 residue peptides from IgE-binding assays only; sequences outside that range are not scored.",
-    "p_allergen is not calibrated; the 0.5 boundary is the model's own class boundary, not a risk threshold.",
+    "p_allergen is not a calibrated probability. The 0.5 label threshold is calibrated: A threshold search (the MCC-optimal threshold on cross-validation) did not beat the default: on the MLP, SVM and GAT models and their ensembles it raised cross-validated MCC by at most 0.001 and never raised hold-out MCC (default 0.321 to 0.377, searched 0.311 to 0.353), so no other threshold does better. It is the model's own class boundary, not a risk threshold.",
     "Not trained on cosmetic or therapeutic peptides specifically."
   ]
 }

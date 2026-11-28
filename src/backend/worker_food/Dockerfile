@@ -38,6 +38,6 @@ RUN useradd --create-home --shell /bin/bash appuser && chown -R appuser /app
 USER appuser
 
 # Import check intentionally avoids inference and downloading weights. The smoke check runs MMseqs2 on three small proteins and fails the build if it does not cluster.
-RUN python -c "import runner; import backend.worker_food.worker; import pipeline.food.runner; import pipeline.food.provenance" \
+RUN python -c "import runner; import backend.worker_food.worker; import food.pipeline.runner; import food.shared.provenance" \
     && python -m backend.worker_food.smoke
 ENTRYPOINT ["python", "-m", "backend.worker_food.worker"]

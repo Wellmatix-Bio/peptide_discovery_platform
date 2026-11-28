@@ -4,7 +4,7 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
-from schemas.food_dossier import GATE_RULE, ReviewRequest, gate_summary, latest, new_record, parse_log
+from food.shared.dossier import GATE_RULE, ReviewRequest, gate_summary, latest, new_record, parse_log
 
 
 def record(peptide, decision, reason="", reviewer="Hazara"):

@@ -9,10 +9,10 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "src"))
 
-from pipeline.food import settings  # noqa: E402
-from pipeline.food.evidence import EvidenceLookup, load_evidence  # noqa: E402
-from pipeline.food.ranking.stage import MODEL_OBJECTIVES, derive  # noqa: E402
-from schemas.food import FoodCandidate, ParentOrigin  # noqa: E402
+from food.c_discovery import settings  # noqa: E402
+from food.c_discovery.evidence import EvidenceLookup, load_evidence  # noqa: E402
+from food.pipeline.stages.ranking import MODEL_OBJECTIVES, derive  # noqa: E402
+from food.shared.candidate import FoodCandidate, ParentOrigin  # noqa: E402
 
 LOOKUP = EvidenceLookup(load_evidence())
 EVIDENCE = {e["sequence"]: e for e in load_evidence()}
@@ -93,9 +93,9 @@ def test_a_peptide_is_observed_only_with_lcms_evidence_and_the_pipeline_never_se
 
 
 def test_no_stage_output_is_observed():
-    from pipeline.food.digestion.engine import run as digest
-    from pipeline.food.digestion.settings import DEFAULT_SETTINGS
-    from pipeline.food.protein_library.protein import Protein
+    from food.b_digestion.engine import run as digest
+    from food.b_digestion.settings import DEFAULT_SETTINGS
+    from food.a_proteins.protein import Protein
 
     _, peptides, _ = digest([Protein(substrate_id="P1:1-30", accession="P1", sequence="MKWVTFISLLLLFSSAYSRGVFRRDTHKSE", food_source="Whey", precursor_start=1, precursor_end=30)], DEFAULT_SETTINGS)
     assert peptides and {p["evidence_class"] for p in peptides} == {"THEORETICAL"}

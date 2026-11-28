@@ -7,7 +7,7 @@ Question: does the 81-peptide evidence set carry assay conditions, controls, neg
 Reproduce: `python scripts/food_validation/evidence_audit.py` (reads `labeled_peptides_v1.csv` and the source workbook `GLP-1 Secretion_merged&labeled.xlsx`; writes `evidence_audit.json`, `evidence_audit_peptides.csv`, `evidence_observations.csv` here). Nothing was corrected or filled in.
 
 ## What was audited
-- Shipped table: `src/pipeline/food/evidence/data/labeled_peptides_v1.csv`, 81 peptides (51 positive, 30 negative), peptide-level.
+- Shipped table: `src/food/c_discovery/evidence/data/labeled_peptides_v1.csv`, 81 peptides (51 positive, 30 negative), peptide-level.
 - Source: the workbook's Merged sheet, 120 labelled assay observations (68 positive, 52 negative) covering the same 81 peptides, plus the ChatGPT-mining sheet (45 rows) that holds the fuller assay record.
 
 ## Findings

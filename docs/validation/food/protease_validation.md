@@ -1,6 +1,6 @@
 # Protease rules: validation report
 
-What was validated: the Expasy PeptideCutter rules in `src/pipeline/food/digestion/rules.py`, which s03 (digestion) and s06 (gut stability) use. Digestion uses `pepsin_ph1.3`, `trypsin` and `chymotrypsin_high`. Gut survival (s06) uses `pepsin_ph1.3`, `trypsin` and, since this report, `chymotrypsin_low`. The report gives sensitivity, specificity and a balanced accuracy for each rule against experimentally observed cleavage sites, a verdict against the bar Phase 1 set, and the limits that apply when the rules are used on food peptides.
+What was validated: the Expasy PeptideCutter rules in `src/food/b_digestion/rules.py`, which s03 (digestion) and s06 (gut stability) use. Digestion uses `pepsin_ph1.3`, `trypsin` and `chymotrypsin_high`. Gut survival (s06) uses `pepsin_ph1.3`, `trypsin` and, since this report, `chymotrypsin_low`. The report gives sensitivity, specificity and a balanced accuracy for each rule against experimentally observed cleavage sites, a verdict against the bar Phase 1 set, and the limits that apply when the rules are used on food peptides.
 
 Reproduce: `python scripts/food_validation/protease_rules.py` (writes `protease_validation.json` here). The data are Phase 1's `Model Validation` inputs, read in place.
 

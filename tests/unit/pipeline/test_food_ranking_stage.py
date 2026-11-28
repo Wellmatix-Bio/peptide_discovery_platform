@@ -14,11 +14,11 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "src"))
 
-from pipeline.food import settings  # noqa: E402
-from pipeline.food.screening import checks  # noqa: E402
-from schemas.food_dossier_pdf import split_outside_brackets  # noqa: E402
-from pipeline.food.ranking.stage import MODEL_OBJECTIVES, FoodRankingDecision  # noqa: E402
-from schemas.food import FoodCandidate, ParentOrigin  # noqa: E402
+from food.c_discovery import settings  # noqa: E402
+from food.c_discovery.screening import checks  # noqa: E402
+from food.shared.dossier_pdf import split_outside_brackets  # noqa: E402
+from food.pipeline.stages.ranking import MODEL_OBJECTIVES, FoodRankingDecision  # noqa: E402
+from food.shared.candidate import FoodCandidate, ParentOrigin  # noqa: E402
 from schemas.run_config import StageConfig  # noqa: E402
 
 FIX = Path(__file__).resolve().parents[2] / "fixtures" / "food" / "phase1"

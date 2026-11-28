@@ -9,7 +9,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from backend.api_e2e import api
-from schemas.food_run_config import FOOD_REQUIRED_WEIGHT_FILES, FoodRunConfig
+from food.pipeline.run_config import FOOD_REQUIRED_WEIGHT_FILES, FoodRunConfig
 
 BASE = "/api/v1/jobs/food"
 IMAGE = "us-central1-docker.pkg.dev/test/repo/worker-food:1"

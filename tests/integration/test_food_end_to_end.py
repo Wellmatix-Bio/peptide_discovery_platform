@@ -15,19 +15,20 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
 
-from pipeline.food import registry, settings  # noqa: E402
-from pipeline.food.digestion.stage import FoodDigestion  # noqa: E402
-from pipeline.food.generation import settings as S  # noqa: E402
-from pipeline.food.generation.stage import FoodGeneration  # noqa: E402
-from pipeline.food.gut_stability.stage import FoodGutStability  # noqa: E402
-from pipeline.food.io import load_food_candidates_jsonl  # noqa: E402
-from pipeline.food.protein_library.fasta import read_fasta  # noqa: E402
-from pipeline.food.protein_library.protein import Protein  # noqa: E402
-from pipeline.food.ranking.stage import FoodRankingDecision  # noqa: E402
-from pipeline.food.runner import FoodPipelineRunner  # noqa: E402
-from pipeline.food.screening.model_registry import ScreeningModel  # noqa: E402
-from pipeline.food.screening.stage import FoodScreening  # noqa: E402
-from schemas.food import FoodCandidate  # noqa: E402
+from food.pipeline import registry
+from food.c_discovery import settings  # noqa: E402
+from food.pipeline.stages.digestion import FoodDigestion  # noqa: E402
+from food.c_discovery.generation import settings as S  # noqa: E402
+from food.pipeline.stages.generation import FoodGeneration  # noqa: E402
+from food.pipeline.stages.gut_stability import FoodGutStability  # noqa: E402
+from food.shared.io import load_food_candidates_jsonl  # noqa: E402
+from food.a_proteins.fasta import read_fasta  # noqa: E402
+from food.a_proteins.protein import Protein  # noqa: E402
+from food.pipeline.stages.ranking import FoodRankingDecision  # noqa: E402
+from food.pipeline.runner import FoodPipelineRunner  # noqa: E402
+from food.c_discovery.screening.model_registry import ScreeningModel  # noqa: E402
+from food.pipeline.stages.screening import FoodScreening  # noqa: E402
+from food.shared.candidate import FoodCandidate  # noqa: E402
 from schemas.run_config import RunConfig  # noqa: E402
 
 FIX = Path(__file__).resolve().parents[1] / "fixtures" / "food" / "phase1"
@@ -95,7 +96,7 @@ def test_every_ranked_peptide_is_traceable_and_carries_what_was_not_validated(ru
 
 
 def test_every_ranked_peptide_passes_the_provenance_check(run):
-    from pipeline.food.provenance import check_provenance
+    from food.shared.provenance import check_provenance
 
     out, _ = run
     assert out and check_provenance(out, make_proteins()) == []  # the real runner's final list, designed peptides included
@@ -130,8 +131,8 @@ def test_the_run_is_repeatable(run, tmp_path_factory):
 
 
 def test_the_ranked_peptides_carry_their_digestion_detail_alignment_and_mass_and_the_digestion_agrees_with_a_new_simulation(run):
-    from common.food_digestion import masses
-    from pipeline.food.digestion.explain import explain_candidates
+    from food.b_digestion import masses
+    from food.b_digestion.explain import explain_candidates
 
     out, run_dir = run
     back = load_food_candidates_jsonl(str(run_dir / "candidates" / "s07_food_ranking_decision.jsonl"))  # what was saved, not what the stage holds in memory

@@ -1,4 +1,4 @@
-"""Validation of protein-family assignment (src/pipeline/food/protein_library/clusters.py) against the data foundation's real CD-HIT output.
+"""Validation of protein-family assignment (src/food/a_proteins/families.py) against the data foundation's real CD-HIT output.
 
 The data foundation clustered its 524 digestion substrates with CD-HIT at 100, 95, 90, 80, 70, 60 and 50% identity (`evaluation/digestion_substrates_c*.clstr`) and
 classified each substrate into one of 21 curated protein families (`families` column of `digestion_substrates_clusters.csv`). This script:
@@ -25,8 +25,8 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "src"))
 sys.path.insert(0, str(ROOT))  # model_store, imported by the pipeline package
 
-from pipeline.food import settings  # noqa: E402
-from pipeline.food.protein_library.clusters import IDENTITY  # noqa: E402
+from food.c_discovery import settings  # noqa: E402
+from food.a_proteins.families import IDENTITY  # noqa: E402
 
 def _read_cdhit(path: Path) -> dict[str, str]:
     """member -> representative from CD-HIT's `.clstr` (the representative is the line ending in `*`). Reads the data foundation's reference files; the platform clusters with MMseqs2."""

@@ -18,7 +18,7 @@ from google.api_core.exceptions import NotFound
 
 from backend.worker.worker import CompletedRunExists, completed_run_reason
 from common import storage
-from schemas.food_run_config import FoodRunConfig
+from food.pipeline.run_config import FoodRunConfig
 
 log = logging.getLogger("worker_food")
 
@@ -37,8 +37,8 @@ def load_job_config(path: str, wait_seconds: float = 0) -> FoodRunConfig:
 
 def load_run_proteins(config: FoodRunConfig):
     """The submitted proteins with the run's food source, allergen status and protein-family cluster; QC issues and clustering notes come with them."""
-    from pipeline.food.protein_library.clusters import assign_clusters
-    from pipeline.food.protein_library.protein import load_proteins
+    from food.a_proteins.families import assign_clusters
+    from food.a_proteins.protein import load_proteins
 
     with tempfile.TemporaryDirectory() as tmp:  # the FASTA sits in the run folder, local or gs://; the reader wants a file
         fasta = Path(tmp) / "proteins.fasta"
@@ -56,7 +56,7 @@ def load_run_proteins(config: FoodRunConfig):
 
 def ranking_rules() -> dict:
     """The settings the ranking ran under, saved with the report so the reports can state them."""
-    from pipeline.food import settings
+    from food.c_discovery import settings
 
     return {"min_length": settings.MIN_LENGTH, "max_length": settings.MAX_LENGTH, "model_stage_pool": settings.MODEL_TOP, "final_count": settings.FINAL_COUNT,
             "max_per_cluster": settings.MAX_PER_CLUSTER, "max_per_parent_family": settings.MAX_PER_PARENT_CLUSTER, "min_exact_evidence": settings.MIN_EXACT_EVIDENCE,
@@ -73,7 +73,7 @@ def write_ranking_report(runner, run_dir: str) -> None:
 
 def write_provenance_check(candidates, proteins, run_dir: str) -> list[dict]:
     """Checks every final candidate against the run's proteins and saves the outcome next to the results."""
-    from pipeline.food.provenance import check_provenance
+    from food.shared.provenance import check_provenance
 
     issues = check_provenance(candidates, proteins)
     storage.write_text(storage.join(run_dir, "provenance_check.json"), json.dumps({"checked": len(candidates), "issues": issues}))
@@ -93,7 +93,7 @@ def run_job(config_path: str, wait_seconds: float = 0, overwrite: bool = False) 
     try:
         import numpy as np
         import torch
-        from pipeline.food.runner import FoodPipelineRunner
+        from food.pipeline.runner import FoodPipelineRunner
 
         proteins, issues, notes = load_run_proteins(config)
         storage.write_text(storage.join(run_dir, "protein_qc.json"), json.dumps([asdict(i) for i in issues]))

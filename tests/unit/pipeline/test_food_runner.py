@@ -11,11 +11,11 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "src"))
 
 from common.io import BoundaryWriter  # noqa: E402
-from pipeline.food.io import load_food_candidates_jsonl  # noqa: E402
-from pipeline.food.runner import FoodPipelineRunner  # noqa: E402
+from food.shared.io import load_food_candidates_jsonl  # noqa: E402
+from food.pipeline.runner import FoodPipelineRunner  # noqa: E402
 from registry import build_stages  # noqa: E402
 from runner import PipelineRunner  # noqa: E402
-from schemas.food import FoodCandidate, ParentOrigin  # noqa: E402
+from food.shared.candidate import FoodCandidate, ParentOrigin  # noqa: E402
 from schemas.run_config import RunConfig  # noqa: E402
 
 

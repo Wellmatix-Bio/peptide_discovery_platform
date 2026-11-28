@@ -10,12 +10,12 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "src"))
 
-from pipeline.food.digestion.stage import FoodDigestion  # noqa: E402
-from pipeline.food.generation import settings as S  # noqa: E402
-from pipeline.food.generation.stage import LINEAGE, FoodGeneration  # noqa: E402
-from pipeline.food.protein_library.protein import Protein  # noqa: E402
-from pipeline.food.protein_library.fasta import read_fasta  # noqa: E402
-from schemas.food import FoodCandidate  # noqa: E402
+from food.pipeline.stages.digestion import FoodDigestion  # noqa: E402
+from food.c_discovery.generation import settings as S  # noqa: E402
+from food.pipeline.stages.generation import LINEAGE, FoodGeneration  # noqa: E402
+from food.a_proteins.protein import Protein  # noqa: E402
+from food.a_proteins.fasta import read_fasta  # noqa: E402
+from food.shared.candidate import FoodCandidate  # noqa: E402
 from schemas.run_config import StageConfig  # noqa: E402
 
 FIX = Path(__file__).resolve().parents[2] / "fixtures" / "food" / "phase1"

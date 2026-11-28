@@ -1,0 +1,82 @@
+sequence,length,label,label_conflict,n_observations,studies,sources,food_derivation,direction,n_pos_obs,n_neg_obs,cell_models,evidence_tier
+AEKTKIP,7,0,False,1,EP3916006A1,Purity verified CSV,food_parent_unverified,negative,0,1,STC-1,primary_assay
+AGPQGPIGPR,10,0,False,2,PMID33396793,ChatGPT mining;Paper Agent Derived,food_parent_stated,negative,0,2,STC-1,primary_assay
+AIRGCRL,7,1,False,1,PMID:40528814,Purity verified CSV,engineered_analog,positive,1,0,mouse jejunal organoids,primary_assay
+ANVST,5,1,False,1,BIOPEP 9331,BIOPEP positives,food_parent_unverified,positive,1,0,,database_curated
+APDSGNFR,8,1,False,7,PMID40509480,ChatGPT mining;Paper Agent Derived,food_parent_stated,positive,7,0,NCI-H716; STC-1,primary_assay
+ASCNGVCSPFEMPPCGSSACRCIPVGLVVGYCRHPSG,37,1,False,1,PMID40550800,Paper Agent Derived,food_parent_stated,positive,1,0,db/db mice (gavage); mouse small intestinal organoids,primary_assay
+DLVDK,5,0,False,2,PMID33396793,ChatGPT mining;Paper Agent Derived,food_parent_stated,negative,0,2,STC-1,primary_assay
+DSKPGSL,7,0,False,2,PMID33396793,ChatGPT mining;Paper Agent Derived,food_parent_stated,negative,0,2,STC-1,primary_assay
+DVSGGYDE,8,0,False,2,PMID33396793,ChatGPT mining;Paper Agent Derived,food_parent_stated,negative,0,2,STC-1,primary_assay
+EAPLNPK,7,0,False,2,PMID33396793,ChatGPT mining;Paper Agent Derived,food_parent_stated,negative,0,2,STC-1,primary_assay
+ELLK,4,0,False,2,PMID33396793,ChatGPT mining;Paper Agent Derived,food_parent_stated,negative,0,2,STC-1,primary_assay
+EQRLGNQWAVGHLM,14,1,False,1,PMID:31984675; PMCID:PMC6983481; DOI:10.14814/phy2.14352,Purity verified CSV,non_food_hormone,positive,1,0,Isolated perfused Wistar rat colon,primary_assay
+EVLSQ,5,0,False,2,PMID33396793,ChatGPT mining;Paper Agent Derived,food_parent_stated,negative,0,2,STC-1,primary_assay
+FFPALLSL,8,1,False,1,BIOPEP 11464,BIOPEP positives,food_parent_unverified,positive,1,0,,database_curated
+FRTATGAV,8,0,False,1,PMID32516710,ChatGPT mining,food_parent_stated,negative,0,1,STC-1,primary_assay
+GATGPAGAV,9,0,False,2,PMID33396793,ChatGPT mining;Paper Agent Derived,food_parent_stated,negative,0,2,STC-1,primary_assay
+GPFPLPD,7,1,False,7,PMID40509480,ChatGPT mining;Paper Agent Derived,food_parent_stated,positive,7,0,NCI-H716; STC-1,primary_assay
+HIHVNGA,7,0,False,2,PMID33396793,ChatGPT mining;Paper Agent Derived,food_parent_stated,negative,0,2,STC-1,primary_assay
+HSDAVFTDNYTRLRKQMAVKKYLNSILN,28,0,False,1,PMID:31984675; PMCID:PMC6983481; DOI:10.14814/phy2.14352,Purity verified CSV,non_food_hormone,negative,0,1,Isolated perfused Wistar rat colon,primary_assay
+IL,2,0,False,1,PMID28326005,Paper Agent Derived,food_parent_stated,negative,0,1,Wistar rats after treadmill exercise (in vivo),primary_assay
+IPAVFK,6,1,False,1,EP3916006A1,Purity verified CSV,food_parent_unverified,positive,1,0,STC-1,primary_assay
+KAAVT,5,1,False,1,BIOPEP 9333,BIOPEP positives,food_parent_unverified,positive,1,0,,database_curated
+KQGDVIALPA,10,1,False,1,CN121045334B / HK40128519B,Purity verified CSV,food_parent_unverified,positive,1,0,STC-1,primary_assay
+LAHMGPY,7,1,False,1,BIOPEP 11627,BIOPEP positives,food_parent_unverified,positive,1,0,,database_curated
+LEL,3,0,False,2,PMID33396793,ChatGPT mining;Paper Agent Derived,food_parent_stated,negative,0,2,STC-1,primary_assay
+LGME,4,0,False,2,PMID33396793,ChatGPT mining;Paper Agent Derived,food_parent_stated,negative,0,2,STC-1,primary_assay
+LGVDE,5,0,False,2,PMID33396793,ChatGPT mining;Paper Agent Derived,food_parent_stated,negative,0,2,STC-1,primary_assay
+LI,2,0,False,1,PMID28326005,Paper Agent Derived,food_parent_stated,negative,0,1,Wistar rats after treadmill exercise (in vivo),primary_assay
+LIVTQTM,7,1,False,1,EP3916006A1,Purity verified CSV,food_parent_unverified,positive,1,0,STC-1,primary_assay
+LKLKLL,6,1,False,1,PMID:42473065,Purity verified CSV,food_parent_unverified,positive,1,0,STC-1,primary_assay
+LKPT,4,1,False,3,BIOPEP 9934;PMID33396793,BIOPEP positives;ChatGPT mining;Paper Agent Derived,food_parent_stated,positive,3,0,STC-1,primary_assay
+LLMMK,5,0,False,2,PMID33396793,ChatGPT mining;Paper Agent Derived,food_parent_stated,negative,0,2,STC-1,primary_assay
+LLP,3,0,False,1,PMID32516710,ChatGPT mining,food_parent_stated,negative,0,1,STC-1,primary_assay
+LPPLQPAVMVPF,12,1,False,1,BIOPEP 11462,BIOPEP positives,food_parent_unverified,positive,1,0,,database_curated
+LQAFEPLR,8,1,False,1,CN122167528A,Purity verified CSV,food_parent_unverified,positive,1,0,STC-1,primary_assay
+LTDY,4,0,False,2,PMID33396793,ChatGPT mining;Paper Agent Derived,food_parent_stated,negative,0,2,STC-1,primary_assay
+LTLL,4,1,False,1,WO2021083958A1,Purity verified CSV,food_parent_unverified,positive,1,0,STC-1,primary_assay
+LV,2,0,False,1,PMID28326005,Paper Agent Derived,food_parent_stated,negative,0,1,Wistar rats after treadmill exercise (in vivo),primary_assay
+MAADIISTIGDLVKWIIDTVNKFKK,25,1,False,1,PMID:32188864,Purity verified CSV,food_parent_unverified,positive,1,0,human intestinal enteroid monolayers,primary_assay
+MLPYPLPFCW,10,1,False,1,BIOPEP 11463,BIOPEP positives,food_parent_unverified,positive,1,0,,database_curated
+NDQRGEII,8,1,False,1,CN121045334B / HK40128519B,Purity verified CSV,food_parent_unverified,positive,1,0,STC-1,primary_assay
+NWYYPPQ,7,1,False,1,BIOPEP 11461,BIOPEP positives,food_parent_unverified,positive,1,0,,database_curated
+PAAVRSPAQILQ,12,1,False,1,EP3916006A1,Purity verified CSV,food_parent_unverified,positive,1,0,STC-1,primary_assay
+PEEHPT,6,0,False,2,PMID33396793,ChatGPT mining;Paper Agent Derived,food_parent_stated,negative,0,2,STC-1,primary_assay
+PFL,3,1,False,1,PMID32516710,ChatGPT mining,food_parent_stated,positive,1,0,STC-1,primary_assay
+PFVQQQQ,7,1,False,1,CN121045334B / HK40128519B,Purity verified CSV,food_parent_unverified,positive,1,0,STC-1,primary_assay
+PPPWQ,5,1,False,1,BIOPEP 11459,BIOPEP positives,food_parent_unverified,positive,1,0,,database_curated
+PQLAPF,6,1,False,1,BIOPEP 11466,BIOPEP positives,food_parent_unverified,positive,1,0,,database_curated
+PSEQYQPYPEQQEPFVQ,17,1,False,1,CN121045334B / HK40128519B,Purity verified CSV,food_parent_unverified,positive,1,0,STC-1,primary_assay
+PSLVH,5,0,False,2,PMID33396793,ChatGPT mining;Paper Agent Derived,food_parent_stated,negative,0,2,STC-1,primary_assay
+PYPILP,6,1,False,1,BIOPEP 11460,BIOPEP positives,food_parent_unverified,positive,1,0,,database_curated
+QLLQPQLQ,8,1,False,1,CN122167528A,Purity verified CSV,food_parent_unverified,positive,1,0,STC-1,primary_assay
+RADHPFL,7,0,False,1,PMID32516710,ChatGPT mining,food_parent_stated,negative,0,1,STC-1,primary_assay
+RADTYNPR,8,1,False,1,CN122167528A,Purity verified CSV,food_parent_unverified,positive,1,0,STC-1,primary_assay
+RYLG,4,1,False,1,EP3916006A1,Purity verified CSV,food_parent_unverified,positive,1,0,STC-1,primary_assay
+RYLGY,5,1,False,1,EP3916006A1,Purity verified CSV,food_parent_unverified,positive,1,0,STC-1,primary_assay
+RYLGYLE,7,1,False,1,EP3916006A1,Purity verified CSV,food_parent_unverified,positive,1,0,STC-1,primary_assay
+SAGPQGPIGPR,11,0,False,1,PMID33396793,ChatGPT mining,food_parent_stated,negative,0,1,STC-1,primary_assay
+SRYPS,5,1,False,1,EP3916006A1,Purity verified CSV,food_parent_unverified,positive,1,0,STC-1,primary_assay
+TAGWNIPMGL,10,1,False,1,BIOPEP 11465,BIOPEP positives,food_parent_unverified,positive,1,0,,database_curated
+TKAVEH,6,1,False,1,BIOPEP 9332,BIOPEP positives,food_parent_unverified,positive,1,0,,database_curated
+VAHPAPYF,8,1,False,1,BIOPEP 11626,BIOPEP positives,food_parent_unverified,positive,1,0,,database_curated
+VAPEEHPT,8,0,False,2,PMID33396793,ChatGPT mining;Paper Agent Derived,food_parent_stated,negative,0,2,STC-1,primary_assay
+VAWRNRCKGTD,11,1,False,1,EP3916006A1,Purity verified CSV,food_parent_unverified,positive,1,0,STC-1,primary_assay
+VDGL,4,1,False,1,WO2021083958A1,Purity verified CSV,food_parent_unverified,positive,1,0,STC-1,primary_assay
+VL,2,0,False,1,PMID28326005,Paper Agent Derived,food_parent_stated,negative,0,1,Wistar rats after treadmill exercise (in vivo),primary_assay
+VLLPD,5,0,False,1,PMID32516710,ChatGPT mining,food_parent_stated,negative,0,1,STC-1,primary_assay
+VLLPDEVSGL,10,0,False,1,PMID32516710,ChatGPT mining,food_parent_stated,negative,0,1,STC-1,primary_assay
+VLPL,4,1,False,1,WO2021083958A1,Purity verified CSV,food_parent_unverified,positive,1,0,STC-1,primary_assay
+VPIDVDKTKVHNVEPVESARIEPPDTGLYYDEYLKQVIEVLETDPHFREKLQKADIEEIRSGRLSQELDLVSHKVRTRLDEL,82,1,False,1,PMID:25930999; DOI:10.1016/j.bbrc.2015.04.100,Purity verified CSV,non_food_hormone,positive,1,0,STC-1,primary_assay
+VPLM,4,1,False,1,WO2021083958A1,Purity verified CSV,food_parent_unverified,positive,1,0,STC-1,primary_assay
+VPSIHDLF,8,1,False,1,BIOPEP 11628,BIOPEP positives,food_parent_unverified,positive,1,0,,database_curated
+VVEP,4,0,False,2,PMID33396793,ChatGPT mining;Paper Agent Derived,food_parent_stated,negative,0,2,STC-1,primary_assay
+WARGCRL,7,1,False,1,PMID:40528814,Purity verified CSV,engineered_analog,positive,1,0,mouse jejunal organoids,primary_assay
+WIAGCRL,7,1,False,1,PMID:40528814,Purity verified CSV,engineered_analog,positive,1,0,mouse jejunal organoids,primary_assay
+WIRACRL,7,1,False,1,PMID:40528814,Purity verified CSV,engineered_analog,positive,1,0,mouse jejunal organoids,primary_assay
+WIRGARL,7,1,False,1,PMID:40528814,Purity verified CSV,engineered_analog,positive,1,0,mouse jejunal organoids,primary_assay
+WIRGCRA,7,1,False,1,PMID:40528814,Purity verified CSV,engineered_analog,positive,1,0,mouse jejunal organoids,primary_assay
+WIRGCRL,7,1,True,8,PMID40528814,ChatGPT mining;Paper Agent Derived,food_parent_stated,mixed,4,4,STC-1; mouse jejunal organoids,primary_assay
+WRNRCKGTD,9,1,False,1,EP3916006A1,Purity verified CSV,food_parent_unverified,positive,1,0,STC-1,primary_assay
+YAEGTFISDYSIAMDKIRQQDFVNWLLAQKGKKNDWKHNLTQ,42,1,False,1,PMID:31984675; PMCID:PMC6983481; DOI:10.14814/phy2.14352,Purity verified CSV,non_food_hormone,positive,1,0,Isolated perfused Wistar rat colon,primary_assay

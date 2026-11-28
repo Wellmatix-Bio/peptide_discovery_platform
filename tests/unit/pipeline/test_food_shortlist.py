@@ -8,7 +8,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "src"))
 
-from pipeline.food.ranking import shortlist  # noqa: E402
+from food.c_discovery.ranking import shortlist  # noqa: E402
 
 LABELS = {"model_cytotoxicity_label": ("predicted_cytotoxic", "cytotoxic"), "model_aggregation_label": ("predicted_aggregation_prone", "aggregation-prone"),
           "model_solubility_label": ("predicted_insoluble", "insoluble"), "model_synthesis_feasibility_label": ("predicted_difficult", "hard to synthesise")}

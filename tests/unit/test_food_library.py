@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 
-from common.food_library import (
+from food.a_proteins.library import (
     ACCESSION_ONLY_MESSAGE,
     DATA,
     NOT_IN_LIBRARY_MESSAGE,
@@ -20,7 +20,7 @@ from common.food_library import (
     UnknownLibraryProteins,
     library,
 )
-from common.protein_fasta import Substrate
+from food.a_proteins.fasta import Substrate
 
 PHASE1_FASTA = Path(__file__).resolve().parents[1] / "fixtures" / "food" / "phase1" / "digestion_substrates.fasta"
 L = library()
@@ -80,7 +80,7 @@ def test_resolve_keeps_the_order_drops_repeats_and_names_what_is_missing():
 
 def test_the_fasta_and_records_of_chosen_proteins_round_trip():
     chosen = L.resolve([L.proteins[0].substrate_id, L.proteins[10].substrate_id])
-    from common.protein_fasta import read_fasta
+    from food.a_proteins.fasta import read_fasta
 
     path = Path(__file__).parent / "_tmp_library.fasta"
     path.write_text(L.fasta_text(chosen), encoding="utf-8")
@@ -127,7 +127,7 @@ def test_a_library_built_from_other_data_loads_the_same_way(tmp_path):
 
 
 def test_every_library_protein_has_both_ends_from_the_fasta_header():
-    from common.protein_fasta import TERMINUS_MEANING
+    from food.a_proteins.fasta import TERMINUS_MEANING
     assert all(p.n_terminus in TERMINUS_MEANING and p.c_terminus in TERMINUS_MEANING for p in L.proteins)
     p = L.by_id["A0A023GQG9:22-749"]
     assert (p.n_terminus, p.c_terminus) == ("SIGNAL_CLEAVED", "SEQ_END") and p.info()["n_terminus"] == "SIGNAL_CLEAVED"
@@ -136,7 +136,7 @@ def test_every_library_protein_has_both_ends_from_the_fasta_header():
 # --- where the library files come from: FOOD_LIBRARY_DIR --------------------------------------------------------
 
 def test_with_no_setting_the_bundled_copy_is_used(monkeypatch):
-    from common import food_library as fl
+    from food.a_proteins import library as fl
 
     monkeypatch.delenv("FOOD_LIBRARY_DIR", raising=False)
     assert fl.data_dir() == fl.BUNDLED_DATA
@@ -145,7 +145,7 @@ def test_with_no_setting_the_bundled_copy_is_used(monkeypatch):
 def test_a_local_folder_is_used_as_it_is_under_dev_mode(monkeypatch, tmp_path):
     import shutil
 
-    from common import food_library as fl
+    from food.a_proteins import library as fl
 
     for name in fl.LIBRARY_FILES:
         shutil.copy(fl.BUNDLED_DATA / name, tmp_path / name)
@@ -154,7 +154,7 @@ def test_a_local_folder_is_used_as_it_is_under_dev_mode(monkeypatch, tmp_path):
 
 
 def test_a_gcs_folder_is_downloaded_once_and_loads_the_same_library(monkeypatch):
-    from common import food_library as fl
+    from food.a_proteins import library as fl
 
     reads = []
 
@@ -171,7 +171,7 @@ def test_a_gcs_folder_is_downloaded_once_and_loads_the_same_library(monkeypatch)
 
 
 def test_a_missing_file_in_the_gcs_folder_names_the_file_and_where_it_was_looked_for(monkeypatch):
-    from common import food_library as fl
+    from food.a_proteins import library as fl
 
     def fake_read_text(path, **kwargs):
         if str(path).endswith("source_records.csv"):

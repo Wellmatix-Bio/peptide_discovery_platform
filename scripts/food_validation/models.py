@@ -1,4 +1,4 @@
-"""Checks of the six screening models as the food pipeline uses them (src/pipeline/food/screening/adapters.py), on real weights.
+"""Checks of the six screening models as the food pipeline uses them (src/food/c_discovery/screening/adapters.py), on real weights.
 
 For each model: does the score point the right way (higher = safer / more developable), is the 0.5 label threshold the model's own boundary, and does the
 applicability band match the training data? Plus, for allergenicity, the two score definitions (1 - p_allergen, Phase 1's hold-out percentile) compared on the
@@ -31,8 +31,8 @@ sys.path.insert(0, str(ROOT / "src"))
 sys.path.insert(0, str(ROOT))
 
 from pipeline.feature_extractor import FeatureExtractor  # noqa: E402
-from pipeline.food import settings  # noqa: E402
-from pipeline.food.screening import adapters  # noqa: E402
+from food.c_discovery import settings  # noqa: E402
+from food.c_discovery.screening import adapters  # noqa: E402
 
 MODELS = ROOT.parent / "Models"
 PHASE1_FIXTURE = ROOT / "tests" / "fixtures" / "food" / "phase1" / "screening_scored.csv"
@@ -174,7 +174,7 @@ def ranking_with_each_allergenicity_score(models: dict) -> dict:
     """The ranking of Phase 1's 400-peptide pool with Phase 1's allergenicity score (percentile) and with the platform's (1 - p_allergen)."""
     from types import SimpleNamespace
 
-    from pipeline.food.ranking.stage import FoodRankingDecision
+    from food.pipeline.stages.ranking import FoodRankingDecision
     from schemas.run_config import StageConfig
 
     spec = importlib.util.spec_from_file_location("ranking_fixture", ROOT / "tests" / "unit" / "pipeline" / "test_food_ranking_stage.py")

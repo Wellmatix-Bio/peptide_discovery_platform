@@ -14,7 +14,7 @@ from pydantic import ValidationError
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
 
 from schemas.candidate import Candidate  # noqa: E402
-from schemas.food import FoodCandidate, ParentOrigin  # noqa: E402
+from food.shared.candidate import FoodCandidate, ParentOrigin  # noqa: E402
 
 
 def parent(**kw) -> ParentOrigin:

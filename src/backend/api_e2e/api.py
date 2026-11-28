@@ -1,7 +1,6 @@
 """Start and inspect complete-pipeline Vertex AI Custom Jobs."""
 
 import hashlib
-import dataclasses
 import json
 import os
 import re
@@ -28,12 +27,12 @@ from pydantic import (
     model_validator,
 )
 from common import storage
-from common.food_digestion.engine import run as run_digestion
-from common.food_digestion.rules import build_registry as digestion_registry
-from common.food_digestion.settings import DEFAULT_SETTINGS as DIGESTION_DEFAULT_SETTINGS, PROTEASE_PATHWAYS, protease_pathways
-from common.food_digestion.validation import LIMITATIONS as DIGESTION_LIMITATIONS, RULE_VALIDATION
-from common.food_library import Match as LibraryMatchResult, UnknownLibraryProteins, library as food_library
-from common.protein_fasta import read_fasta as read_protein_fasta
+from food.b_digestion.engine import run as run_digestion
+from food.b_digestion.rules import build_registry as digestion_registry
+from food.b_digestion.settings import DEFAULT_SETTINGS as DIGESTION_DEFAULT_SETTINGS, PROTEASE_PATHWAYS, with_options
+from food.b_digestion.validation import LIMITATIONS as DIGESTION_LIMITATIONS, RULE_VALIDATION
+from food.a_proteins.library import Match as LibraryMatchResult, UnknownLibraryProteins, library as food_library
+from food.a_proteins.fasta import read_fasta as read_protein_fasta
 
 # Imported for its side effect: common/env.py loads .env into os.environ; do not remove as unused.
 from common import env  # noqa: F401
@@ -44,9 +43,9 @@ from common.applicability import NOT_CHECKED, ReferenceProfile
 from common.sequence_utils import parse_sequence_items
 from schemas.brief import Brief, CosmeticBrief, MetabolicBrief
 from schemas.e2e_config import validate_job_config
-from schemas.food_run_config import FOOD_REQUIRED_WEIGHT_FILES, FoodRunConfig
-from schemas.food_dossier import (FoodDossier, ReviewRecord, ReviewRequest, build_dossier, dossier_html, experiment_sheet_csv, gate_summary, latest, new_record, parse_log, ranking_summary)
-from schemas.food_dossier_pdf import dossier_pdf
+from food.pipeline.run_config import FOOD_REQUIRED_WEIGHT_FILES, FoodRunConfig
+from food.shared.dossier import (FoodDossier, ReviewRecord, ReviewRequest, build_dossier, dossier_html, experiment_sheet_csv, gate_summary, latest, new_record, parse_log, ranking_summary)
+from food.shared.dossier_pdf import dossier_pdf
 from schemas.immuno_config import CYTOKINE_MODELS, DEFAULT_BATCH_SIZE, IMMUNO_MAX_PEPTIDES, REQUIRED_WEIGHT_FILES, ImmunoRunConfig
 from schemas.stage_configs import CosmeticE2ERequest, E2ERequest, MetabolicE2ERequest, resolve_params
 
@@ -953,18 +952,8 @@ def run_food_digestion(request: DigestionRequest):
             raise HTTPException(422, {"message": "No usable protein records in the FASTA", "rejected": [{"id": i.substrate_id, "code": i.code, "message": i.message} for i in issues]})
     if len(substrates) > DIGESTION_MAX_PROTEINS or sum(len(s.sequence) for s in substrates) > DIGESTION_MAX_RESIDUES:
         raise HTTPException(422, f"At most {DIGESTION_MAX_PROTEINS} proteins and {DIGESTION_MAX_RESIDUES} residues per digestion run")
-    base = DIGESTION_DEFAULT_SETTINGS
-    known = {p.id: p for p in base.pathways}
-    unknown = [i for i in (request.pathways or []) if i not in known]
-    if unknown:
-        raise HTTPException(422, f"Unknown pathway {', '.join(unknown)}; available: {', '.join(known)}")
     try:
-        settings = dataclasses.replace(
-            base, pathways=protease_pathways(base, request.proteases) if request.proteases else tuple(known[i] for i in dict.fromkeys(request.pathways)) if request.pathways else base.pathways,
-            max_missed_cleavages=base.max_missed_cleavages if request.max_missed_cleavages is None else request.max_missed_cleavages,
-            min_length=request.min_length or base.min_length, max_length=request.max_length or base.max_length,
-        )
-        settings.validate()
+        settings = with_options(DIGESTION_DEFAULT_SETTINGS, request.proteases, request.pathways, request.max_missed_cleavages, request.min_length, request.max_length)
     except ValueError as exc:
         raise HTTPException(422, str(exc)) from exc
     origins, peptides, cleavage_map = run_digestion(substrates, settings)

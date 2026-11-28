@@ -1,0 +1,42 @@
+# The food dashboard and its API on this computer. Run from the repository root:
+#
+#   docker compose -f deploy/compose.food.yaml up -d --build
+#
+# Dashboard: http://localhost:8080   API: http://localhost:8001 (the page in your browser calls it directly; DEV_MODE allows that origin).
+# Set WEIGHTS_DIR to the folder that holds the model weights (esm2_t30_150M, allergenicity_predictor_v1, ...); it is mounted read-only and never copied into an image.
+# This is a local stack: the API has no authentication and DEV_MODE runs jobs inside its own container, so do not publish it beyond this computer.
+# (deploy/compose.yaml is the production stack; it publishes only the web container.)
+
+name: wellmatix-food
+
+services:
+  api:
+    build:
+      context: ..
+      dockerfile: deploy/food-api.Dockerfile
+    environment:
+      DEV_MODE: "true"
+      FOOD_LIBRARY_DIR: ""  # empty: the library copy bundled in the image
+      VERTEX_ARTIFACTS_DIR: /app/artifacts
+    ports: ["${API_PORT:-8001}:8080"]
+    volumes:
+      - type: bind
+        source: ${WEIGHTS_DIR:-D:/AI Peptide Discovery Platform/Models/model_weights}
+        target: /app/model_store/model_weights
+        read_only: true
+        bind:
+          create_host_path: false  # a wrong WEIGHTS_DIR must fail, not mount an empty folder
+      - food_runs:/app/artifacts
+
+  dashboard:
+    build:
+      context: ./food-dashboard
+    environment:
+      WMX_API_BASE_URL: http://localhost:${API_PORT:-8001}
+    ports: ["${DASHBOARD_PORT:-8080}:80"]
+    depends_on:
+      api:
+        condition: service_healthy
+
+volumes:
+  food_runs:

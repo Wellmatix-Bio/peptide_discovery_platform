@@ -10,9 +10,9 @@ import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "src"))
 
-from pipeline.food import settings  # noqa: E402
-from pipeline.food.ranking import ranking  # noqa: E402
-from pipeline.food.screening import checks, model_registry  # noqa: E402
+from food.c_discovery import settings  # noqa: E402
+from food.c_discovery.ranking import ranking  # noqa: E402
+from food.c_discovery.screening import checks, model_registry  # noqa: E402
 
 CONFIG = {name: {"objective": "safety", "class": "", "weights": ""} for name in ("allergenicity", "cytotoxicity", "solubility")}
 

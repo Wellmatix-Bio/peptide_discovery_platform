@@ -16,15 +16,15 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "src"))
 
-from pipeline.food import settings  # noqa: E402
-from pipeline.food.digestion import DEFAULT_SETTINGS, run  # noqa: E402
-from pipeline.food.evidence import load_evidence  # noqa: E402
-from pipeline.food.generation import edits as E  # noqa: E402
-from pipeline.food.generation import filters as Fl  # noqa: E402
-from pipeline.food.generation import generate as G  # noqa: E402
-from pipeline.food.generation import settings as S  # noqa: E402
-from pipeline.food.protein_library.fasta import read_fasta  # noqa: E402
-from pipeline.food.screening.screening import physchem  # noqa: E402
+from food.c_discovery import settings  # noqa: E402
+from food.b_digestion import DEFAULT_SETTINGS, run  # noqa: E402
+from food.c_discovery.evidence import load_evidence  # noqa: E402
+from food.c_discovery.generation import edits as E  # noqa: E402
+from food.c_discovery.generation import filters as Fl  # noqa: E402
+from food.c_discovery.generation import generate as G  # noqa: E402
+from food.c_discovery.generation import settings as S  # noqa: E402
+from food.a_proteins.fasta import read_fasta  # noqa: E402
+from food.c_discovery.screening.screening import physchem  # noqa: E402
 
 FIX = Path(__file__).resolve().parents[2] / "fixtures" / "food" / "phase1"
 

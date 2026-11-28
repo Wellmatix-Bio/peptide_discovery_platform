@@ -224,7 +224,7 @@ tests/fixtures/
 docs/FOOD_DEVELOPMENT_PLAN.md
 docs/FOOD_PIPELINE_PLAN.md
 src/pipeline/food/evidence/data/labeled_peptides_v1.csv
-src/common/food_library/data/source_records.csv
+src/food/a_proteins/library/data/source_records.csv
 
 # The bitterness model: its code, tests and notes stay off GitHub for now
 model_store/bitterness_predictor_v1/

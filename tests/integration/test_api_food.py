@@ -9,7 +9,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from backend.api_e2e import api
-from schemas.food_run_config import FoodRunConfig
+from food.pipeline.run_config import FoodRunConfig
 
 URL = "/api/v1/jobs/food/create"
 FASTA = ">P1 whey beta-lactoglobulin\nVAGTWYSLAMAASDISLLDAQSAPLR\n>P2 casein\nFFVAPFPEVFGK\n>BAD1 bad\nAXB\n"
@@ -136,7 +136,7 @@ def test_the_worker_runs_the_stages_on_the_submitted_proteins_and_reports_succes
     from dataclasses import dataclass
 
     from backend.worker_food import worker
-    from pipeline.food import runner as food_runner
+    from food.pipeline import runner as food_runner
 
     @dataclass(frozen=True)
     class Ctx:
@@ -312,8 +312,8 @@ def test_no_dossier_or_sheet_before_the_run_has_succeeded(local):
 
 def test_the_worker_fails_the_run_when_a_peptide_is_not_where_it_says(tmp_path, monkeypatch):
     from backend.worker_food import worker
-    from pipeline.food import runner as food_runner
-    from schemas.food import FoodCandidate, ParentOrigin
+    from food.pipeline import runner as food_runner
+    from food.shared.candidate import FoodCandidate, ParentOrigin
 
     liar = FoodCandidate(id="PEP-000000000000", sequence="AAAAAA", origin_type="DIGESTION_DERIVED",
                          parents=[ParentOrigin(protein_id="P1:1-26", start_in_product=1, end_in_product=6, start_in_precursor=1, end_in_precursor=6)],

@@ -7,8 +7,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "src"))
 
-from pipeline.food.protein_library.fasta import read_fasta  # noqa: E402
-from pipeline.food.protein_library.protein import Protein, load_proteins  # noqa: E402
+from food.a_proteins.fasta import read_fasta  # noqa: E402
+from food.a_proteins.protein import Protein, load_proteins  # noqa: E402
 
 RECORDS = "accession,sequence_version,checksum,organism,taxon_id,protein_family,allergen_source_flag,retrieved_at,uniprot_release\n"
 
@@ -39,7 +39,7 @@ def test_proteins_carry_the_source_record(tmp_path):
 
 
 def test_a_protein_with_no_source_record_has_an_unknown_allergen_flag_and_a_warning(tmp_path):
-    f, r = write(tmp_path, ">P1\nAAKGG\n>P2\nAAKGG\n", "P1,1,x,o,1,fam,False,d,r\n")
+    f, r = write(tmp_path, ">P1\nAAKGG\n>P2\nAAKGC\n", "P1,1,x,o,1,fam,False,d,r\n")
     proteins, issues = load_proteins(f, r)
     assert [p.allergen_source for p in proteins] == [False, None]
     assert [(i.substrate_id, i.code, i.severity) for i in issues] == [("P2:1-5", "NO_SOURCE_RECORD", "warning")]
@@ -49,3 +49,10 @@ def test_without_a_source_table_nothing_is_guessed(tmp_path):
     f, _ = write(tmp_path, ">P1\nAAKGG\n")
     (p,), issues = load_proteins(f)
     assert (p.allergen_source, p.version, p.checksum, p.cluster, issues) == (None, None, None, None, [])
+
+
+def test_two_records_with_the_same_sequence_each_get_a_duplicate_sequence_warning_and_both_are_kept(tmp_path):
+    f, _ = write(tmp_path, ">P1\nAAKGG\n>P2\nAAKGG\n>P3\nAAKGC\n")
+    substrates, issues = read_fasta(f)
+    assert len(substrates) == 3
+    assert [(i.substrate_id, i.code, i.severity) for i in issues] == [("P1:1-5", "DUPLICATE_SEQUENCE", "warning"), ("P2:1-5", "DUPLICATE_SEQUENCE", "warning")]

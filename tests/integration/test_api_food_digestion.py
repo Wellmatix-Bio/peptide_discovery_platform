@@ -10,11 +10,11 @@ import pytest
 from fastapi.testclient import TestClient
 
 from backend.api_e2e import api
-from common.food_digestion.engine import run as engine_run
-from common.food_digestion.rules import BUILTIN_ENZYMES
-from common.food_digestion.settings import DEFAULT_SETTINGS
-from common.food_digestion.validation import RULE_VALIDATION
-from common.food_library import library
+from food.b_digestion.engine import run as engine_run
+from food.b_digestion.rules import BUILTIN_ENZYMES
+from food.b_digestion.settings import DEFAULT_SETTINGS
+from food.b_digestion.validation import RULE_VALIDATION
+from food.a_proteins.library import library
 
 L = library()
 CLIENT = TestClient(api.app)
@@ -134,10 +134,10 @@ def test_a_rule_is_never_taken_from_the_request():
     assert CLIENT.post(RUN, json={"library_proteins": IDS[:1], "custom_enzymes": {"x": {"pattern": "(a+)+$"}}}).status_code == 422  # unknown field: no user regex reaches the server
 
 
-def test_the_engine_and_the_pipeline_alias_are_one_module():
-    import pipeline.food.digestion.engine as alias
+def test_a_peptide_id_is_pep_and_twelve_hex_characters():
+    from food.b_digestion.engine import peptide_id
 
-    assert alias is __import__("common.food_digestion.engine", fromlist=["x"]) and re.match(r"PEP-[0-9A-F]{12}$", alias.peptide_id("ACDE"))
+    assert re.match(r"PEP-[0-9A-F]{12}$", peptide_id("ACDE"))
 
 
 def test_the_settings_name_the_proteases_a_run_can_be_limited_to_with_their_single_enzyme_pathways():
@@ -164,7 +164,7 @@ def test_chosen_proteases_run_each_alone_and_together_in_digestion_order(chosen,
 
 
 def test_protease_pathways_are_built_from_the_default_stage_definitions_with_no_new_rule_or_ph():
-    from common.food_digestion.settings import PROTEASE_PATHWAYS, protease_pathways
+    from food.b_digestion.settings import PROTEASE_PATHWAYS, protease_pathways
 
     defaults = {st for p in DEFAULT_SETTINGS.pathways for st in p.stages}
     built = protease_pathways(DEFAULT_SETTINGS, list(PROTEASE_PATHWAYS))

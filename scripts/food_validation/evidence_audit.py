@@ -1,6 +1,6 @@
 """Audit of the food GLP-1 evidence dataset: does it carry assay conditions, controls, negative results and study provenance?
 
-Reads the shipped peptide table (src/pipeline/food/evidence/data/labeled_peptides_v1.csv) and the source workbook it was built from
+Reads the shipped peptide table (src/food/c_discovery/evidence/data/labeled_peptides_v1.csv) and the source workbook it was built from
 (`GLP-1 Secretion_merged&labeled.xlsx`, sheets Merged and ChatGPT mining), recomputes every figure, and writes
 `evidence_audit.json` and `evidence_audit_peptides.csv` to the output folder. Nothing is corrected or filled in: a missing field stays missing.
 

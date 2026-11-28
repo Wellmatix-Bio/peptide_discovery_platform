@@ -1,4 +1,4 @@
-"""Benchmark of the platform's protease cleavage rules (src/pipeline/food/digestion/rules.py) against experimentally observed cleavage sites.
+"""Benchmark of the platform's protease cleavage rules (src/food/b_digestion/rules.py) against experimentally observed cleavage sites.
 
 The rules are the ones s03 (digestion) and s06 (gut stability) use. Each rule gives a yes/no call per internal bond, so the scores are classification metrics
 at that one operating point: sensitivity, specificity, precision, MCC and balanced accuracy (= the AUROC of a binary call).

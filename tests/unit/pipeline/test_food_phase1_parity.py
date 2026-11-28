@@ -17,10 +17,10 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "src"))
 
-from pipeline.food import settings  # noqa: E402
-from pipeline.food.evidence import EvidenceLookup, load_evidence  # noqa: E402
-from pipeline.food.ranking import ranking, shortlist  # noqa: E402
-from pipeline.food.screening import checks, screening  # noqa: E402
+from food.c_discovery import settings  # noqa: E402
+from food.c_discovery.evidence import EvidenceLookup, load_evidence  # noqa: E402
+from food.c_discovery.ranking import ranking, shortlist  # noqa: E402
+from food.c_discovery.screening import checks, screening  # noqa: E402
 
 FIX = Path(__file__).resolve().parents[2] / "fixtures" / "food" / "phase1"
 #: md5 of labeled_peptides_v1.csv recorded by the last Phase 1 screening run (screening_run.json).
@@ -126,7 +126,7 @@ def test_ranking_picks_the_same_peptides_in_the_same_order_as_phase_1():
 
 
 def test_the_rationale_keeps_phase_1_wording_apart_from_the_evidence_sentences():
-    from schemas.food_dossier_pdf import split_outside_brackets
+    from food.shared.dossier_pdf import split_outside_brackets
 
     def kept(text):
         bits = [b.split("; ", 1)[-1] if b.startswith("evidence gate:") else b for b in split_outside_brackets(text)]

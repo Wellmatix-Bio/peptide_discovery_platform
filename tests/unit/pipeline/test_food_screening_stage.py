@@ -11,10 +11,10 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "src"))
 
-from pipeline.food import settings  # noqa: E402
-from pipeline.food.screening.model_registry import ScreeningModel  # noqa: E402
-from pipeline.food.screening.stage import FoodScreening  # noqa: E402
-from schemas.food import FoodCandidate, ParentOrigin  # noqa: E402
+from food.c_discovery import settings  # noqa: E402
+from food.c_discovery.screening.model_registry import ScreeningModel  # noqa: E402
+from food.pipeline.stages.screening import FoodScreening  # noqa: E402
+from food.shared.candidate import FoodCandidate, ParentOrigin  # noqa: E402
 from schemas.run_config import StageConfig  # noqa: E402
 
 FIX = Path(__file__).resolve().parents[2] / "fixtures" / "food" / "phase1"
@@ -118,7 +118,7 @@ def test_the_parent_allergen_flag_comes_from_the_protein_library(flag, expected)
 
 
 def test_a_generated_peptide_is_looked_up_as_itself_and_its_template_evidence_is_shown_but_never_transferred():
-    from pipeline.food.evidence import EvidenceLookup, load_evidence
+    from food.c_discovery.evidence import EvidenceLookup, load_evidence
 
     lookup = EvidenceLookup(load_evidence())
     row = next(r for r in SAMPLE if not r["exclusion"] and r["evidence_match"] == "near")
@@ -139,7 +139,7 @@ def test_a_generated_peptide_is_looked_up_as_itself_and_its_template_evidence_is
 
 
 def test_a_designed_peptide_that_equals_an_evidence_peptide_is_an_exact_sequence_match_of_its_own():
-    from pipeline.food.evidence import load_evidence
+    from food.c_discovery.evidence import load_evidence
 
     known = next(e for e in load_evidence() if e["direction"] == "positive")["sequence"]
     row = next(r for r in SAMPLE if not r["exclusion"])

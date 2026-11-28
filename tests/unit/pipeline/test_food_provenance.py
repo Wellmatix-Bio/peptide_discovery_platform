@@ -11,13 +11,13 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "src"))
 
-from pipeline.food import settings  # noqa: E402
-from pipeline.food.digestion.engine import peptide_id  # noqa: E402
-from pipeline.food.digestion.stage import FoodDigestion  # noqa: E402
-from pipeline.food.protein_library.clusters import assign_clusters  # noqa: E402
-from pipeline.food.protein_library.fasta import read_fasta  # noqa: E402
-from pipeline.food.protein_library.protein import Protein  # noqa: E402
-from pipeline.food.provenance import check_provenance  # noqa: E402
+from food.c_discovery import settings  # noqa: E402
+from food.b_digestion.engine import peptide_id  # noqa: E402
+from food.pipeline.stages.digestion import FoodDigestion  # noqa: E402
+from food.a_proteins.families import assign_clusters  # noqa: E402
+from food.a_proteins.fasta import read_fasta  # noqa: E402
+from food.a_proteins.protein import Protein  # noqa: E402
+from food.shared.provenance import check_provenance  # noqa: E402
 from schemas.run_config import StageConfig  # noqa: E402
 
 FIX = Path(__file__).resolve().parents[2] / "fixtures" / "food" / "phase1"

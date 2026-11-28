@@ -11,8 +11,8 @@ RESIDUES = "ACDEFGHIKLMNPQRSTVWY"
 
 
 def check_clustering() -> None:
-    from pipeline.food.protein_library.clusters import assign_clusters
-    from pipeline.food.protein_library.protein import Protein
+    from food.a_proteins.families import assign_clusters
+    from food.a_proteins.protein import Protein
 
     rng = random.Random(7)
     parent = "".join(rng.choice(RESIDUES) for _ in range(150))

@@ -11,17 +11,17 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "src"))
 
-from common import food_liabilities  # noqa: E402
-from common.food_digestion import masses  # noqa: E402
-from pipeline.food.digestion import DEFAULT_SETTINGS, run  # noqa: E402
-from pipeline.food.digestion.explain import explain_candidates  # noqa: E402
-from pipeline.food.digestion.stage import FoodDigestion  # noqa: E402
-from pipeline.food.evidence import load_evidence  # noqa: E402
-from pipeline.food.evidence.lookup import EvidenceLookup  # noqa: E402
-from pipeline.food.protein_library.protein import Protein  # noqa: E402
-from pipeline.food.screening import screening  # noqa: E402
-from schemas.food import FoodCandidate, ParentOrigin  # noqa: E402
-from schemas.food_dossier import ranking_summary  # noqa: E402
+from food.shared import liabilities  # noqa: E402
+from food.b_digestion import masses  # noqa: E402
+from food.b_digestion import DEFAULT_SETTINGS, run  # noqa: E402
+from food.b_digestion.explain import explain_candidates  # noqa: E402
+from food.pipeline.stages.digestion import FoodDigestion  # noqa: E402
+from food.c_discovery.evidence import load_evidence  # noqa: E402
+from food.c_discovery.evidence.lookup import EvidenceLookup  # noqa: E402
+from food.a_proteins.protein import Protein  # noqa: E402
+from food.c_discovery.screening import screening  # noqa: E402
+from food.shared.candidate import FoodCandidate, ParentOrigin  # noqa: E402
+from food.shared.dossier import ranking_summary  # noqa: E402
 from schemas.run_config import StageConfig  # noqa: E402
 
 PROTEIN = Protein(substrate_id="P1:11-40", accession="P1", precursor_start=11, precursor_end=40, sequence="MKAAKGGRCCFLKDGPQQQQNGAAAAWR", food_source="Whey")
@@ -132,15 +132,15 @@ def test_the_alignment_does_not_change_the_evidence_score_or_type(lookup):
 @pytest.mark.parametrize("seq", ["QMAWCDGPNGAAAAK", "AAAAK", "MMM", "DPDG", "QQQQ", "KKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKK"])
 def test_the_liability_sites_name_the_same_liabilities_the_screening_counts(seq):
     names = [n for n in screening.physchem(seq)["liabilities"].split(";") if n]
-    sites = food_liabilities.liability_sites(names, seq)
+    sites = liabilities.liability_sites(names, seq)
     assert [s["name"] for s in sites] == names
     for s in sites:
-        if s["name"] not in food_liabilities.WHOLE_SEQUENCE:
+        if s["name"] not in liabilities.WHOLE_SEQUENCE:
             assert s["sites"], (seq, s)  # a residue-level liability always has a position
 
 
 def test_liabilities_are_reported_with_residue_positions():
-    sites = {s["name"]: s for s in food_liabilities.liability_sites(["methionine_oxidation", "tryptophan_oxidation", "asp_gly", "asp_pro", "n_term_gln", "homopolymer_run", "cysteine", "long_for_synthesis"],
+    sites = {s["name"]: s for s in liabilities.liability_sites(["methionine_oxidation", "tryptophan_oxidation", "asp_gly", "asp_pro", "n_term_gln", "homopolymer_run", "cysteine", "long_for_synthesis"],
                                                                     "QMAWCDGPDPAAAAK")}
     assert sites["methionine_oxidation"]["text"] == "M2: oxidation" and sites["tryptophan_oxidation"]["text"] == "W4: oxidation"
     assert sites["asp_gly"]["sites"] == ["D6"] and sites["asp_pro"]["sites"] == ["D9"] and sites["n_term_gln"]["sites"] == ["Q1"] and sites["cysteine"]["sites"] == ["C5"]
@@ -148,7 +148,7 @@ def test_liabilities_are_reported_with_residue_positions():
 
 
 def test_a_designed_peptide_gets_its_mass_and_the_terminal_state_stated():
-    from schemas.food_dossier import build_dossier
+    from food.shared.dossier import build_dossier
 
     row = {"id": "PEP-X", "sequence": "AETYNPR", "origin_type": "SYNTHETIC_DESIGN", "evidence_class": "THEORETICAL", "parents": [],
            "predictions": {"ranking": {"rank": 1, "rationale": "", "limitations": ""}, "screening": {"liabilities": "methionine_oxidation"}, "models": {}}}
@@ -161,7 +161,7 @@ def test_a_designed_peptide_gets_its_mass_and_the_terminal_state_stated():
 
 
 def test_the_generation_stage_stores_the_mass_of_every_designed_peptide():
-    from pipeline.food.generation import stage as generation
+    from food.c_discovery.generation import stage as generation
 
     source = Path(generation.__file__).read_text(encoding="utf-8")
     assert "mono_mass=round(masses.mono_mass(" in source and "chemistry_notes=masses.chemistry_notes(" in source
@@ -195,7 +195,7 @@ def test_a_run_that_did_not_record_something_gets_none_never_a_guess():
 
 
 def test_the_dossier_keeps_rank_pareto_front_and_shortlist_position_apart_and_lists_the_objective_values():
-    from schemas.food_dossier import build_dossier
+    from food.shared.dossier import build_dossier
 
     row = {"id": "PEP-X", "sequence": "LKPT", "origin_type": "DIGESTION_DERIVED", "evidence_class": "THEORETICAL", "parents": [{"protein_id": "P1:1-9"}], "parent_clusters": ["family:Whey"],
            "predictions": {"ranking": {"rank": 7, "pareto_front": 2, "n_fronts": 4, "shortlist_position": None, "shortlist_reason": "not eligible: its evidence is no evidence", "cluster": 5, "coverage": 0.75,
@@ -209,8 +209,8 @@ def test_the_dossier_keeps_rank_pareto_front_and_shortlist_position_apart_and_li
 def test_the_pdf_has_a_page_on_how_the_list_was_made_only_when_the_run_recorded_it():
     from pypdf import PdfReader
 
-    from schemas.food_dossier import build_dossier
-    from schemas.food_dossier_pdf import dossier_pdf
+    from food.shared.dossier import build_dossier
+    from food.shared.dossier_pdf import dossier_pdf
 
     row = {"id": "PEP-X", "sequence": "LKPT", "origin_type": "DIGESTION_DERIVED", "evidence_class": "THEORETICAL", "parents": [{"protein_id": "P1:1-9"}],
            "predictions": {"ranking": {"rank": 7, "pareto_front": 2, "n_fronts": 4, "shortlist_position": 1, "rationale": "", "limitations": ""}, "screening": {}, "models": {}}}

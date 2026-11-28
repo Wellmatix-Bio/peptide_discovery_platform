@@ -1,6 +1,6 @@
 # Screening models: validation and applicability report
 
-What was checked: the six models behind `s05_food_screening` (`src/pipeline/food/screening/adapters.py`), on real weights. For each: does the score point the right way (higher = safer or more developable), is the 0.5 label the model's own boundary, and does the applicability band match the training data? For allergenicity, which of the two score definitions to use. The spec asks to "verify allergenicity and bitterness threshold calibration and score direction".
+What was checked: the six models behind `s05_food_screening` (`src/food/c_discovery/screening/adapters.py`), on real weights. For each: does the score point the right way (higher = safer or more developable), is the 0.5 label the model's own boundary, and does the applicability band match the training data? For allergenicity, which of the two score definitions to use. The spec asks to "verify allergenicity and bitterness threshold calibration and score direction".
 
 Reproduce: `DEV_MODE=true python scripts/food_validation/models.py` (needs the real weights; writes `model_validation.json` here).
 
@@ -25,7 +25,8 @@ Sensitivity below is the share of the unsafe or undevelopable class that the 0.5
 - **Hold-out:** 1,591 labelled peptides from `iedb_ige_peptides_splits.csv` (490 IgE-binding). The adapter's score ranks the non-binding above the binding with **AUC 0.852**; sensitivity 0.635, specificity 0.896, MCC 0.553 at the 0.5 label.
 - **This is probably not a clean hold-out.** The model card reports AUC 0.729, sensitivity 0.452, MCC 0.370 on 1,581 hold-out peptides. The splits file is newer than the deployed weights (20 November against 19 November) and has 1,750 hold-out peptides where the card says 1,779. Some of these peptides may have been in the training data, which would explain the higher figures. **The card's numbers are the ones to quote.** Direction is confirmed either way.
 - **Threshold:** the weights record a decision threshold of 0.0 on the raw score, which is p = 0.5. The label threshold is the model's own boundary.
-- **Calibration:** `p_allergen` is not a probability. On this hold-out, predicted 0.1 to 0.4 corresponds to observed rates of 0.06 to 0.16 (over-predicts), and predicted 0.6 to 0.8 to observed 0.78 to 0.94 (under-predicts). The card says the same ("uncalibrated"). If the hold-out is partly in the training data, the real gaps are larger.
+- **Threshold search:** the MCC-optimal threshold on cross-validation did not beat the default: on the MLP, SVM and GAT models and their ensembles it raised cross-validated MCC by at most 0.001 and never raised hold-out MCC (default 0.321 to 0.377, searched 0.311 to 0.353), so the 0.5 label threshold is calibrated.
+- **Calibration of the probability:** `p_allergen` is not a probability. On this hold-out, predicted 0.1 to 0.4 corresponds to observed rates of 0.06 to 0.16 (over-predicts), and predicted 0.6 to 0.8 to observed 0.78 to 0.94 (under-predicts). The card says the same ("uncalibrated"). If the hold-out is partly in the training data, the real gaps are larger.
 - **Applicability:** the 7-20 residue "in domain" band equals the 5th and 95th percentile of the training lengths stored in the weights (3 to 49, p5 7, p95 20). AUC is 0.822 inside the band and 0.890 outside (131 peptides), so the model does not do worse outside it on this set.
 
 ### Bitterness

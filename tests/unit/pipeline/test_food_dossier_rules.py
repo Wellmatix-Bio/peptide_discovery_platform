@@ -7,8 +7,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "src"))
 
-from pipeline.food.digestion.rules import BUILTIN_ENZYMES  # noqa: E402
-from schemas.food_dossier import pepsin_reachable_bonds  # noqa: E402
+from food.b_digestion.rules import BUILTIN_ENZYMES  # noqa: E402
+from food.shared.dossier import pepsin_reachable_bonds  # noqa: E402
 
 
 def test_the_reach_formula_equals_the_most_bonds_the_rule_can_cut_at_every_length():

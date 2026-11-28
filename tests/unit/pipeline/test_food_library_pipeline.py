@@ -8,9 +8,9 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "src"))
 
 from backend.worker_food.worker import load_run_proteins  # noqa: E402
-from common.food_library import library  # noqa: E402
-from common.protein_fasta import Substrate  # noqa: E402
-from schemas.food_run_config import FoodRunConfig  # noqa: E402
+from food.a_proteins.library import library  # noqa: E402
+from food.a_proteins.fasta import Substrate  # noqa: E402
+from food.pipeline.run_config import FoodRunConfig  # noqa: E402
 
 L = library()
 

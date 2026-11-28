@@ -1,6 +1,6 @@
 # Protein-family clustering: validation report
 
-What was checked: `src/pipeline/food/protein_library/clusters.py`, which gives each protein a cluster (UniProt family, else MMseqs2 through `pymmseqs` 1.2.0 at 70% identity, else one cluster per accession; it was 90% and CD-HIT was an option when this was checked, see "Decision") so the ranking can cap peptides per family.
+What was checked: `src/food/a_proteins/families.py`, which gives each protein a cluster (UniProt family, else MMseqs2 through `pymmseqs` 1.2.0 at 70% identity, else one cluster per accession; it was 90% and CD-HIT was an option when this was checked, see "Decision") so the ranking can cap peptides per family.
 
 ## Verdict
 1. **MMseqs2 has not been executed by the platform code yet.** The platform now clusters with `pymmseqs` 1.2.0 (MMseqs2 inside). pymmseqs has Linux and macOS builds only, so it cannot run on this Windows machine. A test that runs it for real is in the suite and runs in Linux CI. See "Not done".

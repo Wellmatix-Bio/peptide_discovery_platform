@@ -10,7 +10,7 @@ from pathlib import Path
 
 import pytest
 
-from schemas.food_dossier import (ASSAY_DESIGN_FIELDS, DECIDED_STATUS, EVIDENCE_TYPE_MEANING, MODEL_OUTPUT_MEANING, MODEL_SCORE_MEANING, PROPOSED_STATUS, SHEET_COLUMNS, UNCUT_BOND_FRACTION_STATEMENT, build_dossier, dossier_html,
+from food.shared.dossier import (ASSAY_DESIGN_FIELDS, DECIDED_STATUS, EVIDENCE_TYPE_MEANING, MODEL_OUTPUT_MEANING, MODEL_SCORE_MEANING, PROPOSED_STATUS, SHEET_COLUMNS, UNCUT_BOND_FRACTION_STATEMENT, build_dossier, dossier_html,
                                   experiment_sheet, experiment_sheet_csv)
 
 FIXTURES = Path(__file__).resolve().parents[1] / "fixtures" / "food"
@@ -160,7 +160,7 @@ def test_the_html_page_escapes_every_value_and_shows_the_review():
 
 @pytest.mark.parametrize("length,reachable", [(4, 0), (6, 2), (8, 4), (10, 6), (3, 0)])
 def test_pepsin_reach_follows_the_table_of_the_protease_report(length, reachable):
-    from schemas.food_dossier import pepsin_reachable_bonds
+    from food.shared.dossier import pepsin_reachable_bonds
 
     assert pepsin_reachable_bonds(length) == reachable
 
@@ -222,7 +222,7 @@ def test_every_model_is_reported_as_its_own_output_for_what_it_predicts_never_as
 
 
 def test_a_saved_output_is_used_as_it_is_and_an_older_run_gets_it_recovered_from_the_ranking_value():
-    from schemas.food_dossier import model_outputs
+    from food.shared.dossier import model_outputs
 
     saved = model_outputs({"cytotoxicity": {"score": 0.2, "output": 0.81, "label": "predicted_cytotoxic", "applicability": "in_domain"}})
     assert saved["cytotoxicity"]["output"] == 0.81
@@ -235,7 +235,7 @@ def with_ends(candidate, n, c):
 
 
 def test_the_ends_of_the_parent_protein_chain_are_in_the_json_html_and_sheet_and_not_recorded_when_absent():
-    from schemas.food_dossier import build_dossier, dossier_html
+    from food.shared.dossier import build_dossier, dossier_html
     d = build_dossier(with_ends(EXACT, "SIGNAL_CLEAVED", "SEQ_END"), CONTROLS)
     assert d.comparison_materials["parent_proteins"][0]["protein_n_terminus"] == "SIGNAL_CLEAVED"
     page = dossier_html(d)
